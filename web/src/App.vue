@@ -38,6 +38,13 @@ async function onLogout() {
             GOA Kombucha
           </RouterLink>
           <RouterLink
+            to="/commandes"
+            class="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            active-class="font-medium text-foreground"
+          >
+            Mes commandes
+          </RouterLink>
+          <RouterLink
             v-if="estAdmin"
             to="/admin"
             class="text-sm text-muted-foreground transition-colors hover:text-foreground"

@@ -6,6 +6,9 @@ import { computed, ref } from 'vue'
  */
 const quantites = ref<Record<number, number>>({})
 
+/** Renseigné quand le panier édite une commande Easybeer existante (upsert). */
+const modification = ref<{ idCommande: number; numero: number | null; commentaire: string } | null>(null)
+
 export function usePanier() {
   const changer = (idStockBouteille: number, delta: number) => {
     const actuel = quantites.value[idStockBouteille] ?? 0
@@ -21,6 +24,25 @@ export function usePanier() {
 
   const vider = () => {
     quantites.value = {}
+    modification.value = null
+  }
+
+  /** Pré-remplit le panier depuis une commande existante (mode modification). */
+  const chargerCommande = (commande: {
+    idCommande: number
+    numero: number | null
+    commentaire: string
+    lignes: { idStockBouteille: number | null; quantite: number }[]
+  }) => {
+    quantites.value = {}
+    for (const l of commande.lignes) {
+      if (l.idStockBouteille != null && l.quantite > 0) quantites.value[l.idStockBouteille] = l.quantite
+    }
+    modification.value = {
+      idCommande: commande.idCommande,
+      numero: commande.numero,
+      commentaire: commande.commentaire,
+    }
   }
 
   const nbCartons = computed(() =>
@@ -34,5 +56,5 @@ export function usePanier() {
     })),
   )
 
-  return { quantites, changer, fixer, vider, nbCartons, lignes }
+  return { quantites, changer, fixer, vider, chargerCommande, modification, nbCartons, lignes }
 }

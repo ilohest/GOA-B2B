@@ -89,18 +89,21 @@ export interface MeResponse {
   idGrilleTarifaire: number | null
 }
 
-export interface CommandeResponse {
-  ok: boolean
-  orderId: string
-  easybeer: { id?: number; numero?: number; message?: string }
+export interface CommandeResume {
+  idCommande: number
+  numero: number | null
+  totalTTC: number | null
+  totalHT: number | null
+  /** Epoch millis (normalisé côté serveur). */
+  dateCreation: number | null
+  modifiable: boolean
 }
 
-export interface OrderRecord {
-  orderId: string
-  easybeerIdCommande?: number
-  easybeerNumero?: number
-  statut: string
-  commentaire?: string
-  createdAt?: number
-  lignes?: { idStockBouteille: number; quantite: number; prixUnitaireHT: number }[]
+export interface CommandeEdition {
+  idCommande: number
+  numero: number | null
+  etat: string
+  modifiable: boolean
+  commentaire: string
+  lignes: { idStockBouteille: number | null; quantite: number }[]
 }

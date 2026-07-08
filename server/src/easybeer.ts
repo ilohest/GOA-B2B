@@ -302,10 +302,99 @@ export async function enregistrerCommande(input: EnregistrerCommandeInput): Prom
   return { id, numero: json.map?.numero, message: json.map?.message, brut: json }
 }
 
+/**
+ * Modification de commande EN PLACE (upsert vérifié, EASYBEER.md §4) :
+ * on relit l'objet complet via /commande/edition/{id}, on remplace lignes et
+ * commentaire, puis on re-POST /commande/enregistrer avec le même idCommande
+ * → même id, même numéro, pas de doublon.
+ *
+ * Les lignes existantes sont mises à jour en conservant leur objet d'origine
+ * (ids d'éléments Easybeer préservés) ; les lignes retirées sont supprimées du
+ * tableau ; les nouvelles sont construites comme à la création.
+ */
+export async function modifierCommande(input: {
+  idCommande: number
+  commentaire: string
+  lignes: LigneCommandeInput[]
+}): Promise<ResultatEnregistrement> {
+  const { status, json: commande } = await eb<Record<string, unknown>>(
+    'GET',
+    `/commande/edition/${input.idCommande}`,
+  )
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/edition/${input.idCommande}`)
+
+  const existants = (commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []
+  const parIdStock = new Map(
+    existants.map((e) => [(e.stockBouteille as { idStockBouteille?: number })?.idStockBouteille, e]),
+  )
+
+  commande.elementsBouteilles = input.lignes.map((l) => {
+    const existant = parIdStock.get(l.produit.idStockBouteille)
+    if (existant) {
+      return {
+        ...existant,
+        quantite: l.quantite,
+        prixUnitaireHTHorsRemise: l.prixUnitaireHT,
+        prixLotHT: l.prixUnitaireHT,
+      }
+    }
+    return {
+      stockBouteille: { idStockBouteille: l.produit.idStockBouteille },
+      stockProduit: l.produit,
+      quantite: l.quantite,
+      prixUnitaireHTHorsRemise: l.prixUnitaireHT,
+      prixLotHT: l.prixUnitaireHT,
+      designation: l.produit.libelle,
+      tauxTVA: l.produit.tauxTVA ?? {},
+      tarifHorsDroits: true,
+    }
+  })
+  commande.commentaire = input.commentaire
+
+  const { status: statusEnr, json } = await eb<{
+    succes?: boolean
+    message?: string
+    map?: { id?: number; numero?: number; message?: string }
+  }>('POST', '/commande/enregistrer', commande)
+
+  const id = json?.map?.id
+  if (statusEnr !== 200 || json?.succes === false || id == null) {
+    throw new Error(`Easybeer ${statusEnr} sur /commande/enregistrer (upsert) — ${json?.message || 'échec inconnu'}`)
+  }
+  return { id, numero: json.map?.numero, message: json.map?.message, brut: json }
+}
+
 /** GET /commande/supprimer/{id} — nettoyage d'un devis/commande de test. */
 export async function supprimerCommande(idCommande: number): Promise<void> {
   const { status } = await eb('GET', `/commande/supprimer/${idCommande}`)
   if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/supprimer/${idCommande}`)
+}
+
+export interface CommandeResume {
+  idCommande?: number
+  numero?: number
+  etat?: { code?: string; libelle?: string } | string
+  paiementEtat?: { code?: string; libelle?: string } | string
+  totalTTC?: number
+  totalHT?: number
+  dateCreation?: string
+}
+
+/**
+ * POST /commande/liste/{etat} — historique COMPLET d'un client (recette
+ * EASYBEER.md validée) : body { idClient, inclureArchive: true } OBLIGATOIRE
+ * (sans inclureArchive → 200 corps vide) ; l'{etat} du path est ignoré quand
+ * idClient est présent → 1 seul appel pour tout l'historique.
+ */
+export async function listeCommandesClient(idClient: number): Promise<CommandeResume[]> {
+  const params = new URLSearchParams({ colonneTri: 'numero', numeroPage: '1', nombreParPage: '200' })
+  const { status, json } = await eb<{ liste?: CommandeResume[] }>(
+    'POST',
+    `/commande/liste/DEVIS?${params.toString()}`,
+    { idClient, inclureArchive: true },
+  )
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/liste`)
+  return json?.liste ?? []
 }
 
 /** GET /commande/edition/{id} — détail complet (lignes dans elementsBouteilles[]). */

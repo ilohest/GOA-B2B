@@ -11,7 +11,9 @@ import {
   listeTypesClient,
   resoudreGrilleRacine,
   listeProduitsAutocomplete,
+  listeCommandesClient,
   enregistrerCommande,
+  modifierCommande,
   detailCommande,
   type ProduitAutocomplete,
 } from './easybeer.js'
@@ -84,13 +86,77 @@ app.get('/api/catalogue', requireAuth, async (c) => {
   return c.json({ produits: catalogueClient(produits, overrides, prixClient), syncedAt })
 })
 
+// ---- Commandes ----
+
+/** États Easybeer au-delà desquels le client ne peut plus modifier (décision §6.3). */
+const ETATS_NON_MODIFIABLES = new Set(['LIVREE', 'ANNULEE'])
+
+const codeEtat = (etat: unknown): string =>
+  typeof etat === 'string' ? etat : ((etat as { code?: string } | null)?.code ?? '')
+
 /**
- * Créer une commande dans Easybeer (recette EASYBEER.md §4).
- *
- * Toute la résolution se fait depuis le CACHE (produits complets, prix du
- * client, grille racine, minimum) — le front n'envoie que des quantités, les
- * prix ne sont JAMAIS pris du client. Seule l'écriture finale tape Easybeer.
+ * Résout et valide les lignes d'une commande depuis le CACHE (produits
+ * complets, prix du client, visibilité/rupture, minimum). Les prix ne sont
+ * JAMAIS pris du client — il n'envoie que des quantités.
  */
+async function resoudreLignes(
+  db: NonNullable<ReturnType<typeof getDb>>,
+  easybeerIdClient: number,
+  lignesInput: { idStockBouteille: number; quantite: number }[],
+): Promise<
+  | { ok: false; erreur: string }
+  | {
+      ok: true
+      lignes: { produit: ProduitAutocomplete; quantite: number; prixUnitaireHT: number }[]
+      totalHT: number
+      idGrilleTarifaire: number
+      tags: string[] | string | null
+    }
+> {
+  const ko = (erreur: string) => ({ ok: false as const, erreur })
+  const valides = lignesInput.filter(
+    (l) => Number.isInteger(l.quantite) && l.quantite > 0 && Number.isFinite(l.idStockBouteille),
+  )
+  if (!valides.length) return ko('Aucune ligne de commande valide')
+
+  const [{ produits }, overrides, cacheClient] = await Promise.all([
+    lireCatalogue(db),
+    lireOverrides(db),
+    lireCacheClient(db, easybeerIdClient),
+  ])
+  if (cacheClient.idGrilleTarifaire == null) return ko('Grille tarifaire introuvable pour ce client')
+
+  const parId = new Map<number, ProduitAutocomplete>(produits.map((p) => [p.idStockBouteille, p]))
+  const lignes: { produit: ProduitAutocomplete; quantite: number; prixUnitaireHT: number }[] = []
+  for (const l of valides) {
+    const produit = parId.get(l.idStockBouteille)
+    const override = overrides[String(l.idStockBouteille)]
+    if (!produit || !override?.visible) return ko(`Produit ${l.idStockBouteille} indisponible au catalogue`)
+    if (override.rupture) return ko(`« ${override.displayName || produit.libelle} » est en rupture`)
+    const prixUnitaireHT = cacheClient.prix[String(l.idStockBouteille)]
+    if (prixUnitaireHT == null) {
+      return ko(`Pas de tarif défini pour « ${override.displayName || produit.libelle} » — contactez GOA`)
+    }
+    lignes.push({ produit, quantite: l.quantite, prixUnitaireHT })
+  }
+
+  // Contrôle du minimum de commande (brief §6.3), aussi appliqué côté front.
+  const totalHT = lignes.reduce((somme, l) => somme + l.quantite * l.prixUnitaireHT, 0)
+  const minimum = cacheClient.client.minimumCommande
+  if (minimum != null && totalHT < minimum) {
+    return ko(`Minimum de commande : ${minimum.toFixed(2)} € HT (panier : ${totalHT.toFixed(2)} € HT)`)
+  }
+
+  return {
+    ok: true,
+    lignes,
+    totalHT,
+    idGrilleTarifaire: cacheClient.idGrilleTarifaire,
+    tags: cacheClient.client.tags,
+  }
+}
+
+/** Créer une commande dans Easybeer (recette EASYBEER.md §4). */
 app.post('/api/commandes', requireAuth, async (c) => {
   const user = c.get('user')
   if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
@@ -101,54 +167,13 @@ app.post('/api/commandes', requireAuth, async (c) => {
     commentaire?: string
     lignes: { idStockBouteille: number; quantite: number }[]
   }>()
-  const lignesInput = (body.lignes ?? []).filter(
-    (l) => Number.isInteger(l.quantite) && l.quantite > 0 && Number.isFinite(l.idStockBouteille),
-  )
-  if (!lignesInput.length) return c.json({ error: 'Aucune ligne de commande valide' }, 400)
-
-  const [{ produits }, overrides, cacheClient] = await Promise.all([
-    lireCatalogue(db),
-    lireOverrides(db),
-    lireCacheClient(db, user.easybeerIdClient),
-  ])
-  if (cacheClient.idGrilleTarifaire == null) {
-    return c.json({ error: 'Grille tarifaire introuvable pour ce client' }, 400)
-  }
-
-  const parId = new Map<number, ProduitAutocomplete>(produits.map((p) => [p.idStockBouteille, p]))
-  const lignes: { produit: ProduitAutocomplete; quantite: number; prixUnitaireHT: number }[] = []
-  for (const l of lignesInput) {
-    const produit = parId.get(l.idStockBouteille)
-    const override = overrides[String(l.idStockBouteille)]
-    if (!produit || !override?.visible) {
-      return c.json({ error: `Produit ${l.idStockBouteille} indisponible au catalogue` }, 400)
-    }
-    if (override.rupture) {
-      return c.json({ error: `« ${override.displayName || produit.libelle} » est en rupture` }, 400)
-    }
-    const prixUnitaireHT = cacheClient.prix[String(l.idStockBouteille)]
-    if (prixUnitaireHT == null) {
-      return c.json(
-        { error: `Pas de tarif défini pour « ${override.displayName || produit.libelle} » — contactez GOA` },
-        400,
-      )
-    }
-    lignes.push({ produit, quantite: l.quantite, prixUnitaireHT })
-  }
-
-  // Contrôle du minimum de commande (brief §6.3), aussi appliqué côté front.
-  const totalHT = lignes.reduce((somme, l) => somme + l.quantite * l.prixUnitaireHT, 0)
-  const minimum = cacheClient.client.minimumCommande
-  if (minimum != null && totalHT < minimum) {
-    return c.json(
-      { error: `Minimum de commande : ${minimum.toFixed(2)} € HT (panier : ${totalHT.toFixed(2)} € HT)` },
-      400,
-    )
-  }
+  const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes ?? [])
+  if (!resolution.ok) return c.json({ error: resolution.erreur }, 400)
+  const { lignes, totalHT, idGrilleTarifaire } = resolution
 
   const resultat = await enregistrerCommande({
     idClient: user.easybeerIdClient,
-    idGrilleTarifaire: cacheClient.idGrilleTarifaire,
+    idGrilleTarifaire,
     tauxTVA: lignes[0].produit.tauxTVA ?? {},
     commentaire: body.commentaire?.trim() || 'Commande via la plateforme GOA',
     estDevis: config.commandeEstDevis,
@@ -177,21 +202,108 @@ app.post('/api/commandes', requireAuth, async (c) => {
   return c.json({ ok: true, orderId, totalHT, easybeer: { id: resultat.id, numero: resultat.numero } })
 })
 
-/** Liste des commandes de l'utilisateur (Firestore). */
+/**
+ * Historique des commandes du client, lu en direct d'Easybeer (brief §6.1 —
+ * consultation ponctuelle, pas de statut affiché au client).
+ */
 app.get('/api/commandes', requireAuth, async (c) => {
   const user = c.get('user')
-  const db = getDb()
-  if (!db) return c.json({ commandes: [], note: 'Firestore non configuré (dev).' })
-  const snap = await db.collection('orders').where('uid', '==', user.uid).get()
-  const commandes = snap.docs.map((d) => d.data()).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+  if (user.easybeerIdClient == null) return c.json({ commandes: [] })
+  const resumes = await listeCommandesClient(user.easybeerIdClient)
+  // dateCreation Easybeer = epoch millis ou chaîne selon les endpoints → on normalise.
+  const ts = (v: unknown) => (v == null ? 0 : new Date(v as string | number).getTime() || 0)
+  const commandes = resumes
+    .map((r) => ({
+      idCommande: r.idCommande,
+      numero: r.numero,
+      totalTTC: r.totalTTC ?? null,
+      totalHT: r.totalHT ?? null,
+      dateCreation: ts(r.dateCreation) || null,
+      modifiable: !ETATS_NON_MODIFIABLES.has(codeEtat(r.etat)),
+    }))
+    .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
   return c.json({ commandes })
 })
 
-/** Détail d'une commande Easybeer (pour le suivi). */
-app.get('/api/commandes/:id/easybeer', requireAuth, async (c) => {
-  const id = Number(c.req.param('id'))
-  const detail = await detailCommande(id)
-  return c.json({ detail })
+/** Charge une commande pour modification (contrôle propriété + garde-fou statut). */
+async function chargerCommandeClient(idCommande: number, easybeerIdClient: number) {
+  const commande = await detailCommande(idCommande)
+  const proprietaire = (commande.client as { idClient?: number } | undefined)?.idClient
+  if (proprietaire !== easybeerIdClient) return null
+  return commande
+}
+
+/** Détail d'une commande (pré-remplissage du panier pour modification). */
+app.get('/api/commandes/:id/edition', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+  const idCommande = Number(c.req.param('id'))
+  const commande = await chargerCommandeClient(idCommande, user.easybeerIdClient)
+  if (!commande) return c.json({ error: 'Commande introuvable' }, 404)
+
+  const etat = codeEtat(commande.etat)
+  const lignes = ((commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []).map((e) => ({
+    idStockBouteille: (e.stockBouteille as { idStockBouteille?: number })?.idStockBouteille ?? null,
+    quantite: e.quantite as number,
+  }))
+  return c.json({
+    idCommande,
+    numero: commande.numero ?? null,
+    etat,
+    modifiable: !ETATS_NON_MODIFIABLES.has(etat),
+    commentaire: (commande.commentaire as string) ?? '',
+    lignes,
+  })
+})
+
+/**
+ * Modification EN PLACE d'une commande (upsert Easybeer, garde-fou : refusée
+ * dès que la commande est LIVREE ou ANNULEE — décision brief §6.3/§9).
+ */
+app.put('/api/commandes/:id', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const idCommande = Number(c.req.param('id'))
+  const commande = await chargerCommandeClient(idCommande, user.easybeerIdClient)
+  if (!commande) return c.json({ error: 'Commande introuvable' }, 404)
+  const etat = codeEtat(commande.etat)
+  if (ETATS_NON_MODIFIABLES.has(etat)) {
+    return c.json({ error: `Cette commande ne peut plus être modifiée (état : ${etat.toLowerCase()})` }, 409)
+  }
+
+  const body = await c.req.json<{
+    commentaire?: string
+    lignes: { idStockBouteille: number; quantite: number }[]
+  }>()
+  const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes ?? [])
+  if (!resolution.ok) return c.json({ error: resolution.erreur }, 400)
+  const { lignes, totalHT } = resolution
+
+  const resultat = await modifierCommande({
+    idCommande,
+    commentaire: body.commentaire?.trim() || 'Commande via la plateforme GOA (modifiée)',
+    lignes,
+  })
+
+  await db.collection('orders').add({
+    uid: user.uid,
+    easybeerIdClient: user.easybeerIdClient,
+    easybeerIdCommande: idCommande,
+    action: 'modification',
+    totalHT,
+    lignes: lignes.map((l) => ({
+      idStockBouteille: l.produit.idStockBouteille,
+      quantite: l.quantite,
+      prixUnitaireHT: l.prixUnitaireHT,
+    })),
+    commentaire: body.commentaire ?? '',
+    createdAt: Date.now(),
+  })
+
+  return c.json({ ok: true, totalHT, easybeer: { id: resultat.id, numero: resultat.numero } })
 })
 
 // ---- Admin : invitations (flux §5 du brief) ----

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useMutation, useQuery } from '@tanstack/vue-query'
+import { computed, ref, watch } from 'vue'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CatalogueClientResponse, ProduitCatalogueClient } from '@/lib/types'
@@ -32,7 +32,7 @@ const prixFr = (v: number) => v.toLocaleString('fr-FR', { style: 'currency', cur
 
 // --- Panier ---
 
-const { quantites, changer, vider, nbCartons, lignes } = usePanier()
+const { quantites, changer, vider, modification, nbCartons, lignes } = usePanier()
 
 const produitsParId = computed(() => {
   const map = new Map<number, ProduitCatalogueClient>()
@@ -55,20 +55,39 @@ const sousMinimum = computed(() => minimum.value != null && totalHT.value < mini
 
 // --- Envoi de la commande ---
 
+const queryClient = useQueryClient()
 const dialogOuvert = ref(false)
 const commentaire = ref('')
-const confirmation = ref<{ numero?: number | null; totalHT: number } | null>(null)
+const confirmation = ref<{ numero?: number | null; totalHT: number; modification: boolean } | null>(null)
+
+// En mode modification, on repart du commentaire existant de la commande.
+watch(
+  modification,
+  (m) => {
+    if (m) commentaire.value = m.commentaire
+  },
+  { immediate: true },
+)
 
 const envoi = useMutation({
-  mutationFn: () =>
-    api.post<{ ok: boolean; totalHT: number; easybeer: { id?: number; numero?: number } }>(
-      '/commandes',
-      { commentaire: commentaire.value, lignes: lignes.value },
-    ),
+  mutationFn: () => {
+    const body = { commentaire: commentaire.value, lignes: lignes.value }
+    return modification.value
+      ? api.put<{ ok: boolean; totalHT: number; easybeer: { numero?: number } }>(
+          `/commandes/${modification.value.idCommande}`,
+          body,
+        )
+      : api.post<{ ok: boolean; totalHT: number; easybeer: { numero?: number } }>('/commandes', body)
+  },
   onSuccess: (res) => {
-    confirmation.value = { numero: res.easybeer.numero ?? null, totalHT: res.totalHT }
+    confirmation.value = {
+      numero: res.easybeer.numero ?? modification.value?.numero ?? null,
+      totalHT: res.totalHT,
+      modification: modification.value != null,
+    }
     vider()
     commentaire.value = ''
+    queryClient.invalidateQueries({ queryKey: ['commandes'] })
   },
   onError: (e) => toast.error((e as Error).message),
 })
@@ -182,17 +201,29 @@ function ouvrirRecap() {
     </Card>
 
     <!-- Barre panier -->
-    <div v-if="nbCartons > 0" class="fixed inset-x-0 bottom-0 z-20 px-4 pb-4">
+    <div v-if="nbCartons > 0 || modification" class="fixed inset-x-0 bottom-0 z-20 px-4 pb-4">
       <div
         class="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-xl border bg-background p-3 shadow-lg"
       >
         <div class="text-sm">
+          <p v-if="modification" class="text-xs font-medium text-primary">
+            Modification de la commande n° {{ modification.numero ?? modification.idCommande }}
+          </p>
           <p class="font-semibold">{{ nbCartons }} carton{{ nbCartons > 1 ? 's' : '' }} — {{ prixFr(totalHT) }} HT</p>
           <p v-if="sousMinimum" class="text-xs text-destructive">
             Minimum de commande : {{ prixFr(minimum!) }} HT
           </p>
+          <button
+            v-if="modification"
+            class="text-xs text-muted-foreground underline underline-offset-2"
+            @click="vider(); commentaire = ''"
+          >
+            Annuler la modification
+          </button>
         </div>
-        <Button size="lg" :disabled="sousMinimum" @click="ouvrirRecap">Commander</Button>
+        <Button size="lg" :disabled="sousMinimum || nbCartons === 0" @click="ouvrirRecap">
+          {{ modification ? 'Mettre à jour' : 'Commander' }}
+        </Button>
       </div>
     </div>
 
@@ -201,8 +232,12 @@ function ouvrirRecap() {
       <DialogContent class="sm:max-w-md">
         <template v-if="!confirmation">
           <DialogHeader>
-            <DialogTitle>Récapitulatif de votre commande</DialogTitle>
-            <DialogDescription>Vérifiez les quantités avant l'envoi.</DialogDescription>
+            <DialogTitle>
+              {{ modification ? `Modifier la commande n° ${modification.numero ?? modification.idCommande}` : 'Récapitulatif de votre commande' }}
+            </DialogTitle>
+            <DialogDescription>
+              {{ modification ? 'Cette version annule et remplace la précédente.' : "Vérifiez les quantités avant l'envoi." }}
+            </DialogDescription>
           </DialogHeader>
           <ul class="grid gap-2 text-sm">
             <li
@@ -229,14 +264,14 @@ function ouvrirRecap() {
           </div>
           <DialogFooter>
             <Button class="w-full" size="lg" :disabled="envoi.isPending.value" @click="envoi.mutate()">
-              {{ envoi.isPending.value ? 'Envoi…' : 'Confirmer la commande' }}
+              {{ envoi.isPending.value ? 'Envoi…' : modification ? 'Confirmer la modification' : 'Confirmer la commande' }}
             </Button>
           </DialogFooter>
         </template>
 
         <template v-else>
           <DialogHeader>
-            <DialogTitle>Commande envoyée ✓</DialogTitle>
+            <DialogTitle>{{ confirmation.modification ? 'Commande mise à jour ✓' : 'Commande envoyée ✓' }}</DialogTitle>
             <DialogDescription>
               Votre commande de {{ prixFr(confirmation.totalHT) }} HT a bien été transmise à GOA<template
                 v-if="confirmation.numero"
