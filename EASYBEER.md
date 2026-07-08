@@ -364,6 +364,15 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
   délai de paiement. Modèle produit = produit fini (saveur) × contenant × colisage (idLot) = idStockBouteille.
   Désynchro colisage 0,35L : Jotform 12×35cL vs Easybeer Carton de 18 → à confirmer. Jotform = flux prod à reproduire.
 
+- **2026-07-08 (dev V1, étape 8)** : ⚠️ **`GET /commande/edition/{id}` renvoie 400
+  « Cette commande n'est pas modifiable ! » sur les commandes LIVREE/archivées** — c'est un endpoint
+  d'ÉDITION, pas de lecture. Pour lire n'importe quelle commande (détail, historique) →
+  **`GET /commande/detail/{id}`** (200 même sur LIVREE). Le détail contient **`documents[]`** :
+  `{ idCommandeDocument, type { code: BON_COMMANDE|FACTURE|…, libelle, couleur }, code (ex. FA0038x),
+  nomFichier, nomFichierTelechargement, annule, estFacture, estAvoir, envoye… }` → alimente
+  directement l'écran « mes documents » (télécharger via `/commande/document/telecharger/{idCommandeDocument}`).
+  Confirmé aussi : les réponses `detail` peuvent contenir des caractères de contrôle → parser en mode tolérant.
+
 - **2026-07-08 (dev V1, étape 5)** : commande créée via la plateforme (devis 2691703, recette §4
   inchangée). ⚠️ **Écart de prix observé** : envoyé `prixUnitaireHTHorsRemise: 27.30` (= prix de
   `/parametres/prix`), mais `commande/edition` renvoie `prixUnitaireHTHorsRemise: 27.55` et

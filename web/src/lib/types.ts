@@ -101,6 +101,17 @@ export interface CommandeResume {
   modifiable: boolean
 }
 
+export interface CommandeDetail {
+  idCommande: number
+  numero: number | null
+  reference: string | null
+  totalHT: number | null
+  totalTTC: number | null
+  commentaire: string
+  lignes: { designation: string; quantite: number; prixUnitaireHT: number | null }[]
+  documents: { idCommandeDocument: number; libelle: string; code: string; nomFichier: string }[]
+}
+
 export interface CommandeEdition {
   idCommande: number
   numero: number | null

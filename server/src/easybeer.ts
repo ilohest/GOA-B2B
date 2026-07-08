@@ -36,12 +36,21 @@ export class EasybeerBanError extends Error {
   }
 }
 
-async function eb<T>(method: string, path: string, body?: unknown): Promise<{ status: number; json: T }> {
+/** Sérialise un appel Easybeer dans la file globale (espacement garanti). */
+function passerParLaFile<T>(fn: () => Promise<T>): Promise<T> {
   const execution = fileAttente.then(async () => {
     const attente = dernierAppel + MIN_INTERVAL_MS - Date.now()
     if (attente > 0) await new Promise((r) => setTimeout(r, attente))
     dernierAppel = Date.now()
+    return fn()
+  })
+  // La file survit aux erreurs (l'échec est propagé à l'appelant seulement).
+  fileAttente = execution.catch(() => {})
+  return execution
+}
 
+async function eb<T>(method: string, path: string, body?: unknown): Promise<{ status: number; json: T }> {
+  return passerParLaFile(async () => {
     const res = await fetch(`${BASE}${path}`, {
       method,
       headers: {
@@ -62,13 +71,16 @@ async function eb<T>(method: string, path: string, body?: unknown): Promise<{ st
     try {
       json = text ? JSON.parse(text) : {}
     } catch {
-      json = { _raw: text.slice(0, 300) }
+      // Certaines réponses (commentaires de commande) contiennent des
+      // caractères de contrôle qui cassent le JSON strict — parsing tolérant.
+      try {
+        json = JSON.parse(text.replace(/[\u0000-\u001F]/g, ' '))
+      } catch {
+        json = { _raw: text.slice(0, 300) }
+      }
     }
     return { status: res.status, json: json as T }
   })
-  // La file survit aux erreurs (l'échec est propagé à l'appelant seulement).
-  fileAttente = execution.catch(() => {})
-  return execution
 }
 
 // --- Types (sous-ensembles exploités) ---
@@ -397,9 +409,27 @@ export async function listeCommandesClient(idClient: number): Promise<CommandeRe
   return json?.liste ?? []
 }
 
-/** GET /commande/edition/{id} — détail complet (lignes dans elementsBouteilles[]). */
+/**
+ * GET /commande/detail/{id} — LECTURE d'une commande, quel que soit son état
+ * (⚠️ /commande/edition renvoie 400 sur les commandes non modifiables —
+ * il est réservé au flux de modification, cf. EASYBEER.md).
+ * Contient lignes (elementsBouteilles[]) ET documents[] (BC, factures, avoirs).
+ */
 export async function detailCommande(idCommande: number): Promise<Record<string, unknown>> {
-  const { status, json } = await eb<Record<string, unknown>>('GET', `/commande/edition/${idCommande}`)
-  if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/edition/${idCommande}`)
+  const { status, json } = await eb<Record<string, unknown>>('GET', `/commande/detail/${idCommande}`)
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/detail/${idCommande}`)
   return json
+}
+
+/** GET /commande/document/telecharger/{id} — flux binaire du PDF. */
+export async function telechargerDocument(
+  idCommandeDocument: number,
+): Promise<{ corps: ArrayBuffer; contentType: string }> {
+  return passerParLaFile(async () => {
+    const res = await fetch(`${BASE}/commande/document/telecharger/${idCommandeDocument}`, {
+      headers: { Authorization: BASIC_AUTH },
+    })
+    if (!res.ok) throw new Error(`Easybeer ${res.status} sur /commande/document/telecharger/${idCommandeDocument}`)
+    return { corps: await res.arrayBuffer(), contentType: res.headers.get('content-type') ?? 'application/pdf' }
+  })
 }

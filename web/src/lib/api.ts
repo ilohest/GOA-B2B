@@ -27,4 +27,19 @@ export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
   put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
+
+  /** Télécharge un binaire authentifié (ex. PDF) et déclenche l'enregistrement. */
+  async telecharger(path: string, nomFichier: string): Promise<void> {
+    const res = await fetch(`/api${path}`, { headers: await authHeader() })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error((data as { error?: string }).error || `Erreur ${res.status}`)
+    }
+    const url = URL.createObjectURL(await res.blob())
+    const a = document.createElement('a')
+    a.href = url
+    a.download = nomFichier
+    a.click()
+    URL.revokeObjectURL(url)
+  },
 }

@@ -15,6 +15,7 @@ import {
   enregistrerCommande,
   modifierCommande,
   detailCommande,
+  telechargerDocument,
   type ProduitAutocomplete,
 } from './easybeer.js'
 import { lireCacheClient, lireCatalogue, syncTout } from './sync.js'
@@ -253,6 +254,78 @@ async function chargerCommandeClient(idCommande: number, easybeerIdClient: numbe
   if (proprietaire !== easybeerIdClient) return null
   return commande
 }
+
+interface DocumentEasybeer {
+  idCommandeDocument?: number
+  code?: string
+  nomFichierTelechargement?: string
+  nomFichier?: string
+  annule?: boolean
+  type?: { code?: string; libelle?: string }
+  dateCreation?: number
+}
+
+/** Détail d'une commande pour AFFICHAGE (lignes + documents), tout état. */
+app.get('/api/commandes/:id', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+  const idCommande = Number(c.req.param('id'))
+  const commande = await chargerCommandeClient(idCommande, user.easybeerIdClient)
+  if (!commande) return c.json({ error: 'Commande introuvable' }, 404)
+
+  const lignes = ((commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []).map((e) => ({
+    designation:
+      ((e.stockProduit as { libelle?: string } | undefined)?.libelle as string) ??
+      ((e.designation as string) || 'Produit'),
+    quantite: e.quantite as number,
+    prixUnitaireHT: (e.prixUnitaireHTHorsRemise as number) ?? null,
+  }))
+  const documents = (((commande.documents as DocumentEasybeer[] | undefined) ?? []) )
+    .filter((d) => !d.annule && d.idCommandeDocument != null)
+    .map((d) => ({
+      idCommandeDocument: d.idCommandeDocument!,
+      libelle: d.type?.libelle ?? 'Document',
+      code: d.code ?? '',
+      nomFichier: d.nomFichierTelechargement || d.nomFichier || `${d.code ?? 'document'}.pdf`,
+    }))
+
+  return c.json({
+    idCommande,
+    numero: commande.numero ?? null,
+    reference: commande.reference ?? null,
+    totalHT: commande.totalHT ?? null,
+    totalTTC: commande.totalTTC ?? null,
+    commentaire: (commande.commentaire as string) || '',
+    lignes,
+    documents,
+  })
+})
+
+/** Téléchargement d'un document (facture, BL…) — toujours la version à jour d'Easybeer. */
+app.get('/api/commandes/:id/documents/:idDoc/pdf', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+  const idCommande = Number(c.req.param('id'))
+  const idDoc = Number(c.req.param('idDoc'))
+
+  // Propriété : le document doit appartenir à une commande du client connecté.
+  const commande = await chargerCommandeClient(idCommande, user.easybeerIdClient)
+  if (!commande) return c.json({ error: 'Commande introuvable' }, 404)
+  const doc = ((commande.documents as DocumentEasybeer[] | undefined) ?? []).find(
+    (d) => d.idCommandeDocument === idDoc,
+  )
+  if (!doc) return c.json({ error: 'Document introuvable' }, 404)
+
+  const { corps, contentType } = await telechargerDocument(idDoc)
+  const nom = doc.nomFichierTelechargement || 'document.pdf'
+  const nomAscii = nom.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '')
+  return new Response(corps, {
+    headers: {
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment; filename="${nomAscii}"; filename*=UTF-8''${encodeURIComponent(nom)}`,
+    },
+  })
+})
 
 /** Détail d'une commande (pré-remplissage du panier pour modification). */
 app.get('/api/commandes/:id/edition', requireAuth, async (c) => {
