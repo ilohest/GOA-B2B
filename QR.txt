@@ -1,0 +1,84 @@
+Goa - Cadrage pour la plateforme de commandes
+Quel logiciel de gestion tu utilises et il te sert à quoi exactement aujourd'hui?
+Easybeer : ajout manuel des commandes reçues via jotform / mail / téléphone, comptabilité,
+statistiques, envoie de documents et factures
+Combien de clients tu traites et environ combien de commandes par semaine/mois?
+100+ clients actifs, 100 à 150 commandes par mois
+A quel point tu veux pouvoir personnaliser ton offre? Est ce qu'il faut aller jusqu'à pouvoir
+personnaliser le catalogue pour un client spécifique? Ou bien on s'arrête à différents tarifs et
+remises d'après un type?
+Tous les clients ont le même catalogue, la personnalisation par client servirai à :
+- Les classer par type (chr / gms / événement) afin d'appliquer un franco de livraison différent
+- Les classer par type de logistique (transporteur / en direct)
+Pour les paiements, quel serait le rôle de la nouvelle plateforme?
+Tu veux que la plateforme émettes les factures et gérer les statuts des paiements, les
+relances etc via celle-ci?
+Ou tu as déjà ton outil de gestion qui le fait?
+Je fais la gestion des factures sur easybeer, mais je dois vérifier manuellement tous les paiements et
+pointer la date manuellement, ils ont un outil de rapprochement bancaire qui est bancal 70% des
+transactions sont mal rapprochés
+Toujours pour les paiements, j'imagine que tu fonctionnes par émission de factures avec
+délais et virement. Est ce qu'il faudra intégrer des paiements direct?
+Ça peut être intéressant de faire un système de paiement instantané mais pas une priorité
+Données clients
+Au sujet des données clients.
+Déjà, je conseillerais d'implémenter dés la V1 une gestion de compte complète. Sauf si tu as une bonne
+raison de pas le faire.
+Aussi, j'ai besoin que tu m'expliques le flux actuel d'un client qui passe une commande.
+Tu as déjà une base de données avec entre autres, tes données clients dans ton logiciel de
+gestion.
+Est ce que le but de la v3 est de se soustraire complètement de ce logiciel? Ou bien il faut
+cohabiter?
+Parce que si je comprends bien, avant la v3 et les connexions api il faudra doubler toutes les
+données (la nouvelle plateforme vs le logiciel de gestion)?
+En gros, d'après-toi, comment je travaille avec ces données avant la v3?
+Je ne pourrais jamais m'en soustraire car la compta dessus est trop spécifique, l'idée est vraiment
+d'avoir un logiciel presque entièrement passif, qui transmet automatiquement les commandes vers
+easybeer, qui reste notre cœur logistique
+je ne sais pas répondre aux autres questions atm
+Dans la version actuelle, dis-moi si je comprends bien ce qui se passe ; tu envoies le jotform
+à des clients avec lesquels tu es déjà en relation et tu les identifies seulement par le champ
+"Mon commerce", parce que tu as déjà toutes les coordonnées. Et ils ont accès aux tarifs
+ailleurs. Ensuite tu reçois le form et tu génères une facture dans le logiciel de gestion? C'est
+bien ça?
+C'est ça. Le lien jotform est envoyé via un mail de rappel 1 semaine avant la tournée de livraison, la
+commande jotform est recopiée manuellement sur easybeer (90% du temps sur mobile -> pas pratique,
+erreurs fréquentes), de là, on génère bons de livraison et factures
+Dans la nouvelle version, est-ce qu'un client avec qui tu ne traites pas encore doit pouvoir
+(1) faire une demande de contact via la plateforme ?
+(2) passer directement une commande sans avoir été ajouté au préalable ?
+Seul les clients connus auront accès à cette plateforme donc pas de gestion des inconnus
+Voilà une idée de comment je conçois le nouveau flux de commande. Est-ce que j'ai bien
+compris :
+------------------------
+Client existant
+--------------------------
+1. Un client existant dans ta db veut passer commande. Pour ça, il se rend sur la plateforme, il
+entre son numéro client (présent dans tous les échanges de mails). Ou alors un compte client,
+comme conseillé.
+2. Il se voit proposé un catalogue de produits potentiellement personnalisé. Il lui est indiqué si
+des produits sont manquants ou dans quel délais ils pourraient être disponibles. Donc gestion
+d'un stock.
+3. Il passe une proposition de commande.
+4. Goa reçoit la proposition, si tu acceptes la commande, tu confirmes en même temps le
+mode de livraison et les délais. Emission de facture. Tu mettras à jour le statut de la
+commande (qui restera potentiellement annulable par le client jusqu'à une certaine étape). Tu
+mettras également à jour le statut du paiement, avec des automations pour des éventuelles
+relances.
+------------------------
+Nouveau client
+--------------------------
+- Un client avec qui tu ne traites pas encore veut commander. Pour il a un form pour prendre
+contact. Il peut ajouter déjà une proposition de commande d'après une grille tarifaire standard.
+(On indique qu'il peut prendre contact pour potentiellement avoir d'autres conditions.)
+- Tu reçois la demande de contact. Tu vérifies les donnes et valide le client.
+- Le reste du flux est le même que client existant.
+1 - privilégié le compte avec login, j'ai d'abord eu peur que les boomers perdent leurs MDP tout le temps
+mais ils n'auront pas le choix
+2 - mêmes produits pour tout le monde, gestion des ruptures simples : on/off
+4 - confirmation et details non nécessaire, faire au plus simple, ils sont habitués à avoir assez peu d'info
+concernant la livraison et c'est ok. gestion de documents faite sur easybeer, commande non annulable
+par le client (car c'est très rare)
+Nouveau iencli : ne pas les gerer
+Ce contenu n'est ni rédigé, ni cautionné par Google.
+Forms

@@ -1,0 +1,24 @@
+{
+  "name": "goa-kombucha-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend GOA Kombucha — intégration Easybeer (Basic Auth) + Firebase Admin/Firestore",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "dotenv": "^16.4.7",
+    "firebase-admin": "^13.0.2",
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.2"
+  }
+}

@@ -1,0 +1,152 @@
+import { serve } from '@hono/node-server'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { randomUUID } from 'node:crypto'
+import { config } from './config.js'
+import { requireAuth, requireAdmin } from './auth.js'
+import { getDb } from './firebase.js'
+import {
+  listeClients,
+  getClient,
+  listeTypesClient,
+  resoudreGrilleRacine,
+  listeProduitsAutocomplete,
+  enregistrerCommande,
+  detailCommande,
+  type ProduitAutocomplete,
+} from './easybeer.js'
+
+const app = new Hono()
+
+app.use('*', cors({ origin: config.webOrigin, credentials: true }))
+
+app.get('/api/health', (c) => c.json({ ok: true, authDisabled: config.authDisabled }))
+
+/** Profil de l'utilisateur connecté + données client Easybeer + grille tarifaire résolue. */
+app.get('/api/me', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) {
+    return c.json({ user, client: null, idGrilleTarifaire: null })
+  }
+  const [client, types] = await Promise.all([getClient(user.easybeerIdClient), listeTypesClient()])
+  const idGrilleTarifaire = resoudreGrilleRacine(client?.type?.idClientType, types)
+  return c.json({ user, client, idGrilleTarifaire })
+})
+
+/** Catalogue commun (produits commandables + dispo). */
+app.get('/api/catalogue', requireAuth, async (c) => {
+  const produits = await listeProduitsAutocomplete(true)
+  return c.json({ produits })
+})
+
+/** Créer une proposition de commande => devis Easybeer + trace Firestore. */
+app.post('/api/commandes', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+
+  const body = await c.req.json<{
+    commentaire?: string
+    estDevis?: boolean
+    lignes: { idStockBouteille: number; quantite: number; prixUnitaireHT: number }[]
+  }>()
+  if (!body.lignes?.length) return c.json({ error: 'Aucune ligne de commande' }, 400)
+
+  // Résolution serveur : client -> grille racine, et produits complets depuis l'autocomplete.
+  const [client, types, produits] = await Promise.all([
+    getClient(user.easybeerIdClient),
+    listeTypesClient(),
+    listeProduitsAutocomplete(true),
+  ])
+  const idGrilleTarifaire = resoudreGrilleRacine(client?.type?.idClientType, types)
+  if (idGrilleTarifaire == null) return c.json({ error: 'Grille tarifaire introuvable pour ce client' }, 400)
+
+  const parId = new Map<number, ProduitAutocomplete>(produits.map((p) => [p.idStockBouteille, p]))
+  const lignes = body.lignes.map((l) => {
+    const produit = parId.get(l.idStockBouteille)
+    if (!produit) throw new Error(`Produit ${l.idStockBouteille} introuvable au catalogue`)
+    return { produit, quantite: l.quantite, prixUnitaireHT: l.prixUnitaireHT }
+  })
+  const tauxTVA = lignes[0].produit.tauxTVA ?? {}
+
+  const resultat = await enregistrerCommande({
+    idClient: user.easybeerIdClient,
+    idGrilleTarifaire,
+    tauxTVA,
+    commentaire: body.commentaire ?? '',
+    estDevis: body.estDevis ?? true,
+    lignes,
+  })
+
+  // Trace côté Firestore (miroir léger de suivi), si disponible.
+  const db = getDb()
+  const orderId = randomUUID()
+  if (db) {
+    await db.collection('orders').doc(orderId).set({
+      orderId,
+      uid: user.uid,
+      easybeerIdClient: user.easybeerIdClient,
+      easybeerIdCommande: resultat.id,
+      easybeerNumero: resultat.numero,
+      statut: 'proposee',
+      lignes: body.lignes,
+      commentaire: body.commentaire ?? '',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+  }
+
+  return c.json({ ok: true, orderId, easybeer: resultat })
+})
+
+/** Liste des commandes de l'utilisateur (Firestore). */
+app.get('/api/commandes', requireAuth, async (c) => {
+  const user = c.get('user')
+  const db = getDb()
+  if (!db) return c.json({ commandes: [], note: 'Firestore non configuré (dev).' })
+  const snap = await db.collection('orders').where('uid', '==', user.uid).get()
+  const commandes = snap.docs.map((d) => d.data()).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+  return c.json({ commandes })
+})
+
+/** Détail d'une commande Easybeer (pour le suivi). */
+app.get('/api/commandes/:id/easybeer', requireAuth, async (c) => {
+  const id = Number(c.req.param('id'))
+  const detail = await detailCommande(id)
+  return c.json({ detail })
+})
+
+// ---- Admin : invitations (squelette ; nécessite Firestore configuré) ----
+
+/** Liste des clients Easybeer (pour que l'admin choisisse qui inviter). */
+app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
+  const page = Number(c.req.query('page') ?? 1)
+  const recherche = c.req.query('q') ?? ''
+  const res = await listeClients(recherche ? { recherche } : {}, { numeroPage: page, nombreParPage: 25 })
+  return c.json(res)
+})
+
+/** Crée une invitation pour lier un client Easybeer à un futur compte. */
+app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firestore non configuré' }, 501)
+  const { easybeerIdClient, email } = await c.req.json<{ easybeerIdClient: number; email: string }>()
+  if (!easybeerIdClient || !email) return c.json({ error: 'easybeerIdClient et email requis' }, 400)
+  const token = randomUUID()
+  await db.collection('invitations').doc(token).set({
+    token,
+    easybeerIdClient,
+    email,
+    createdBy: c.get('user').uid,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 14, // 14 jours
+    usedAt: null,
+  })
+  const lien = `${config.invite.baseUrl}?token=${token}`
+  // TODO: envoi email si SMTP configuré ; sinon on renvoie le lien à copier.
+  return c.json({ ok: true, token, lien })
+})
+
+serve({ fetch: app.fetch, port: config.port }, (info) => {
+  console.log(`[server] GOA Kombucha backend sur http://localhost:${info.port}`)
+  if (config.authDisabled) console.log('[server] ⚠️  AUTH_DISABLED=true (dev) — auth court-circuitée.')
+})

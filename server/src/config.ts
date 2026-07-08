@@ -1,0 +1,31 @@
+import 'dotenv/config'
+
+function required(name: string, value: string | undefined): string {
+  if (!value) throw new Error(`Variable d'environnement manquante : ${name}`)
+  return value
+}
+
+export const config = {
+  port: Number(process.env.PORT ?? 8787),
+  webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
+
+  easybeer: {
+    target: process.env.EASYBEER_API_TARGET ?? 'https://api.easybeer.fr',
+    username: required('EASYBEER_USERNAME', process.env.EASYBEER_USERNAME),
+    password: required('EASYBEER_PASSWORD', process.env.EASYBEER_PASSWORD),
+  },
+
+  firebase: {
+    projectId: process.env.FIREBASE_PROJECT_ID || undefined,
+    credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS || undefined,
+  },
+
+  // En dev, tant que Firebase n'est pas configuré, on court-circuite l'auth.
+  authDisabled: process.env.AUTH_DISABLED === 'true',
+  devEasybeerIdClient: Number(process.env.DEV_EASYBEER_ID_CLIENT ?? 588074),
+
+  invite: {
+    baseUrl: process.env.INVITE_BASE_URL ?? 'http://localhost:5173/activer',
+    smtpUrl: process.env.SMTP_URL || undefined,
+  },
+}

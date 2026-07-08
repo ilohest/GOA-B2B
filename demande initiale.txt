@@ -1,0 +1,14 @@
+J'aimerais développer une application/plateforme web permettant aux clients professionnels de passer commande de manière simple et intuitive.
+
+Le système devra proposer deux modes de livraison que l'on choisit côté serveur selon le client:
+* livraison directe par nos soins
+* livraison par transporteur
+
+L'interface d'administration devra permettre de gérer facilement les paramètres commerciaux et logistiques, notamment:
+* les minimums de commande selon la région et le type de client.
+* les tarifs produits, les frais de livraison, les délais de livraison,
+* les éventuelles remises ou conditions commerciales spécifiques.
+
+Intégration d'un système de compte client 
+Un suivi de commande en temps réel
+Connexion à l'API de EasyBeer afin d'interconnecter automatiquement les commandes, fichiers et données clients 

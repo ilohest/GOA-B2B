@@ -1,0 +1,21 @@
+@import 'tailwindcss';
+
+/* Direction brand GOA : kombucha artisanal — ambre/émeraude sur pierre chaude. */
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --color-brand-50: #f0fdf4;
+  --color-brand-600: #047857;
+  --color-brand-700: #065f46;
+  --color-brand-800: #064e3b;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+body {
+  background-color: var(--color-stone-50);
+  color: var(--color-stone-800);
+  -webkit-font-smoothing: antialiased;
+}
