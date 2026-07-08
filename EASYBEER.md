@@ -40,6 +40,16 @@
 - L'API **throttle agressivement** : en enchaînant les appels (session 2026-06-20), nombreuses réponses
   **HTTP 200 mais corps vide** (0 octet), de façon intermittente, sur `client/liste`, `commande/liste`,
   `produit/edition`, etc. Ce n'est pas une erreur applicative — c'est de la limitation de débit.
+- ✅ **Limites EXPLICITES observées (2026-07-08)** : en dépassant le seuil, l'API répond désormais
+  **HTTP 400** avec corps texte `Limit of 10 requests per second reached. You are currently banned.
+  Try again in N seconds` (N observé ≈ 220 s, soit un **ban de ~4 min**). Donc : **10 req/s max**, et
+  le dépassement coûte très cher. **Insister pendant un ban (retries) ne fait que gaspiller** — parser
+  le message et attendre. Parade implémentée côté serveur (`server/src/easybeer.ts`) : file d'attente
+  unique avec espacement minimal entre TOUS les appels sortants + erreur typée `EasybeerBanError`.
+  - ⚠️ La limite réelle est PLUS stricte que le message : un run de synchro à **~5 req/s soutenus**
+    (espacement 200 ms) a re-déclenché un ban, et la durée annoncée **augmente** (220 s → 298 s).
+    Probable fenêtre glissante / quota par minute. Espacement adopté : **400 ms** (2,5 req/s) —
+    à ajuster si nouveau ban.
 - **Conséquence d'archi : NE JAMAIS appeler Easybeer en direct à chaque requête client.** Un trafic client
   normal ferait throttler la plateforme en continu.
 - **Pattern obligatoire** : un **job de synchro serveur** récupère le catalogue (produits, prix, stock, images)
@@ -353,6 +363,11 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
   Endpoints export remises en 500 (params à trouver). Fiche client expose adresses de livraison géocodées +
   délai de paiement. Modèle produit = produit fini (saveur) × contenant × colisage (idLot) = idStockBouteille.
   Désynchro colisage 0,35L : Jotform 12×35cL vs Easybeer Carton de 18 → à confirmer. Jotform = flux prod à reproduire.
+
+- **2026-07-08 (dev V1, étape 3)** : rate-limiting devenu **explicite** — HTTP **400**
+  `Limit of 10 requests per second reached. You are currently banned. Try again in N seconds`
+  (ban ~220 s). Voir §1bis. Le sync serveur sérialise désormais tous les appels (file unique, 200 ms
+  d'espacement) et abandonne immédiatement pendant un ban au lieu de réessayer.
 
 - **2026-07-08 (dev V1, étape 2)** : le filtre `idsClients` de `POST /parametres/client/liste` est
   **silencieusement ignoré** (renvoie la liste complète, même famille que `idClient` sur l'autocomplete

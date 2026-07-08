@@ -24,6 +24,9 @@ export const config = {
     emulatorFirestoreHost: process.env.FIRESTORE_EMULATOR_HOST ?? 'localhost:8080',
   },
 
+  // Synchro périodique Easybeer → cache (0 = désactivée ; en prod, Cloud Scheduler).
+  syncIntervalMinutes: Number(process.env.SYNC_INTERVAL_MINUTES ?? 0),
+
   // En dev, tant que Firebase n'est pas configuré, on court-circuite l'auth.
   authDisabled: process.env.AUTH_DISABLED === 'true',
   devEasybeerIdClient: Number(process.env.DEV_EASYBEER_ID_CLIENT ?? 588074),

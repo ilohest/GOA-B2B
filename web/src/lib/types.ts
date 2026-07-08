@@ -37,6 +37,14 @@ export interface AdminClientsResponse {
   comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }>
 }
 
+export interface SyncReport {
+  produits: number
+  typesClient: number
+  clients: { idClient: number; nom: string | null; prix: number; erreur?: string }[]
+  dureeMs: number
+  syncedAt: number
+}
+
 export interface InvitationResponse {
   ok: boolean
   email: string

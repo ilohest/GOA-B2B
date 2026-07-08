@@ -16,24 +16,59 @@ const BASE = config.easybeer.target
 const BASIC_AUTH =
   'Basic ' + Buffer.from(`${config.easybeer.username}:${config.easybeer.password}`).toString('base64')
 
-async function eb<T>(method: string, path: string, body?: unknown): Promise<{ status: number; json: T }> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      Authorization: BASIC_AUTH,
-      Accept: 'application/json',
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-  const text = await res.text()
-  let json: unknown
-  try {
-    json = text ? JSON.parse(text) : {}
-  } catch {
-    json = { _raw: text.slice(0, 300) }
+/**
+ * Rate-limiting Easybeer (vérifié 2026-07-08) : 10 req/s max, dépassement =
+ * BAN de ~3-4 min avec réponse HTTP 400 explicite ("You are currently banned.
+ * Try again in N seconds"). Parade : TOUS les appels sortants passent par une
+ * file unique avec espacement minimal — aucun code appelant ne peut créer de
+ * rafale, même sous trafic concurrent.
+ */
+// 400 ms (2,5 req/s) : un run à ~5 req/s soutenus a déclenché un ban malgré la
+// limite annoncée de 10 req/s (fenêtre glissante probable, bans croissants).
+const MIN_INTERVAL_MS = 400
+let fileAttente: Promise<unknown> = Promise.resolve()
+let dernierAppel = 0
+
+export class EasybeerBanError extends Error {
+  constructor(public retryAfterSeconds: number) {
+    super(`API Easybeer temporairement bannie (rate-limit) — réessayer dans ${retryAfterSeconds} s`)
+    this.name = 'EasybeerBanError'
   }
-  return { status: res.status, json: json as T }
+}
+
+async function eb<T>(method: string, path: string, body?: unknown): Promise<{ status: number; json: T }> {
+  const execution = fileAttente.then(async () => {
+    const attente = dernierAppel + MIN_INTERVAL_MS - Date.now()
+    if (attente > 0) await new Promise((r) => setTimeout(r, attente))
+    dernierAppel = Date.now()
+
+    const res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: {
+        Authorization: BASIC_AUTH,
+        Accept: 'application/json',
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+    const text = await res.text()
+
+    if (res.status === 400 && text.includes('banned')) {
+      const secondes = Number(/Try again in (\d+) seconds/.exec(text)?.[1] ?? 60)
+      throw new EasybeerBanError(secondes)
+    }
+
+    let json: unknown
+    try {
+      json = text ? JSON.parse(text) : {}
+    } catch {
+      json = { _raw: text.slice(0, 300) }
+    }
+    return { status: res.status, json: json as T }
+  })
+  // La file survit aux erreurs (l'échec est propagé à l'appelant seulement).
+  fileAttente = execution.catch(() => {})
+  return execution
 }
 
 // --- Types (sous-ensembles exploités) ---
@@ -69,6 +104,16 @@ export interface ModeleClient {
   adresse?: ModeleAdresse
   actif?: boolean
   type?: ModeleClientType
+  // Paramètres commerciaux (fiche complète via /parametres/client/edition —
+  // champs omis quand nuls, cf. EASYBEER.md §3).
+  minimumCommande?: number
+  minimumCommandeAutorise?: number
+  fraisLivraisonHT?: number
+  remise?: string
+  remise2?: string
+  typeRemise2?: string
+  typeLivraisonFav?: string
+  tags?: string[] | string
 }
 
 export interface ListePagineeOfModeleClient {
@@ -166,6 +211,35 @@ export async function listeProduitsAutocomplete(accesPro = true): Promise<Produi
     `/stock/produits/autocomplete?${params.toString()}`,
   )
   if (status !== 200) throw new Error(`Easybeer ${status} sur /stock/produits/autocomplete`)
+  return json
+}
+
+// --- Tarifs ---
+
+export interface PrixProduit {
+  idProduitPrix?: number
+  prixHT?: number
+  horsDroits?: boolean
+}
+
+/**
+ * GET /parametres/prix/{idStockBouteille}/{idClientType}/{idClient} —
+ * prix d'UN produit pour LE client connecté (type + id réels : les prix varient
+ * par grille ET par tarifs custom client, cf. EASYBEER.md).
+ * Grille sans tarif défini → objet sans `prixHT` (pas une erreur).
+ */
+export async function getPrix(
+  idStockBouteille: number,
+  idClientType: number,
+  idClient: number,
+): Promise<PrixProduit | null> {
+  const { status, json } = await eb<PrixProduit>(
+    'GET',
+    `/parametres/prix/${idStockBouteille}/${idClientType}/${idClient}`,
+  )
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /parametres/prix/${idStockBouteille}`)
+  // Corps vide (throttling) → null pour déclencher un retry côté sync.
+  if (json == null || Object.keys(json).length === 0) return null
   return json
 }
 

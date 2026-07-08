@@ -15,10 +15,21 @@ import {
   detailCommande,
   type ProduitAutocomplete,
 } from './easybeer.js'
+import { lireCacheClient, lireCatalogue, syncTout } from './sync.js'
+
+import { EasybeerBanError } from './easybeer.js'
 
 const app = new Hono()
 
 app.use('*', cors({ origin: config.webOrigin, credentials: true }))
+
+app.onError((err, c) => {
+  if (err instanceof EasybeerBanError) {
+    return c.json({ error: err.message, retryAfterSeconds: err.retryAfterSeconds }, 503)
+  }
+  console.error('[server]', err)
+  return c.json({ error: err.message || 'Erreur interne' }, 500)
+})
 
 app.get('/api/health', (c) => c.json({ ok: true, authDisabled: config.authDisabled }))
 
@@ -38,15 +49,31 @@ app.get('/api/me', requireAuth, async (c) => {
   if (user.easybeerIdClient == null) {
     return c.json({ user, client: null, idGrilleTarifaire: null })
   }
-  const [client, types] = await Promise.all([getClient(user.easybeerIdClient), listeTypesClient()])
-  const idGrilleTarifaire = resoudreGrilleRacine(client?.type?.idClientType, types)
-  return c.json({ user, client, idGrilleTarifaire })
+
+  const db = getDb()
+  if (!db) {
+    // Mode dev sans Firebase (AUTH_DISABLED) : lecture directe, jamais en prod.
+    const [client, types] = await Promise.all([getClient(user.easybeerIdClient), listeTypesClient()])
+    const idGrilleTarifaire = resoudreGrilleRacine(client?.type?.idClientType, types)
+    return c.json({ user, client, idGrilleTarifaire })
+  }
+
+  // Lecture CACHE (rempli à la volée au premier login) — jamais Easybeer en direct.
+  const cache = await lireCacheClient(db, user.easybeerIdClient)
+  return c.json({
+    user,
+    client: cache.client,
+    idGrilleTarifaire: cache.idGrilleTarifaire,
+    syncedAt: cache.syncedAt,
+  })
 })
 
-/** Catalogue commun (produits commandables + dispo). */
+/** Catalogue commun (produits commandables), servi depuis le cache. */
 app.get('/api/catalogue', requireAuth, async (c) => {
-  const produits = await listeProduitsAutocomplete(true)
-  return c.json({ produits })
+  const db = getDb()
+  if (!db) return c.json({ produits: await listeProduitsAutocomplete(true) })
+  const { produits, syncedAt } = await lireCatalogue(db)
+  return c.json({ produits, syncedAt })
 })
 
 /** Créer une proposition de commande => devis Easybeer + trace Firestore. */
@@ -210,6 +237,37 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
     client: { idClient: client.idClient, nom: client.nom, numero: client.numero },
   })
 })
+
+// ---- Admin : synchro du cache ----
+
+/** Dernier rapport de synchro. */
+app.get('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  const snap = await db.doc('cache/meta').get()
+  return c.json({ dernierSync: snap.data()?.dernierSync ?? null })
+})
+
+/** Déclenche une synchro complète Easybeer → cache. */
+app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  const report = await syncTout(db)
+  return c.json({ ok: true, report })
+})
+
+// Synchro périodique optionnelle (SYNC_INTERVAL_MINUTES > 0). En prod, préférer
+// Cloud Scheduler → POST /api/admin/sync (étape 9).
+if (config.syncIntervalMinutes > 0) {
+  setInterval(
+    () => {
+      const db = getDb()
+      if (db) syncTout(db).catch((e) => console.error('[sync] échec :', (e as Error).message))
+    },
+    config.syncIntervalMinutes * 60_000,
+  )
+  console.log(`[sync] synchro périodique toutes les ${config.syncIntervalMinutes} min.`)
+}
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`[server] GOA Kombucha backend sur http://localhost:${info.port}`)
