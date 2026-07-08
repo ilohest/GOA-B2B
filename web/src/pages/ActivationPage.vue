@@ -6,6 +6,7 @@ import { toast } from 'vue-sonner'
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth'
 import { firebaseAuth } from '@/firebase'
 import { useAuth } from '@/composables/useAuth'
+import BrandLogo from '@/components/BrandLogo.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -76,7 +77,7 @@ async function onSubmit() {
   <main class="flex min-h-dvh items-center justify-center p-4">
     <Card class="w-full max-w-sm">
       <CardHeader class="text-center">
-        <p class="text-sm font-semibold tracking-widest text-primary uppercase">GOA Kombucha</p>
+        <BrandLogo variante="complet" class="mb-2" />
         <CardTitle class="text-xl">Créez votre mot de passe</CardTitle>
         <CardDescription v-if="state === 'ready'">
           Compte : <span class="font-medium text-foreground">{{ email }}</span>

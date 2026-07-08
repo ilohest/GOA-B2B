@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { useAuth } from '@/composables/useAuth'
 import { useMe } from '@/composables/useMe'
+import BrandLogo from '@/components/BrandLogo.vue'
 import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/sonner'
 
@@ -34,8 +35,11 @@ async function onLogout() {
     >
       <div class="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-3 px-4">
         <nav class="flex items-center gap-4">
-          <RouterLink to="/" class="text-sm font-semibold tracking-widest text-primary uppercase">
-            GOA Kombucha
+          <RouterLink to="/" class="flex items-center gap-2">
+            <BrandLogo variante="rond" />
+            <span class="hidden text-sm font-semibold tracking-widest text-primary uppercase sm:inline">
+              GOA Kombucha
+            </span>
           </RouterLink>
           <RouterLink
             to="/commandes"

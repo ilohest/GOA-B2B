@@ -10,6 +10,7 @@ import {
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { AdminClientsResponse, ClientEasybeer, InvitationResponse, SyncReport } from '@/lib/types'
+import { dateHeureFr } from '@/lib/format'
 import AdminNav from '@/components/AdminNav.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -113,9 +114,6 @@ const synchro = useMutation({
 
 const dernierSync = computed(() => synchro.data.value?.report ?? syncMeta.value?.dernierSync ?? null)
 
-const formatDate = (ts: number) =>
-  new Date(ts).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
-
 // --- Table (TanStack) ---
 
 const compteDe = (c: ClientEasybeer) =>
@@ -202,7 +200,7 @@ const totalPages = computed(() => data.value?.totalPages ?? 1)
       <CardContent class="flex flex-wrap items-center justify-between gap-3">
         <p class="text-sm text-muted-foreground">
           <template v-if="dernierSync">
-            Dernière synchro : {{ formatDate(dernierSync.syncedAt) }} —
+            Dernière synchro : {{ dateHeureFr(dernierSync.syncedAt) }} —
             {{ dernierSync.produits }} produits, {{ dernierSync.clients.length }} client(s)
             <span v-if="dernierSync.clients.some((c) => c.erreur)" class="text-destructive">
               ({{ dernierSync.clients.filter((c) => c.erreur).length }} en erreur)

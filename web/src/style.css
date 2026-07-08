@@ -10,10 +10,10 @@
 
 /* Direction brand GOA : kombucha artisanal — accent émeraude unique sur neutres. */
 @theme {
-  --color-brand-50: #f0fdf4;
-  --color-brand-600: #047857;
-  --color-brand-700: #065f46;
-  --color-brand-800: #064e3b;
+  --color-brand-50: #f0faf2;
+  --color-brand-600: #289948;
+  --color-brand-700: #1f7a39;
+  --color-brand-800: #175c2b;
 }
 
 @theme inline {
@@ -63,7 +63,7 @@
   --card-foreground: oklch(0.216 0.006 56.043);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.216 0.006 56.043);
-  --primary: oklch(0.508 0.118 165.612);
+  --primary: oklch(0.512 0.13 148.6);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0.001 106.424);
   --secondary-foreground: oklch(0.216 0.006 56.043);
@@ -74,21 +74,21 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.923 0.003 48.717);
   --input: oklch(0.923 0.003 48.717);
-  --ring: oklch(0.508 0.118 165.612);
-  --chart-1: oklch(0.508 0.118 165.612);
-  --chart-2: oklch(0.696 0.149 162.48);
+  --ring: oklch(0.602 0.155 148.4);
+  --chart-1: oklch(0.602 0.155 148.4);
+  --chart-2: oklch(0.708 0.142 149.0);
   --chart-3: oklch(0.553 0.013 58.071);
   --chart-4: oklch(0.709 0.01 56.259);
   --chart-5: oklch(0.268 0.007 34.298);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0.001 106.423);
   --sidebar-foreground: oklch(0.216 0.006 56.043);
-  --sidebar-primary: oklch(0.508 0.118 165.612);
+  --sidebar-primary: oklch(0.512 0.13 148.6);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0.001 106.424);
   --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
   --sidebar-border: oklch(0.923 0.003 48.717);
-  --sidebar-ring: oklch(0.508 0.118 165.612);
+  --sidebar-ring: oklch(0.602 0.155 148.4);
 }
 
 .dark {
@@ -98,8 +98,8 @@
   --card-foreground: oklch(0.985 0.001 106.423);
   --popover: oklch(0.216 0.006 56.043);
   --popover-foreground: oklch(0.985 0.001 106.423);
-  --primary: oklch(0.696 0.149 162.48);
-  --primary-foreground: oklch(0.262 0.051 172.552);
+  --primary: oklch(0.708 0.142 149.0);
+  --primary-foreground: oklch(0.26 0.06 148.6);
   --secondary: oklch(0.268 0.007 34.298);
   --secondary-foreground: oklch(0.985 0.001 106.423);
   --muted: oklch(0.268 0.007 34.298);
@@ -109,20 +109,20 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.696 0.149 162.48);
-  --chart-1: oklch(0.696 0.149 162.48);
-  --chart-2: oklch(0.508 0.118 165.612);
+  --ring: oklch(0.708 0.142 149.0);
+  --chart-1: oklch(0.708 0.142 149.0);
+  --chart-2: oklch(0.602 0.155 148.4);
   --chart-3: oklch(0.709 0.01 56.259);
   --chart-4: oklch(0.553 0.013 58.071);
   --chart-5: oklch(0.923 0.003 48.717);
   --sidebar: oklch(0.216 0.006 56.043);
   --sidebar-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-primary: oklch(0.696 0.149 162.48);
-  --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
+  --sidebar-primary: oklch(0.708 0.142 149.0);
+  --sidebar-primary-foreground: oklch(0.26 0.06 148.6);
   --sidebar-accent: oklch(0.268 0.007 34.298);
   --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.696 0.149 162.48);
+  --sidebar-ring: oklch(0.708 0.142 149.0);
 }
 
 @layer base {

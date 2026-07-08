@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CatalogueClientResponse, ProduitCatalogueClient } from '@/lib/types'
+import { prixFr } from '@/lib/format'
 import { useMe } from '@/composables/useMe'
 import { usePanier } from '@/composables/usePanier'
-import { Badge } from '@/components/ui/badge'
+import ProduitCard from '@/components/catalogue/ProduitCard.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -27,8 +28,6 @@ const catalogue = useQuery({
   queryKey: ['catalogue'],
   queryFn: () => api.get<CatalogueClientResponse>('/catalogue'),
 })
-
-const prixFr = (v: number) => v.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 
 // --- Panier ---
 
@@ -151,55 +150,15 @@ function ouvrirRecap() {
           Le catalogue n'est pas encore disponible — revenez bientôt.
         </p>
 
-        <ul v-else class="grid gap-3 sm:grid-cols-2">
-          <li
+        <div v-else class="grid gap-3 sm:grid-cols-2">
+          <ProduitCard
             v-for="p in catalogue.data.value.produits"
             :key="p.idStockBouteille"
-            class="flex flex-col justify-between gap-3 rounded-xl border p-4"
-            :class="p.rupture ? 'opacity-60' : ''"
-          >
-            <div class="flex items-start justify-between gap-2">
-              <p class="font-medium">{{ p.libelle }}</p>
-              <Badge v-if="p.rupture" variant="destructive" class="shrink-0">Rupture</Badge>
-            </div>
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-sm text-muted-foreground">
-                <template v-if="p.prixHT != null">
-                  <span class="text-base font-semibold text-foreground">{{ prixFr(p.prixHT) }}</span>
-                  HT
-                </template>
-                <template v-else>Prix sur demande</template>
-              </p>
-              <div v-if="!p.rupture && p.prixHT != null" class="flex flex-col items-end gap-1">
-                <div class="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    class="size-10 text-lg"
-                    :disabled="!quantites[p.idStockBouteille]"
-                    :aria-label="`Retirer ${p.pas > 1 ? p.pas + ' cartons' : 'un carton'} de ${p.libelle}`"
-                    @click="changer(p.idStockBouteille, -p.pas)"
-                  >
-                    −
-                  </Button>
-                  <span class="w-8 text-center text-base font-semibold tabular-nums">
-                    {{ quantites[p.idStockBouteille] ?? 0 }}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    class="size-10 text-lg"
-                    :aria-label="`Ajouter ${p.pas > 1 ? p.pas + ' cartons' : 'un carton'} de ${p.libelle}`"
-                    @click="changer(p.idStockBouteille, p.pas)"
-                  >
-                    +
-                  </Button>
-                </div>
-                <p v-if="p.pas > 1" class="text-xs text-muted-foreground">par {{ p.pas }} (La Poste)</p>
-              </div>
-            </div>
-          </li>
-        </ul>
+            :produit="p"
+            :quantite="quantites[p.idStockBouteille] ?? 0"
+            @changer="(delta) => changer(p.idStockBouteille, delta)"
+          />
+        </div>
       </CardContent>
     </Card>
 

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CommandeDetail, CommandeEdition, CommandeResume } from '@/lib/types'
+import { dateFr, prixFr } from '@/lib/format'
 import { usePanier } from '@/composables/usePanier'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,10 +18,6 @@ const { data, isPending, isError, error } = useQuery({
   queryKey: ['commandes'],
   queryFn: () => api.get<{ commandes: CommandeResume[] }>('/commandes'),
 })
-
-const prixFr = (v: number) => v.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
-const dateFr = (ts: number | null) =>
-  ts ? new Date(ts).toLocaleDateString('fr-FR', { dateStyle: 'medium' }) : '—'
 
 const chargement = ref<number | null>(null)
 

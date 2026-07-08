@@ -49,11 +49,16 @@ function patcher(idStockBouteille: number, patch: Partial<CatalogueOverride>) {
   maj.mutate({ idStockBouteille, patch })
 }
 
-function renommer(idStockBouteille: number, event: Event) {
-  const displayName = (event.target as HTMLInputElement).value
+/** Enregistre un champ texte au blur, seulement s'il a changé. */
+function enregistrerTexte(
+  idStockBouteille: number,
+  champ: 'displayName' | 'photoUrl',
+  event: Event,
+) {
+  const valeur = (event.target as HTMLInputElement).value
   const actuel = data.value?.produits.find((p) => p.produit.idStockBouteille === idStockBouteille)
-  if (actuel && actuel.override.displayName !== displayName.trim()) {
-    patcher(idStockBouteille, { displayName })
+  if (actuel && actuel.override[champ] !== valeur.trim()) {
+    patcher(idStockBouteille, { [champ]: valeur })
   }
 }
 </script>
@@ -92,7 +97,14 @@ function renommer(idStockBouteille: number, event: Event) {
                 :model-value="override.displayName"
                 :placeholder="`Nom d'affichage (sinon : ${produit.libelle})`"
                 class="max-w-md"
-                @blur="renommer(produit.idStockBouteille, $event)"
+                @blur="enregistrerTexte(produit.idStockBouteille, 'displayName', $event)"
+                @keydown.enter="($event.target as HTMLInputElement).blur()"
+              />
+              <Input
+                :model-value="override.photoUrl"
+                placeholder="URL de la photo (upload à venir)"
+                class="max-w-md"
+                @blur="enregistrerTexte(produit.idStockBouteille, 'photoUrl', $event)"
                 @keydown.enter="($event.target as HTMLInputElement).blur()"
               />
             </div>

@@ -32,6 +32,14 @@ Le compte client est lié au client Easybeer de test 588074 (CL000083).
 
 ⚠️ Le backend écoute sur **8788** (8787 déjà pris sur le poste de dev par un autre projet).
 
+## À faire en fin de développement
+
+- **Skeletons** : repasser sur tous les états de chargement (catalogue, listes,
+  détails) avec des skeletons calqués sur le HTML final — à faire quand le
+  markup sera stabilisé, pour éviter de les maintenir en double pendant le dev.
+- Photos produits : upload via Firebase Storage dans l'admin (le champ
+  `photoUrl` des overrides est déjà branché côté client).
+
 ## Règles d'or
 
 1. **Lire `EASYBEER.md` avant tout appel à l'API Easybeer** et le mettre à jour à chaque découverte.

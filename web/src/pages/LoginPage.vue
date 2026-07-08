@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { z } from 'zod'
 import { toast } from 'vue-sonner'
 import { useAuth } from '@/composables/useAuth'
+import BrandLogo from '@/components/BrandLogo.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -88,7 +89,7 @@ async function onResetPassword() {
   <main class="flex min-h-dvh items-center justify-center p-4">
     <Card class="w-full max-w-sm">
       <CardHeader class="text-center">
-        <p class="text-sm font-semibold tracking-widest text-primary uppercase">GOA Kombucha</p>
+        <BrandLogo variante="complet" class="mb-2" />
         <CardTitle class="text-xl">Espace professionnel</CardTitle>
         <CardDescription>Connectez-vous pour passer commande</CardDescription>
       </CardHeader>
