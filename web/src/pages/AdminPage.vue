@@ -10,6 +10,7 @@ import {
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { AdminClientsResponse, ClientEasybeer, InvitationResponse, SyncReport } from '@/lib/types'
+import AdminNav from '@/components/AdminNav.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -188,6 +189,8 @@ const totalPages = computed(() => data.value?.totalPages ?? 1)
 
 <template>
   <div class="grid gap-4">
+    <AdminNav />
+
     <Card>
       <CardHeader>
         <CardTitle class="text-lg">Synchronisation Easybeer</CardTitle>

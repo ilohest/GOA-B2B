@@ -16,6 +16,7 @@ import {
   type ProduitAutocomplete,
 } from './easybeer.js'
 import { lireCacheClient, lireCatalogue, syncTout } from './sync.js'
+import { catalogueAdmin, catalogueClient, lireOverrides, majOverride } from './catalogue.js'
 
 import { EasybeerBanError } from './easybeer.js'
 
@@ -68,12 +69,19 @@ app.get('/api/me', requireAuth, async (c) => {
   })
 })
 
-/** Catalogue commun (produits commandables), servi depuis le cache. */
+/**
+ * Catalogue CLIENT : produits rendus visibles par GOA (overrides) + prix du
+ * client connecté. Tout vient du cache — zéro appel Easybeer.
+ */
 app.get('/api/catalogue', requireAuth, async (c) => {
+  const user = c.get('user')
   const db = getDb()
   if (!db) return c.json({ produits: await listeProduitsAutocomplete(true) })
-  const { produits, syncedAt } = await lireCatalogue(db)
-  return c.json({ produits, syncedAt })
+
+  const [{ produits, syncedAt }, overrides] = await Promise.all([lireCatalogue(db), lireOverrides(db)])
+  const prixClient =
+    user.easybeerIdClient != null ? (await lireCacheClient(db, user.easybeerIdClient)).prix : null
+  return c.json({ produits: catalogueClient(produits, overrides, prixClient), syncedAt })
 })
 
 /** Créer une proposition de commande => devis Easybeer + trace Firestore. */
@@ -236,6 +244,26 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
     dejaActif: prev.status === 'active',
     client: { idClient: client.idClient, nom: client.nom, numero: client.numero },
   })
+})
+
+// ---- Admin : gestion du catalogue (visible / nom / photo / rupture) ----
+
+/** Tous les produits Easybeer + overrides, pour l'écran admin catalogue. */
+app.get('/api/admin/catalogue', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  return c.json(await catalogueAdmin(db))
+})
+
+/** Met à jour l'override d'un produit (champs partiels). */
+app.put('/api/admin/catalogue/:idStockBouteille', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  const id = Number(c.req.param('idStockBouteille'))
+  if (!Number.isFinite(id)) return c.json({ error: 'idStockBouteille invalide' }, 400)
+  const patch = await c.req.json<Record<string, unknown>>()
+  const override = await majOverride(db, id, patch)
+  return c.json({ ok: true, override })
 })
 
 // ---- Admin : synchro du cache ----

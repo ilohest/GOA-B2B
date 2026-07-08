@@ -37,6 +37,32 @@ export interface AdminClientsResponse {
   comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }>
 }
 
+export interface CatalogueOverride {
+  visible: boolean
+  displayName: string
+  photoUrl: string
+  rupture: boolean
+}
+
+export interface CatalogueAdminResponse {
+  syncedAt: number
+  produits: { produit: ProduitAutocomplete; override: CatalogueOverride }[]
+}
+
+export interface ProduitCatalogueClient {
+  idStockBouteille: number
+  libelle: string
+  libelleEasybeer: string
+  photoUrl: string | null
+  rupture: boolean
+  prixHT: number | null
+}
+
+export interface CatalogueClientResponse {
+  produits: ProduitCatalogueClient[]
+  syncedAt: number
+}
+
 export interface SyncReport {
   produits: number
   typesClient: number

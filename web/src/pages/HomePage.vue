@@ -1,9 +1,21 @@
 <script setup lang="ts">
+import { useQuery } from '@tanstack/vue-query'
+import { api } from '@/lib/api'
+import type { CatalogueClientResponse } from '@/lib/types'
 import { useMe } from '@/composables/useMe'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
 const { data, isPending, isError, error } = useMe()
+
+const catalogue = useQuery({
+  queryKey: ['catalogue'],
+  queryFn: () => api.get<CatalogueClientResponse>('/catalogue'),
+})
+
+const prixFr = (v: number) =>
+  v.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 </script>
 
 <template>
@@ -48,9 +60,46 @@ const { data, isPending, isError, error } = useMe()
 
     <Card>
       <CardHeader>
-        <CardTitle class="text-lg">Catalogue &amp; commande</CardTitle>
-        <CardDescription>Bientôt disponible — étapes 4 et 5 du développement.</CardDescription>
+        <CardTitle class="text-lg">Nos kombuchas</CardTitle>
+        <CardDescription>Prix HT, selon vos conditions tarifaires.</CardDescription>
       </CardHeader>
+      <CardContent>
+        <div v-if="catalogue.isPending.value" class="grid gap-3 sm:grid-cols-2">
+          <Skeleton v-for="i in 4" :key="i" class="h-28 w-full" />
+        </div>
+
+        <p v-else-if="catalogue.isError.value" class="text-sm text-destructive">
+          Impossible de charger le catalogue : {{ (catalogue.error.value as Error)?.message }}
+        </p>
+
+        <p
+          v-else-if="!catalogue.data.value?.produits.length"
+          class="text-sm text-muted-foreground"
+        >
+          Le catalogue n'est pas encore disponible — revenez bientôt.
+        </p>
+
+        <ul v-else class="grid gap-3 sm:grid-cols-2">
+          <li
+            v-for="p in catalogue.data.value.produits"
+            :key="p.idStockBouteille"
+            class="flex flex-col justify-between gap-2 rounded-xl border p-4"
+            :class="p.rupture ? 'opacity-60' : ''"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <p class="font-medium">{{ p.libelle }}</p>
+              <Badge v-if="p.rupture" variant="destructive" class="shrink-0">Rupture</Badge>
+            </div>
+            <p class="text-sm text-muted-foreground">
+              <template v-if="p.prixHT != null">
+                <span class="text-base font-semibold text-foreground">{{ prixFr(p.prixHT) }}</span>
+                HT
+              </template>
+              <template v-else>Prix sur demande</template>
+            </p>
+          </li>
+        </ul>
+      </CardContent>
     </Card>
   </div>
 </template>

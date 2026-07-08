@@ -26,6 +26,11 @@ const router = createRouter({
       name: 'admin',
       component: () => import('@/pages/AdminPage.vue'),
     },
+    {
+      path: '/admin/catalogue',
+      name: 'admin-catalogue',
+      component: () => import('@/pages/AdminCataloguePage.vue'),
+    },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
