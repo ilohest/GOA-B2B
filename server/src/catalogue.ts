@@ -121,14 +121,8 @@ export async function majOverride(
   if (typeof patch.visible === 'boolean') champs.visible = patch.visible
   if (typeof patch.rupture === 'boolean') champs.rupture = patch.rupture
   if (typeof patch.displayName === 'string') champs.displayName = patch.displayName.trim()
-  if (typeof patch.photoUrl === 'string') {
-    const url = patch.photoUrl.trim()
-    // Chemin d'asset local (/produits/…) ou https — pas de http ni de schéma exotique.
-    if (url !== '' && !url.startsWith('/') && !url.startsWith('https://')) {
-      throw new Error('URL de photo invalide : chemin local (/…) ou https:// uniquement')
-    }
-    champs.photoUrl = url
-  }
+  // La politique d'URL (chemin local ou https) est validée en amont (schemas.ts).
+  if (typeof patch.photoUrl === 'string') champs.photoUrl = patch.photoUrl.trim()
   await ref.set({ ...champs, updatedAt: Date.now() }, { merge: true })
   return { ...OVERRIDE_DEFAUT, ...((await ref.get()).data() as Partial<CatalogueOverride>) }
 }

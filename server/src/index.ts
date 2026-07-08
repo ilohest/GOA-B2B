@@ -19,6 +19,7 @@ import {
   type ProduitAutocomplete,
 } from './easybeer.js'
 import { lireCacheClient, lireCatalogue, syncTout } from './sync.js'
+import { CommandeBodySchema, InvitationBodySchema, OverridePatchSchema, parserBody } from './schemas.js'
 import {
   catalogueAdmin,
   catalogueClient,
@@ -185,11 +186,11 @@ app.post('/api/commandes', requireAuth, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
 
-  const body = await c.req.json<{
-    commentaire?: string
-    lignes: { idStockBouteille: number; quantite: number }[]
-  }>()
-  const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes ?? [])
+  const parse = parserBody(CommandeBodySchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+  const body = parse.data
+
+  const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes)
   if (!resolution.ok) return c.json({ error: resolution.erreur }, 400)
   const { lignes, totalHT, idGrilleTarifaire } = resolution
 
@@ -368,11 +369,11 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
     return c.json({ error: `Cette commande ne peut plus être modifiée (état : ${etat.toLowerCase()})` }, 409)
   }
 
-  const body = await c.req.json<{
-    commentaire?: string
-    lignes: { idStockBouteille: number; quantite: number }[]
-  }>()
-  const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes ?? [])
+  const parse = parserBody(CommandeBodySchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+  const body = parse.data
+
+  const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes)
   if (!resolution.ok) return c.json({ error: resolution.erreur }, 400)
   const { lignes, totalHT } = resolution
 
@@ -438,8 +439,9 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
   const adminAuth = getAdminAuth()
   if (!db || !adminAuth) return c.json({ error: 'Firebase non configuré' }, 501)
 
-  const body = await c.req.json<{ easybeerIdClient: number; email?: string }>()
-  if (!body.easybeerIdClient) return c.json({ error: 'easybeerIdClient requis' }, 400)
+  const parse = parserBody(InvitationBodySchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+  const body = parse.data
 
   const client = await getClient(body.easybeerIdClient)
   if (!client) return c.json({ error: `Client Easybeer ${body.easybeerIdClient} introuvable` }, 404)
@@ -501,8 +503,9 @@ app.put('/api/admin/catalogue/:idStockBouteille', requireAuth, requireAdmin, asy
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
   const id = Number(c.req.param('idStockBouteille'))
   if (!Number.isFinite(id)) return c.json({ error: 'idStockBouteille invalide' }, 400)
-  const patch = await c.req.json<Record<string, unknown>>()
-  const override = await majOverride(db, id, patch)
+  const parse = parserBody(OverridePatchSchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+  const override = await majOverride(db, id, parse.data)
   return c.json({ ok: true, override })
 })
 
