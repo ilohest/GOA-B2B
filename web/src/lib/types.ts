@@ -13,13 +13,17 @@ export interface ProduitAutocomplete {
 }
 
 export interface ClientEasybeer {
-  idClient?: number
-  nom?: string
-  raisonSociale?: string
-  numero?: string
-  emailPrincipal?: string
+  idClient?: number | null
+  nom?: string | null
+  raisonSociale?: string | null
+  numero?: string | null
+  emailPrincipal?: string | null
   adresse?: { complete?: string; codePostal?: string; ville?: string }
-  type?: { idClientType?: number; libelle?: string }
+  type?: { idClientType?: number | null; libelle?: string | null } | null
+  // Paramètres commerciaux (fiche allégée du cache serveur)
+  minimumCommande?: number | null
+  typeLivraisonFav?: string | null
+  tags?: string[] | string | null
 }
 
 export interface AuthUser {

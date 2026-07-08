@@ -27,6 +27,10 @@ export const config = {
   // Synchro périodique Easybeer → cache (0 = désactivée ; en prod, Cloud Scheduler).
   syncIntervalMinutes: Number(process.env.SYNC_INTERVAL_MINUTES ?? 0),
 
+  // true (défaut, dev) => les commandes partent en DEVIS Easybeer (réversible).
+  // Passer à false en prod pour créer de vraies commandes.
+  commandeEstDevis: process.env.COMMANDE_EST_DEVIS !== 'false',
+
   // En dev, tant que Firebase n'est pas configuré, on court-circuite l'auth.
   authDisabled: process.env.AUTH_DISABLED === 'true',
   devEasybeerIdClient: Number(process.env.DEV_EASYBEER_ID_CLIENT ?? 588074),

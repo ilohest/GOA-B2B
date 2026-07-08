@@ -364,6 +364,13 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
   délai de paiement. Modèle produit = produit fini (saveur) × contenant × colisage (idLot) = idStockBouteille.
   Désynchro colisage 0,35L : Jotform 12×35cL vs Easybeer Carton de 18 → à confirmer. Jotform = flux prod à reproduire.
 
+- **2026-07-08 (dev V1, étape 5)** : commande créée via la plateforme (devis 2691703, recette §4
+  inchangée). ⚠️ **Écart de prix observé** : envoyé `prixUnitaireHTHorsRemise: 27.30` (= prix de
+  `/parametres/prix`), mais `commande/edition` renvoie `prixUnitaireHTHorsRemise: 27.55` et
+  `totalHT: 55.10` (au lieu de 54.60). Écart de **+0,25 €/carton — consigne probable** (champ
+  `totalConsigne` au modèle commande). **À clarifier avec GOA** : le prix affiché côté plateforme
+  doit-il inclure la consigne ? (Easybeer reste maître de la facturation, cf. brief §6.5.)
+
 - **2026-07-08 (dev V1, étape 3)** : rate-limiting devenu **explicite** — HTTP **400**
   `Limit of 10 requests per second reached. You are currently banned. Try again in N seconds`
   (ban ~220 s). Voir §1bis. Le sync serveur sérialise désormais tous les appels (file unique, 200 ms
