@@ -1,4 +1,13 @@
 {
+  "name": "goa-kombucha",
+  "private": true,
+  "scripts": {
+    "dev:emulators": "firebase emulators:start --project demo-goa-kombucha",
+    "dev:server": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "seed": "npm --prefix server run seed",
+    "typecheck": "npm --prefix server run typecheck && npm --prefix web run typecheck"
+  },
   "devDependencies": {
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

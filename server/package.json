@@ -6,6 +6,7 @@
   "description": "Backend GOA Kombucha — intégration Easybeer (Basic Auth) + Firebase Admin/Firestore",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "seed": "tsx scripts/seed-dev.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit"

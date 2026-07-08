@@ -228,9 +228,9 @@ export async function supprimerCommande(idCommande: number): Promise<void> {
   if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/supprimer/${idCommande}`)
 }
 
-/** GET /commande/detail/{id} — pour le suivi de statut. */
+/** GET /commande/edition/{id} — détail complet (lignes dans elementsBouteilles[]). */
 export async function detailCommande(idCommande: number): Promise<Record<string, unknown>> {
-  const { status, json } = await eb<Record<string, unknown>>('GET', `/commande/detail/${idCommande}`)
-  if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/detail/${idCommande}`)
+  const { status, json } = await eb<Record<string, unknown>>('GET', `/commande/edition/${idCommande}`)
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/edition/${idCommande}`)
   return json
 }

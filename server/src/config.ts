@@ -6,7 +6,7 @@ function required(name: string, value: string | undefined): string {
 }
 
 export const config = {
-  port: Number(process.env.PORT ?? 8787),
+  port: Number(process.env.PORT ?? 8788),
   webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
 
   easybeer: {
@@ -18,6 +18,10 @@ export const config = {
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || undefined,
     credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS || undefined,
+    // Dev : émulateurs locaux (Auth + Firestore) au lieu d'un vrai projet.
+    emulators: process.env.FIREBASE_EMULATORS === 'true',
+    emulatorAuthHost: process.env.FIREBASE_AUTH_EMULATOR_HOST ?? 'localhost:9099',
+    emulatorFirestoreHost: process.env.FIRESTORE_EMULATOR_HOST ?? 'localhost:8080',
   },
 
   // En dev, tant que Firebase n'est pas configuré, on court-circuite l'auth.
