@@ -20,6 +20,37 @@ export interface CatalogueOverride {
 
 const OVERRIDE_DEFAUT: CatalogueOverride = { visible: false, displayName: '', photoUrl: '', rupture: false }
 
+// --- Règle transporteur La Poste (brief §6.3/6.4) ---
+
+export type FormatProduit = '35cl' | '1l' | null
+
+/** Format déduit du libellé Easybeer (ex. « … - Carton de 6 Bouteilles - 1L »). */
+export function detecterFormat(libelle: string): FormatProduit {
+  if (/0[.,]?35\s*c?l/i.test(libelle)) return '35cl'
+  if (/\b1\s*l\b/i.test(libelle)) return '1l'
+  return null
+}
+
+/** Tags de la fiche client, normalisés (Easybeer : string, tableau, ou objets). */
+export function normaliserTags(tags: unknown): string[] {
+  if (tags == null) return []
+  const brut = Array.isArray(tags) ? tags : String(tags).split(',')
+  return brut
+    .map((t) => (typeof t === 'string' ? t : ((t as { libelle?: string })?.libelle ?? '')))
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+/**
+ * Pas de commande (incrément de quantité) : les clients tagués `laposte`
+ * commandent en gros cartons homogènes → multiples de 3 (35cl) / 2 (1L).
+ */
+export function pasDeCommande(libelle: string, tags: string[]): number {
+  if (!tags.includes('laposte')) return 1
+  const format = detecterFormat(libelle)
+  return format === '35cl' ? 3 : format === '1l' ? 2 : 1
+}
+
 export async function lireOverrides(db: Firestore): Promise<Record<string, CatalogueOverride>> {
   const snap = await db.collection('catalogueOverrides').get()
   const overrides: Record<string, CatalogueOverride> = {}
@@ -46,6 +77,8 @@ export interface ProduitCatalogueClient {
   photoUrl: string | null
   rupture: boolean
   prixHT: number | null
+  /** Incrément de quantité imposé (1 sauf clients La Poste : 3 ou 2). */
+  pas: number
 }
 
 /**
@@ -57,7 +90,9 @@ export function catalogueClient(
   produits: ProduitAutocomplete[],
   overrides: Record<string, CatalogueOverride>,
   prixClient: Record<string, number> | null,
+  tagsClient: unknown = null,
 ): ProduitCatalogueClient[] {
+  const tags = normaliserTags(tagsClient)
   return produits
     .filter((p) => overrides[String(p.idStockBouteille)]?.visible)
     .map((p) => {
@@ -69,6 +104,7 @@ export function catalogueClient(
         photoUrl: o.photoUrl || null,
         rupture: o.rupture,
         prixHT: prixClient?.[String(p.idStockBouteille)] ?? null,
+        pas: pasDeCommande(p.libelle, tags),
       }
     })
     .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'))

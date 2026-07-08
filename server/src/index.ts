@@ -18,7 +18,14 @@ import {
   type ProduitAutocomplete,
 } from './easybeer.js'
 import { lireCacheClient, lireCatalogue, syncTout } from './sync.js'
-import { catalogueAdmin, catalogueClient, lireOverrides, majOverride } from './catalogue.js'
+import {
+  catalogueAdmin,
+  catalogueClient,
+  lireOverrides,
+  majOverride,
+  normaliserTags,
+  pasDeCommande,
+} from './catalogue.js'
 
 import { EasybeerBanError } from './easybeer.js'
 
@@ -81,9 +88,11 @@ app.get('/api/catalogue', requireAuth, async (c) => {
   if (!db) return c.json({ produits: await listeProduitsAutocomplete(true) })
 
   const [{ produits, syncedAt }, overrides] = await Promise.all([lireCatalogue(db), lireOverrides(db)])
-  const prixClient =
-    user.easybeerIdClient != null ? (await lireCacheClient(db, user.easybeerIdClient)).prix : null
-  return c.json({ produits: catalogueClient(produits, overrides, prixClient), syncedAt })
+  const cacheClient = user.easybeerIdClient != null ? await lireCacheClient(db, user.easybeerIdClient) : null
+  return c.json({
+    produits: catalogueClient(produits, overrides, cacheClient?.prix ?? null, cacheClient?.client.tags),
+    syncedAt,
+  })
 })
 
 // ---- Commandes ----
@@ -138,6 +147,18 @@ async function resoudreLignes(
       return ko(`Pas de tarif défini pour « ${override.displayName || produit.libelle} » — contactez GOA`)
     }
     lignes.push({ produit, quantite: l.quantite, prixUnitaireHT })
+  }
+
+  // Règle transporteur La Poste (brief §6.3) : gros cartons homogènes →
+  // multiples de 3 (35cl) / 2 (1L) pour les clients tagués `laposte`.
+  const tags = normaliserTags(cacheClient.client.tags)
+  for (const l of lignes) {
+    const pas = pasDeCommande(l.produit.libelle, tags)
+    if (l.quantite % pas !== 0) {
+      return ko(
+        `« ${l.produit.libelle} » se commande par multiple de ${pas} (livraison La Poste) — quantité reçue : ${l.quantite}`,
+      )
+    }
   }
 
   // Contrôle du minimum de commande (brief §6.3), aussi appliqué côté front.

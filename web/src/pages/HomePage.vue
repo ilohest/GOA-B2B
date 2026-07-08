@@ -170,29 +170,32 @@ function ouvrirRecap() {
                 </template>
                 <template v-else>Prix sur demande</template>
               </p>
-              <div v-if="!p.rupture && p.prixHT != null" class="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  class="size-10 text-lg"
-                  :disabled="!quantites[p.idStockBouteille]"
-                  :aria-label="`Retirer un carton de ${p.libelle}`"
-                  @click="changer(p.idStockBouteille, -1)"
-                >
-                  −
-                </Button>
-                <span class="w-8 text-center text-base font-semibold tabular-nums">
-                  {{ quantites[p.idStockBouteille] ?? 0 }}
-                </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  class="size-10 text-lg"
-                  :aria-label="`Ajouter un carton de ${p.libelle}`"
-                  @click="changer(p.idStockBouteille, 1)"
-                >
-                  +
-                </Button>
+              <div v-if="!p.rupture && p.prixHT != null" class="flex flex-col items-end gap-1">
+                <div class="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    class="size-10 text-lg"
+                    :disabled="!quantites[p.idStockBouteille]"
+                    :aria-label="`Retirer ${p.pas > 1 ? p.pas + ' cartons' : 'un carton'} de ${p.libelle}`"
+                    @click="changer(p.idStockBouteille, -p.pas)"
+                  >
+                    −
+                  </Button>
+                  <span class="w-8 text-center text-base font-semibold tabular-nums">
+                    {{ quantites[p.idStockBouteille] ?? 0 }}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    class="size-10 text-lg"
+                    :aria-label="`Ajouter ${p.pas > 1 ? p.pas + ' cartons' : 'un carton'} de ${p.libelle}`"
+                    @click="changer(p.idStockBouteille, p.pas)"
+                  >
+                    +
+                  </Button>
+                </div>
+                <p v-if="p.pas > 1" class="text-xs text-muted-foreground">par {{ p.pas }} (La Poste)</p>
               </div>
             </div>
           </li>

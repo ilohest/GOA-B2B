@@ -60,6 +60,8 @@ export interface ProduitCatalogueClient {
   photoUrl: string | null
   rupture: boolean
   prixHT: number | null
+  /** Incrément de quantité imposé (1 sauf clients La Poste : 3 ou 2). */
+  pas: number
 }
 
 export interface CatalogueClientResponse {
