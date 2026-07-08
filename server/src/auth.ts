@@ -15,6 +15,7 @@ export interface AuthUser {
   uid: string
   email?: string
   role: 'client' | 'admin'
+  status?: 'invited' | 'active'
   easybeerIdClient?: number
 }
 
@@ -33,6 +34,7 @@ async function resolveUser(uid: string, email?: string): Promise<AuthUser> {
     uid,
     email: email ?? (data.email as string | undefined),
     role: (data.role as 'client' | 'admin') ?? 'client',
+    status: data.status as 'invited' | 'active' | undefined,
     easybeerIdClient: data.easybeerIdClient as number | undefined,
   }
 }

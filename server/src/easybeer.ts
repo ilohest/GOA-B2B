@@ -119,10 +119,16 @@ export async function listeClients(
   return json
 }
 
-/** Récupère un client par son idClient (via filtre idsClients). */
+/**
+ * GET /parametres/client/edition/{id} — fiche client complète.
+ * ⚠️ NE PAS passer par client/liste avec le filtre `idsClients` : il est
+ * silencieusement IGNORÉ par l'API (renvoie tous les clients) — cf. EASYBEER.md.
+ */
 export async function getClient(idClient: number): Promise<ModeleClient | null> {
-  const res = await listeClients({ idsClients: [idClient] }, { nombreParPage: 1 })
-  return res.liste?.[0] ?? null
+  const { status, json } = await eb<ModeleClient>('GET', `/parametres/client/edition/${idClient}`)
+  if (status === 404) return null
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /parametres/client/edition/${idClient}`)
+  return json?.idClient != null ? json : null
 }
 
 // --- Types / grilles ---

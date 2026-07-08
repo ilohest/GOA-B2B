@@ -26,7 +26,23 @@ export interface AuthUser {
   uid: string
   email?: string
   role: 'client' | 'admin'
+  status?: 'invited' | 'active'
   easybeerIdClient?: number
+}
+
+export interface AdminClientsResponse {
+  liste: ClientEasybeer[]
+  totalElements: number
+  totalPages: number
+  comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }>
+}
+
+export interface InvitationResponse {
+  ok: boolean
+  email: string
+  lien: string
+  dejaActif: boolean
+  client: { idClient?: number; nom?: string; numero?: string }
 }
 
 export interface MeResponse {

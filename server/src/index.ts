@@ -4,7 +4,7 @@ import { cors } from 'hono/cors'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.js'
 import { requireAuth, requireAdmin } from './auth.js'
-import { getDb } from './firebase.js'
+import { getDb, getAdminAuth } from './firebase.js'
 import {
   listeClients,
   getClient,
@@ -25,6 +25,16 @@ app.get('/api/health', (c) => c.json({ ok: true, authDisabled: config.authDisabl
 /** Profil de l'utilisateur connecté + données client Easybeer + grille tarifaire résolue. */
 app.get('/api/me', requireAuth, async (c) => {
   const user = c.get('user')
+
+  // Premier login après invitation : le compte devient actif.
+  if (user.status === 'invited') {
+    const db = getDb()
+    if (db) {
+      await db.collection('users').doc(user.uid).set({ status: 'active', activatedAt: Date.now() }, { merge: true })
+      user.status = 'active'
+    }
+  }
+
   if (user.easybeerIdClient == null) {
     return c.json({ user, client: null, idGrilleTarifaire: null })
   }
@@ -115,35 +125,90 @@ app.get('/api/commandes/:id/easybeer', requireAuth, async (c) => {
   return c.json({ detail })
 })
 
-// ---- Admin : invitations (squelette ; nécessite Firestore configuré) ----
+// ---- Admin : invitations (flux §5 du brief) ----
 
-/** Liste des clients Easybeer (pour que l'admin choisisse qui inviter). */
+/**
+ * Liste des clients Easybeer + statut de compte plateforme par client
+ * (aucun compte / invited / active — plusieurs comptes possibles par client).
+ */
 app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
   const page = Number(c.req.query('page') ?? 1)
   const recherche = c.req.query('q') ?? ''
   const res = await listeClients(recherche ? { recherche } : {}, { numeroPage: page, nombreParPage: 25 })
-  return c.json(res)
+
+  // Statuts des comptes liés (la collection users reste petite : lecture complète).
+  const comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }> = {}
+  const db = getDb()
+  if (db) {
+    const snap = await db.collection('users').where('easybeerIdClient', '!=', null).get()
+    for (const doc of snap.docs) {
+      const d = doc.data()
+      const id = d.easybeerIdClient as number
+      const entry = (comptes[id] ??= { statut: 'invited', emails: [] })
+      if (d.email) entry.emails.push(d.email as string)
+      if (d.status === 'active') entry.statut = 'active'
+    }
+  }
+  return c.json({ ...res, comptes })
 })
 
-/** Crée une invitation pour lier un client Easybeer à un futur compte. */
+/**
+ * Invite un client Easybeer : crée le compte Firebase (sans mot de passe),
+ * écrit users/{uid} = { easybeerIdClient, role client, status invited } et
+ * génère un lien « créez votre mot de passe » (page /activer de l'app).
+ * Ré-appelable pour le même email → régénère simplement un lien frais.
+ */
 app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
-  if (!db) return c.json({ error: 'Firestore non configuré' }, 501)
-  const { easybeerIdClient, email } = await c.req.json<{ easybeerIdClient: number; email: string }>()
-  if (!easybeerIdClient || !email) return c.json({ error: 'easybeerIdClient et email requis' }, 400)
-  const token = randomUUID()
-  await db.collection('invitations').doc(token).set({
-    token,
-    easybeerIdClient,
+  const adminAuth = getAdminAuth()
+  if (!db || !adminAuth) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const body = await c.req.json<{ easybeerIdClient: number; email?: string }>()
+  if (!body.easybeerIdClient) return c.json({ error: 'easybeerIdClient requis' }, 400)
+
+  const client = await getClient(body.easybeerIdClient)
+  if (!client) return c.json({ error: `Client Easybeer ${body.easybeerIdClient} introuvable` }, 404)
+
+  const email = (body.email ?? client.emailPrincipal ?? '').trim().toLowerCase()
+  if (!email) {
+    return c.json({ error: "Ce client n'a pas d'email dans Easybeer — saisissez une adresse." }, 400)
+  }
+
+  // Compte Firebase : réutilisé s'il existe déjà (ré-invitation), sinon créé
+  // sans mot de passe (connexion impossible tant que le lien n'est pas utilisé).
+  const existing = await adminAuth.getUserByEmail(email).catch(() => null)
+  const uid = existing?.uid ?? (await adminAuth.createUser({ email })).uid
+
+  const prev = (await db.collection('users').doc(uid).get()).data() ?? {}
+  await db
+    .collection('users')
+    .doc(uid)
+    .set(
+      {
+        email,
+        easybeerIdClient: body.easybeerIdClient,
+        role: prev.role ?? 'client',
+        status: prev.status === 'active' ? 'active' : 'invited',
+        invitedAt: Date.now(),
+        invitedBy: c.get('user').uid,
+      },
+      { merge: true },
+    )
+
+  // Lien Firebase natif → on extrait l'oobCode pour pointer vers NOTRE page
+  // /activer (même mécanique en prod, aucune page Firebase hébergée).
+  const resetLink = await adminAuth.generatePasswordResetLink(email)
+  const oobCode = new URL(resetLink).searchParams.get('oobCode')
+  const lien = `${config.invite.baseUrl}?oobCode=${encodeURIComponent(oobCode ?? '')}&email=${encodeURIComponent(email)}`
+
+  // TODO V1 : envoi automatique par email (SMTP_URL) ; en attendant, lien à copier.
+  return c.json({
+    ok: true,
     email,
-    createdBy: c.get('user').uid,
-    createdAt: Date.now(),
-    expiresAt: Date.now() + 1000 * 60 * 60 * 24 * 14, // 14 jours
-    usedAt: null,
+    lien,
+    dejaActif: prev.status === 'active',
+    client: { idClient: client.idClient, nom: client.nom, numero: client.numero },
   })
-  const lien = `${config.invite.baseUrl}?token=${token}`
-  // TODO: envoi email si SMTP configuré ; sinon on renvoie le lien à copier.
-  return c.json({ ok: true, token, lien })
 })
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {

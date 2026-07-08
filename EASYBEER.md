@@ -107,6 +107,7 @@
 | **`idClient` casse l'autocomplete produit** | `GET /stock/produits/autocomplete?idClient=...` → **500**. L'appeler **sans** `idClient`. |
 | **Grille tarifaire ≠ type CRM** | Le client porte un `type` (ex. `GMS`, idClientType 20680) qui est une **sous-catégorie CRM**. La vraie **grille tarifaire** est la **racine** de cette hiérarchie (`idParent` vide), ex. `client PRO` (idClientType 17849). Résoudre en remontant `idParent`. |
 | **500 opaques** | Beaucoup d'erreurs de validation renvoient `{ "succes": false, "message": "Une erreur inconnue s'est produite…", "map": {} }` (HTTP 500/400) sans indice. Approche : partir d'un objet complet connu-valide et réduire. |
+| **Filtre `idsClients` IGNORÉ sur `client/liste`** | ✅ Vérifié en réel (2026-07-08) : `POST /parametres/client/liste` avec body `{ idsClients: [601666] }` renvoie **tous les clients** (239) comme si le filtre n'existait pas — aucun message d'erreur. Pour lire UN client, utiliser **`GET /parametres/client/edition/{idClient}`**. (Piège vicieux : le premier client de la liste triée par nom était justement le client de test 588074 → le POC semblait fonctionner par pure coïncidence.) |
 | **Réponse de succès non standard** | Voir §4 — `/commande/enregistrer` répond `{ "map": { "id", "numero", "message" } }`, pas un `{idCommande}`. |
 
 ---
@@ -352,5 +353,11 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
   Endpoints export remises en 500 (params à trouver). Fiche client expose adresses de livraison géocodées +
   délai de paiement. Modèle produit = produit fini (saveur) × contenant × colisage (idLot) = idStockBouteille.
   Désynchro colisage 0,35L : Jotform 12×35cL vs Easybeer Carton de 18 → à confirmer. Jotform = flux prod à reproduire.
+
+- **2026-07-08 (dev V1, étape 2)** : le filtre `idsClients` de `POST /parametres/client/liste` est
+  **silencieusement ignoré** (renvoie la liste complète, même famille que `idClient` sur l'autocomplete
+  et `commande/liste` sans `inclureArchive`). Lecture d'un client individuel → `GET /parametres/client/edition/{id}`
+  (déjà documenté §3, confirmé OK sur 601666). `generatePasswordResetLink` (Firebase Admin) + extraction
+  `oobCode` → page `/activer` de l'app : flux d'invitation validé de bout en bout sur émulateurs.
 
 <!-- Ajouter ici toute nouvelle découverte, avec la date. -->

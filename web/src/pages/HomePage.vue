@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import { useQuery } from '@tanstack/vue-query'
-import { api } from '@/lib/api'
-import type { MeResponse } from '@/lib/types'
+import { useMe } from '@/composables/useMe'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
-const { data, isPending, isError, error } = useQuery({
-  queryKey: ['me'],
-  queryFn: () => api.get<MeResponse>('/me'),
-})
+const { data, isPending, isError, error } = useMe()
 </script>
 
 <template>
