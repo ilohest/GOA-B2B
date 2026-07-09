@@ -43,6 +43,11 @@ const router = createRouter({
       children: [
         {
           path: '',
+          name: 'admin-dashboard',
+          component: () => import('@/pages/admin/AdminDashboardPage.vue'),
+        },
+        {
+          path: 'clients',
           name: 'admin-clients',
           component: () => import('@/pages/admin/AdminClientsPage.vue'),
         },

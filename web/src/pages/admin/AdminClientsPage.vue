@@ -7,10 +7,9 @@ import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type {
   AdminClientsResponse,
-  ClientEasybeer,
+  ClientResume,
   InvitationBulkResultat,
   InvitationResponse,
-  SyncReport,
   Tournee,
 } from '@/lib/types'
 import { dateHeureFr } from '@/lib/format'
@@ -28,52 +27,71 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const router = useRouter()
 const queryClient = useQueryClient()
 
-// --- Liste des clients Easybeer (pagination serveur) ---
-
-const page = ref(1)
-const rechercheInput = ref('')
-const recherche = ref('')
+// --- Clients : servis depuis le CACHE serveur (recherche/pagination locales) ---
 
 const { data, isPending, isError, error } = useQuery({
-  queryKey: ['admin', 'clients', page, recherche],
-  queryFn: () =>
-    api.get<AdminClientsResponse>(
-      `/admin/clients?page=${page.value}${recherche.value ? `&q=${encodeURIComponent(recherche.value)}` : ''}`,
-    ),
-  placeholderData: (prev) => prev,
+  queryKey: ['admin', 'clients'],
+  queryFn: () => api.get<AdminClientsResponse>('/admin/clients'),
 })
 
-function lancerRecherche() {
+const actualisation = useMutation({
+  mutationFn: () => api.get<AdminClientsResponse>('/admin/clients?refresh=1'),
+  onSuccess: (res) => {
+    queryClient.setQueryData(['admin', 'clients'], res)
+    toast.success('Liste resynchronisée depuis Easybeer.')
+  },
+  onError: (e) => toast.error((e as Error).message),
+})
+
+const recherche = ref('')
+const toutAfficher = ref(false)
+const PAR_PAGE = 25
+const page = ref(1)
+
+const clientsFiltres = computed(() => {
+  const q = recherche.value.trim().toLowerCase()
+  const tous = data.value?.clients ?? []
+  if (!q) return tous
+  return tous.filter((c) =>
+    [c.nom, c.raisonSociale, c.numero, c.emailPrincipal, c.categorie].some((v) =>
+      v?.toLowerCase().includes(q),
+    ),
+  )
+})
+
+const totalPages = computed(() =>
+  toutAfficher.value ? 1 : Math.max(1, Math.ceil(clientsFiltres.value.length / PAR_PAGE)),
+)
+const clientsAffiches = computed(() => {
+  if (toutAfficher.value) return clientsFiltres.value
+  const debut = (Math.min(page.value, totalPages.value) - 1) * PAR_PAGE
+  return clientsFiltres.value.slice(debut, debut + PAR_PAGE)
+})
+
+function surRecherche() {
   page.value = 1
-  recherche.value = rechercheInput.value.trim()
 }
 
-// --- Sélection (checkbox, multi-pages) ---
+// --- Sélection (checkbox, conservée à travers pages et recherches) ---
 
 const selection = reactive(new Set<number>())
 
-const idsPage = computed(() =>
-  (data.value?.liste ?? []).map((c) => c.idClient).filter((id): id is number => id != null),
+const idsAffiches = computed(() =>
+  clientsAffiches.value.map((c) => c.idClient).filter((id): id is number => id != null),
 )
 const toutSelectionne = computed(
-  () => idsPage.value.length > 0 && idsPage.value.every((id) => selection.has(id)),
+  () => idsAffiches.value.length > 0 && idsAffiches.value.every((id) => selection.has(id)),
 )
 
 function basculerTout(coche: boolean) {
-  for (const id of idsPage.value) {
+  for (const id of idsAffiches.value) {
     if (coche) selection.add(id)
     else selection.delete(id)
   }
@@ -82,11 +100,11 @@ function basculerTout(coche: boolean) {
 // --- Invitation unitaire ---
 
 const dialogOuvert = ref(false)
-const cible = ref<ClientEasybeer | null>(null)
+const cible = ref<ClientResume | null>(null)
 const emailInvitation = ref('')
 const resultat = ref<InvitationResponse | null>(null)
 
-function ouvrirInvitation(client: ClientEasybeer) {
+function ouvrirInvitation(client: ClientResume) {
   cible.value = client
   emailInvitation.value = client.emailPrincipal ?? ''
   resultat.value = null
@@ -165,32 +183,12 @@ const bulkTournee = useMutation({
   onError: (e) => toast.error((e as Error).message),
 })
 
-// --- Synchro du cache Easybeer ---
+// --- Table ---
 
-const { data: syncMeta } = useQuery({
-  queryKey: ['admin', 'sync'],
-  queryFn: () => api.get<{ dernierSync: SyncReport | null }>('/admin/sync'),
-})
-
-const synchro = useMutation({
-  mutationFn: () => api.post<{ ok: boolean; report: SyncReport }>('/admin/sync'),
-  onSuccess: ({ report }) => {
-    toast.success(
-      `Synchro terminée : ${report.produits} produits, ${report.clients.length} client(s), ${Math.round(report.dureeMs / 1000)} s.`,
-    )
-    queryClient.invalidateQueries()
-  },
-  onError: (e) => toast.error((e as Error).message),
-})
-
-const dernierSync = computed(() => synchro.data.value?.report ?? syncMeta.value?.dernierSync ?? null)
-
-// --- Table (TanStack) ---
-
-const compteDe = (c: ClientEasybeer) =>
+const compteDe = (c: ClientResume) =>
   c.idClient != null ? data.value?.comptes?.[c.idClient] : undefined
 
-const columns: ColumnDef<ClientEasybeer>[] = [
+const columns: ColumnDef<ClientResume>[] = [
   {
     id: 'selection',
     header: () =>
@@ -229,9 +227,9 @@ const columns: ColumnDef<ClientEasybeer>[] = [
       h('span', { class: 'text-sm text-muted-foreground' }, row.original.emailPrincipal || '—'),
   },
   {
-    id: 'type',
+    id: 'categorie',
     header: 'Catégorie',
-    cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.type?.libelle ?? '—'),
+    cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.categorie ?? '—'),
   },
   {
     id: 'compte',
@@ -271,16 +269,13 @@ const columns: ColumnDef<ClientEasybeer>[] = [
 
 const table = useVueTable({
   get data() {
-    return data.value?.liste ?? []
+    return clientsAffiches.value
   },
   columns,
   getCoreRowModel: getCoreRowModel(),
-  manualPagination: true,
 })
 
-const totalPages = computed(() => data.value?.totalPages ?? 1)
-
-function ouvrirFiche(client: ClientEasybeer) {
+function ouvrirFiche(client: ClientResume) {
   if (client.idClient != null) router.push(`/admin/clients/${client.idClient}`)
 }
 </script>
@@ -289,42 +284,30 @@ function ouvrirFiche(client: ClientEasybeer) {
   <div class="grid gap-4">
     <Card>
       <CardHeader>
-        <CardTitle class="text-lg">Synchronisation Easybeer</CardTitle>
-        <CardDescription>
-          Le catalogue et les paramètres clients sont lus depuis un cache, resynchronisé
-          périodiquement (jamais d'appel Easybeer en direct côté client).
-        </CardDescription>
-      </CardHeader>
-      <CardContent class="flex flex-wrap items-center justify-between gap-3">
-        <p class="text-sm text-muted-foreground">
-          <template v-if="dernierSync">
-            Dernière synchro : {{ dateHeureFr(dernierSync.syncedAt) }} —
-            {{ dernierSync.produits }} produits, {{ dernierSync.clients.length }} client(s)
-            <span v-if="dernierSync.clients.some((c) => c.erreur)" class="text-destructive">
-              ({{ dernierSync.clients.filter((c) => c.erreur).length }} en erreur)
-            </span>
-          </template>
-          <template v-else>Aucune synchro complète pour l'instant.</template>
-        </p>
-        <Button :disabled="synchro.isPending.value" variant="secondary" @click="synchro.mutate()">
-          {{ synchro.isPending.value ? 'Synchronisation…' : 'Synchroniser maintenant' }}
-        </Button>
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader>
         <CardTitle class="text-lg">Clients</CardTitle>
         <CardDescription>
-          Liste lue depuis Easybeer. Cliquez sur un client pour sa fiche ; cochez pour les
-          actions en masse.
+          Liste servie depuis le cache
+          <template v-if="data"> (à jour : {{ dateHeureFr(data.syncedAt) }})</template>.
+          Cliquez sur un client pour sa fiche ; cochez pour les actions en masse.
         </CardDescription>
       </CardHeader>
       <CardContent class="grid gap-4">
-        <form class="flex gap-2" @submit.prevent="lancerRecherche">
-          <Input v-model="rechercheInput" placeholder="Rechercher un commerce…" class="max-w-xs" />
-          <Button type="submit" variant="secondary">Rechercher</Button>
-        </form>
+        <div class="flex flex-wrap items-center gap-2">
+          <Input
+            v-model="recherche"
+            placeholder="Rechercher (nom, n°, email, catégorie)…"
+            class="max-w-xs"
+            @input="surRecherche"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="actualisation.isPending.value"
+            @click="actualisation.mutate()"
+          >
+            {{ actualisation.isPending.value ? 'Actualisation…' : 'Actualiser depuis Easybeer' }}
+          </Button>
+        </div>
 
         <!-- Barre d'actions en masse -->
         <div
@@ -383,11 +366,19 @@ function ouvrirFiche(client: ClientEasybeer) {
             </Table>
           </div>
 
-          <div class="flex items-center justify-between text-sm text-muted-foreground">
-            <span>{{ data?.totalElements ?? 0 }} clients — page {{ page }} / {{ totalPages }}</span>
-            <div class="flex gap-2">
-              <Button variant="outline" size="sm" :disabled="page <= 1" @click="page--">Précédent</Button>
-              <Button variant="outline" size="sm" :disabled="page >= totalPages" @click="page++">Suivant</Button>
+          <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+            <span>
+              {{ clientsFiltres.length }} client(s)
+              <template v-if="!toutAfficher"> — page {{ Math.min(page, totalPages) }} / {{ totalPages }}</template>
+            </span>
+            <div class="flex items-center gap-2">
+              <Button variant="ghost" size="sm" @click="toutAfficher = !toutAfficher; page = 1">
+                {{ toutAfficher ? 'Paginer' : 'Tout afficher' }}
+              </Button>
+              <template v-if="!toutAfficher">
+                <Button variant="outline" size="sm" :disabled="page <= 1" @click="page--">Précédent</Button>
+                <Button variant="outline" size="sm" :disabled="page >= totalPages" @click="page++">Suivant</Button>
+              </template>
             </div>
           </div>
         </template>
@@ -470,7 +461,7 @@ function ouvrirFiche(client: ClientEasybeer) {
               </template>
               <p v-else class="text-xs text-destructive">{{ r.erreur }}</p>
             </div>
-            <Button v-if="r.ok && r.lien" size="sm" variant="outline" @click="copier(r.lien)">
+            <Button v-if="r.ok && r.lien" size="sm" variant="outline" @click="copier(r.lien!)">
               Copier le lien
             </Button>
           </div>

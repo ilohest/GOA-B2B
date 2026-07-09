@@ -45,6 +45,24 @@ async function basculerDetail(idCommande: number) {
 
 const telechargementEnCours = ref<number | null>(null)
 
+/** Décomposition des totaux : sous-total HT, remise, TVA (TTC − HT), consigne, total TTC. */
+function lignesTotaux(detail: CommandeDetail) {
+  const lignes: { label: string; valeur: string; classe?: string }[] = []
+  const muted = 'text-muted-foreground'
+  if (detail.totalHT != null) lignes.push({ label: 'Sous-total HT', valeur: prixFr(detail.totalHT), classe: muted })
+  if (detail.remiseTotale) lignes.push({ label: 'Remise', valeur: `− ${prixFr(detail.remiseTotale)}`, classe: muted })
+  if (detail.totalHT != null && detail.totalTTC != null) {
+    lignes.push({
+      label: 'TVA (5,5 %)',
+      valeur: prixFr(Math.max(0, detail.totalTTC - detail.totalHT)),
+      classe: muted,
+    })
+  }
+  if (detail.totalConsigne) lignes.push({ label: 'dont consigne', valeur: prixFr(detail.totalConsigne), classe: muted })
+  if (detail.totalTTC != null) lignes.push({ label: 'Total TTC', valeur: prixFr(detail.totalTTC), classe: 'font-semibold' })
+  return lignes
+}
+
 async function telechargerDocument(idCommande: number, doc: CommandeDetail['documents'][number]) {
   telechargementEnCours.value = doc.idCommandeDocument
   try {
@@ -143,6 +161,18 @@ async function modifier(commande: CommandeResume) {
                   </span>
                 </li>
               </ul>
+              <!-- Totaux : HT / remise / TVA / TTC -->
+              <dl
+                v-if="(details[cmd.idCommande] as CommandeDetail).totalTTC != null"
+                class="mt-3 grid gap-1 border-t pt-3 text-sm"
+              >
+                <template v-for="ligne in lignesTotaux(details[cmd.idCommande] as CommandeDetail)" :key="ligne.label">
+                  <div class="flex items-baseline justify-between gap-3" :class="ligne.classe">
+                    <dt>{{ ligne.label }}</dt>
+                    <dd class="tabular-nums">{{ ligne.valeur }}</dd>
+                  </div>
+                </template>
+              </dl>
               <p
                 v-if="(details[cmd.idCommande] as CommandeDetail).commentaire"
                 class="mt-2 text-xs text-muted-foreground italic"

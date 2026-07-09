@@ -4,7 +4,8 @@
  * onglets horizontaux sur mobile. Les sections sont des routes enfants.
  */
 const sections = [
-  { to: '/admin', label: 'Clients', exact: true },
+  { to: '/admin', label: 'Tableau de bord', exact: true },
+  { to: '/admin/clients', label: 'Clients' },
   { to: '/admin/commandes', label: 'Commandes' },
   { to: '/admin/catalogue', label: 'Catalogue' },
 ]

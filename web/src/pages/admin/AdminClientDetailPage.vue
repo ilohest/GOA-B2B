@@ -65,7 +65,7 @@ const conditions = computed(() => [
   <div class="grid gap-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <RouterLink to="/admin" class="text-sm text-muted-foreground hover:underline">
+        <RouterLink to="/admin/clients" class="text-sm text-muted-foreground hover:underline">
           ← Clients
         </RouterLink>
         <h1 class="text-xl font-semibold">

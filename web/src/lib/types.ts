@@ -34,11 +34,28 @@ export interface AuthUser {
   easybeerIdClient?: number
 }
 
+/** Résumé client servi depuis le cache serveur. */
+export interface ClientResume {
+  idClient: number | null
+  nom: string | null
+  raisonSociale: string | null
+  numero: string | null
+  emailPrincipal: string | null
+  categorie: string | null
+  actif: boolean
+}
+
 export interface AdminClientsResponse {
-  liste: ClientEasybeer[]
-  totalElements: number
-  totalPages: number
+  clients: ClientResume[]
   comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }>
+  syncedAt: number
+}
+
+export interface AdminDashboardResponse {
+  clients: { total: number; avecCompte: number; actifs: number }
+  commandes30j: { nombre: number; caTTC: number }
+  catalogue: { produits: number; visibles: number; ruptures: number }
+  dernierSync: number | null
 }
 
 export interface CatalogueOverride {
@@ -120,7 +137,7 @@ export interface AdminCommandeResume {
 
 export interface AdminCommandesResponse {
   commandes: AdminCommandeResume[]
-  totalElements: number
+  syncedAt: number
   easybeerAppUrl: string
 }
 
@@ -178,6 +195,8 @@ export interface CommandeDetail {
   reference: string | null
   totalHT: number | null
   totalTTC: number | null
+  remiseTotale: number | null
+  totalConsigne: number | null
   commentaire: string
   lignes: { designation: string; quantite: number; prixUnitaireHT: number | null }[]
   documents: { idCommandeDocument: number; libelle: string; code: string; nomFichier: string }[]

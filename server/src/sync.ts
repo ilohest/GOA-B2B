@@ -21,9 +21,12 @@ import {
   EasybeerBanError,
   getClient,
   getPrix,
+  listeClients,
+  listeCommandesRecentes,
   listeProduitsAutocomplete,
   listeTypesClient,
   resoudreGrilleRacine,
+  type CommandeResume,
   type ModeleClient,
   type ModeleClientType,
   type ProduitAutocomplete,
@@ -87,7 +90,10 @@ export interface CacheClientDoc {
 export interface SyncReport {
   produits: number
   typesClient: number
+  listeClients: number
+  commandesRecentes: number
   clients: { idClient: number; nom: string | null; prix: number; erreur?: string }[]
+  erreurs?: string[]
   dureeMs: number
   syncedAt: number
 }
@@ -148,7 +154,111 @@ export async function syncClient(
   return doc
 }
 
+// --- Listes admin (clients + commandes récentes), servies depuis le cache ---
+
+/** Résumé client stocké dans cache/clientsListe (l'écran admin lit ça, pas Easybeer). */
+export interface ClientResume {
+  idClient: number | null
+  nom: string | null
+  raisonSociale: string | null
+  numero: string | null
+  emailPrincipal: string | null
+  categorie: string | null
+  actif: boolean
+}
+
+function resumerClient(c: ModeleClient): ClientResume {
+  return {
+    idClient: c.idClient ?? null,
+    nom: c.nom ?? null,
+    raisonSociale: c.raisonSociale ?? null,
+    numero: c.numero ?? null,
+    emailPrincipal: c.emailPrincipal ?? null,
+    categorie: c.type?.libelle ?? null,
+    actif: c.actif ?? true,
+  }
+}
+
+/** Tous les clients Easybeer (~250 → 2 appels), en un doc de cache. */
+export async function syncListeClients(db: Firestore): Promise<ClientResume[]> {
+  const parPage = 200
+  let clients: ClientResume[] = []
+  for (let page = 1; page <= 10; page++) {
+    const res = await avecRetry(
+      `clients page ${page}`,
+      () => listeClients({}, { numeroPage: page, nombreParPage: parPage }),
+      (r) => Array.isArray(r?.liste),
+    )
+    clients = [...clients, ...res.liste.map(resumerClient)]
+    if (res.liste.length < parPage) break
+  }
+  await db.doc('cache/clientsListe').set({ clients, syncedAt: Date.now() })
+  return clients
+}
+
+export interface CommandeResumeCache {
+  idCommande: number | null
+  numero: number | null
+  client: { idClient: number | null; nom: string | null; numero: string | null } | null
+  etat: { code: string; libelle: string; couleur: string | null }
+  paiement: string | null
+  totalTTC: number | null
+  dateCreation: number | null
+}
+
+function resumerCommande(r: CommandeResume): CommandeResumeCache {
+  const etat =
+    typeof r.etat === 'string'
+      ? { code: r.etat, libelle: r.etat, couleur: null }
+      : { code: r.etat?.code ?? '', libelle: r.etat?.libelle ?? r.etat?.code ?? '', couleur: r.etat?.couleur ?? null }
+  return {
+    idCommande: r.idCommande ?? null,
+    numero: r.numero ?? null,
+    client: r.client
+      ? { idClient: r.client.idClient ?? null, nom: r.client.nom ?? null, numero: r.client.numero ?? null }
+      : null,
+    etat,
+    paiement: typeof r.paiementEtat === 'string' ? r.paiementEtat : (r.paiementEtat?.libelle ?? null),
+    totalTTC: r.totalTTC ?? null,
+    dateCreation: r.dateCreation == null ? null : new Date(r.dateCreation).getTime() || null,
+  }
+}
+
+/** Les ~200 commandes les plus récentes, en un doc de cache. */
+export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResumeCache[]> {
+  const { commandes } = await listeCommandesRecentes(200)
+  const resumees = commandes.map(resumerCommande)
+  await db.doc('cache/commandesRecentes').set({ commandes: resumees, syncedAt: Date.now() })
+  return resumees
+}
+
 // --- Lectures du cache (avec remplissage au premier accès) ---
+
+export async function lireListeClients(
+  db: Firestore,
+  forcerRefresh = false,
+): Promise<{ clients: ClientResume[]; syncedAt: number }> {
+  if (!forcerRefresh) {
+    const snap = await db.doc('cache/clientsListe').get()
+    if (snap.exists) return snap.data() as { clients: ClientResume[]; syncedAt: number }
+  }
+  const clients = await syncListeClients(db)
+  return { clients, syncedAt: Date.now() }
+}
+
+export async function lireCommandesRecentes(
+  db: Firestore,
+  forcerRefresh = false,
+): Promise<{ commandes: CommandeResumeCache[]; syncedAt: number }> {
+  if (!forcerRefresh) {
+    const snap = await db.doc('cache/commandesRecentes').get()
+    if (snap.exists) return snap.data() as { commandes: CommandeResumeCache[]; syncedAt: number }
+  }
+  const commandes = await syncCommandesRecentes(db)
+  return { commandes, syncedAt: Date.now() }
+}
+
+// --- Lectures du cache (catalogue / référentiels / clients) ---
 
 export async function lireCatalogue(db: Firestore): Promise<{ produits: ProduitAutocomplete[]; syncedAt: number }> {
   const snap = await db.doc('cache/catalogue').get()
@@ -178,11 +288,28 @@ async function idsClientsAvecCompte(db: Firestore): Promise<number[]> {
   return [...new Set(snap.docs.map((d) => d.data().easybeerIdClient as number))]
 }
 
-/** Synchro complète : catalogue + référentiels + tous les clients à compte. */
+/**
+ * Synchro complète : catalogue + référentiels + listes admin (clients,
+ * commandes récentes) + fiche/prix de chaque client à compte.
+ */
 export async function syncTout(db: Firestore): Promise<SyncReport> {
   const debut = Date.now()
+  const erreurs: string[] = []
   const produits = await syncCatalogue(db)
   const types = await syncReferentiels(db)
+
+  let listeClientsNb = 0
+  try {
+    listeClientsNb = (await syncListeClients(db)).length
+  } catch (e) {
+    erreurs.push(`liste clients : ${(e as Error).message}`)
+  }
+  let commandesNb = 0
+  try {
+    commandesNb = (await syncCommandesRecentes(db)).length
+  } catch (e) {
+    erreurs.push(`commandes récentes : ${(e as Error).message}`)
+  }
 
   const clients: SyncReport['clients'] = []
   for (const idClient of await idsClientsAvecCompte(db)) {
@@ -197,7 +324,10 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
   const report: SyncReport = {
     produits: produits.length,
     typesClient: types.length,
+    listeClients: listeClientsNb,
+    commandesRecentes: commandesNb,
     clients,
+    ...(erreurs.length ? { erreurs } : {}),
     dureeMs: Date.now() - debut,
     syncedAt: Date.now(),
   }

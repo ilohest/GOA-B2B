@@ -6,12 +6,10 @@ import { config } from './config.js'
 import { requireAuth, requireAdmin } from './auth.js'
 import { getDb, getAdminAuth, getBucket } from './firebase.js'
 import {
-  listeClients,
   getClient,
   listeTypesClient,
   resoudreGrilleRacine,
   listeProduitsAutocomplete,
-  listeCommandesRecentes,
   listeCommandesClient,
   listeTournees,
   attribuerTournee,
@@ -21,7 +19,13 @@ import {
   telechargerDocument,
   type ProduitAutocomplete,
 } from './easybeer.js'
-import { lireCacheClient, lireCatalogue, syncTout } from './sync.js'
+import {
+  lireCacheClient,
+  lireCatalogue,
+  lireCommandesRecentes,
+  lireListeClients,
+  syncTout,
+} from './sync.js'
 import {
   BulkParamsSchema,
   CommandeBodySchema,
@@ -314,6 +318,8 @@ app.get('/api/commandes/:id', requireAuth, async (c) => {
     reference: commande.reference ?? null,
     totalHT: commande.totalHT ?? null,
     totalTTC: commande.totalTTC ?? null,
+    remiseTotale: commande.remiseTotale ?? null,
+    totalConsigne: commande.totalConsigne ?? null,
     commentaire: (commande.commentaire as string) || '',
     lignes,
     documents,
@@ -421,29 +427,34 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
 
 // ---- Admin : invitations (flux §5 du brief) ----
 
-/**
- * Liste des clients Easybeer + statut de compte plateforme par client
- * (aucun compte / invited / active — plusieurs comptes possibles par client).
- */
-app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
-  const page = Number(c.req.query('page') ?? 1)
-  const recherche = c.req.query('q') ?? ''
-  const res = await listeClients(recherche ? { recherche } : {}, { numeroPage: page, nombreParPage: 25 })
-
-  // Statuts des comptes liés (la collection users reste petite : lecture complète).
+/** Statuts des comptes plateforme par idClient (collection users, petite). */
+async function comptesParClient(): Promise<Record<number, { statut: 'invited' | 'active'; emails: string[] }>> {
   const comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }> = {}
   const db = getDb()
-  if (db) {
-    const snap = await db.collection('users').where('easybeerIdClient', '!=', null).get()
-    for (const doc of snap.docs) {
-      const d = doc.data()
-      const id = d.easybeerIdClient as number
-      const entry = (comptes[id] ??= { statut: 'invited', emails: [] })
-      if (d.email) entry.emails.push(d.email as string)
-      if (d.status === 'active') entry.statut = 'active'
-    }
+  if (!db) return comptes
+  const snap = await db.collection('users').where('easybeerIdClient', '!=', null).get()
+  for (const doc of snap.docs) {
+    const d = doc.data()
+    const id = d.easybeerIdClient as number
+    const entry = (comptes[id] ??= { statut: 'invited', emails: [] })
+    if (d.email) entry.emails.push(d.email as string)
+    if (d.status === 'active') entry.statut = 'active'
   }
-  return c.json({ ...res, comptes })
+  return comptes
+}
+
+/**
+ * TOUS les clients (résumés) depuis le CACHE — recherche et pagination se font
+ * côté front. `?refresh=1` force une resynchro depuis Easybeer.
+ */
+app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  const [{ clients, syncedAt }, comptes] = await Promise.all([
+    lireListeClients(db, c.req.query('refresh') === '1'),
+    comptesParClient(),
+  ])
+  return c.json({ clients, comptes, syncedAt })
 })
 
 /**
@@ -723,25 +734,57 @@ app.get('/api/photos/produits/:idStockBouteille', async (c) => {
 
 // ---- Admin : commandes (tous clients) ----
 
-/** Les ~100 commandes les plus récentes de la brasserie (lecture directe Easybeer). */
+/**
+ * Les ~200 commandes les plus récentes, depuis le CACHE (resynchro via
+ * `?refresh=1` ou le job de synchro) — plus d'appel Easybeer par visite.
+ */
 app.get('/api/admin/commandes', requireAuth, requireAdmin, async (c) => {
-  const res = await listeCommandesRecentes(100)
-  const ts = (v: unknown) => (v == null ? 0 : new Date(v as string | number).getTime() || 0)
-  const commandes = res.commandes.map((r) => ({
-    idCommande: r.idCommande,
-    numero: r.numero,
-    client: r.client
-      ? { idClient: r.client.idClient ?? null, nom: r.client.nom ?? null, numero: r.client.numero ?? null }
-      : null,
-    etat: etatAffichage(r.etat),
-    paiement: typeof r.paiementEtat === 'string' ? r.paiementEtat : (r.paiementEtat?.libelle ?? null),
-    totalTTC: r.totalTTC ?? null,
-    dateCreation: ts(r.dateCreation) || null,
-  }))
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  const { commandes, syncedAt } = await lireCommandesRecentes(db, c.req.query('refresh') === '1')
+  return c.json({ commandes, syncedAt, easybeerAppUrl: config.easybeer.appUrl })
+})
+
+/** Statistiques du tableau de bord — 100 % depuis les caches, zéro appel Easybeer. */
+app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const [clientsSnap, commandesSnap, catalogueSnap, overridesSnap, metaSnap, comptes] = await Promise.all([
+    db.doc('cache/clientsListe').get(),
+    db.doc('cache/commandesRecentes').get(),
+    db.doc('cache/catalogue').get(),
+    db.collection('catalogueOverrides').get(),
+    db.doc('cache/meta').get(),
+    comptesParClient(),
+  ])
+
+  const clients = (clientsSnap.data()?.clients ?? []) as { actif: boolean }[]
+  const commandes = (commandesSnap.data()?.commandes ?? []) as {
+    totalTTC: number | null
+    dateCreation: number | null
+    etat: { code: string }
+  }[]
+  const produits = (catalogueSnap.data()?.produits ?? []) as unknown[]
+
+  const depuis30j = Date.now() - 30 * 24 * 3600 * 1000
+  const commandes30j = commandes.filter((cmd) => (cmd.dateCreation ?? 0) >= depuis30j && cmd.etat.code !== 'ANNULEE')
+  const caTTC30j = commandes30j.reduce((somme, cmd) => somme + (cmd.totalTTC ?? 0), 0)
+
+  const statutsComptes = Object.values(comptes)
+  let visibles = 0
+  let ruptures = 0
+  for (const doc of overridesSnap.docs) {
+    const d = doc.data()
+    if (d.visible) visibles++
+    if (d.visible && d.rupture) ruptures++
+  }
+
   return c.json({
-    commandes,
-    totalElements: res.totalElements,
-    easybeerAppUrl: config.easybeer.appUrl,
+    clients: { total: clients.length, avecCompte: statutsComptes.length, actifs: statutsComptes.filter((s) => s.statut === 'active').length },
+    commandes30j: { nombre: commandes30j.length, caTTC: caTTC30j },
+    catalogue: { produits: produits.length, visibles, ruptures },
+    dernierSync: metaSnap.data()?.dernierSync?.syncedAt ?? null,
   })
 })
 
