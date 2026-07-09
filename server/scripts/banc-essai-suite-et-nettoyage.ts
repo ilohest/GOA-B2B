@@ -13,7 +13,7 @@ const auth = 'Basic ' + Buffer.from(`${config.easybeer.username}:${config.easybe
 const delai = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function eb(method: string, path: string, body?: unknown): Promise<{ status: number; json: any }> {
-  await delai(700)
+  await delai(1200)
   const res = await fetch(`${config.easybeer.target}${path}`, {
     method,
     headers: {
@@ -45,7 +45,9 @@ try {
   // 1. Découverte des codes restants (relire après CHAQUE écriture)
   if (existe) {
     console.log('\n--- Codes de livraison restants ---')
-    const candidats = ['NOS_SOINS', 'LIVREUR', 'DIRECT', 'ENLEVEMENT', 'SERVICE', 'POINT_RETRAIT', 'RETRAIT']
+    // Déjà validés : TRANSPORTEUR, ENLEVEMENT. Déjà éliminés (échec silencieux) :
+    // NOS_SOINS, LIVREUR, DIRECT, SERVICE, LIVRAISON_TRANSPORTEUR.
+    const candidats = ['POINT_RETRAIT', 'LIVRAISON', 'PAR_NOS_SOINS', 'LIVRAISON_DIRECTE', 'AVEC_SERVICE']
     for (const candidat of candidats) {
       await eb('POST', '/parametres/client/type-livraison/attribuer', {
         idsClients: [ID_CLIENT_TEST],

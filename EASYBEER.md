@@ -383,6 +383,10 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
     réelle complète** (edition), **purger récursivement tous les `id*`** (sauf `idClientType`) et les
     sous-entités (`listeAdresseLivraison`, `listeRemises`, `tournee`, `numero`…), changer nom/email →
     **200 `{"id":<idClient>}`** (encore un format de réponse différent : ni `map.id`, ni objet complet).
+  - **Codes type de livraison** — validés : `TRANSPORTEUR` → « Livraison par transporteur »,
+    `ENLEVEMENT` → « Enlèvement par le client ». Éliminés (200 mais rien stocké) : `NOS_SOINS`,
+    `LIVREUR`, `DIRECT`, `SERVICE`, `LIVRAISON_TRANSPORTEUR`. Restent à trouver : « livraison par
+    nos soins » (le mode des tournées GOA !), « avec service », « point de retrait ».
   - **Type de livraison préféré** : `type-livraison/attribuer` accepte `typeLivraisonFavFormulaire:
     ["TRANSPORTEUR"]` → ✅ `typeLivraisonFav` = « Livraison par transporteur ». ⚠️ Le candidat
     `LIVRAISON_TRANSPORTEUR` répond 200 mais ne stocke RIEN dans `typeLivraisonFav` (échec silencieux) —
