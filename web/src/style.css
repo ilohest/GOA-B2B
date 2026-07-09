@@ -129,6 +129,14 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Tailwind v4 met cursor: default sur les boutons — on rétablit le pointer
+     sur tout ce qui est cliquable (hors désactivé). */
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  label:has(> input[type='checkbox']:not(:disabled)),
+  label:has(> [role='switch']:not(:disabled)) {
+    cursor: pointer;
+  }
   html,
   body,
   #app {

@@ -28,13 +28,29 @@ const router = createRouter({
     },
     {
       path: '/admin',
-      name: 'admin',
-      component: () => import('@/pages/AdminPage.vue'),
-    },
-    {
-      path: '/admin/catalogue',
-      name: 'admin-catalogue',
-      component: () => import('@/pages/AdminCataloguePage.vue'),
+      component: () => import('@/layouts/AdminLayout.vue'),
+      children: [
+        {
+          path: '',
+          name: 'admin-clients',
+          component: () => import('@/pages/admin/AdminClientsPage.vue'),
+        },
+        {
+          path: 'clients/:id(\\d+)',
+          name: 'admin-client',
+          component: () => import('@/pages/admin/AdminClientDetailPage.vue'),
+        },
+        {
+          path: 'commandes',
+          name: 'admin-commandes',
+          component: () => import('@/pages/admin/AdminCommandesPage.vue'),
+        },
+        {
+          path: 'catalogue',
+          name: 'admin-catalogue',
+          component: () => import('@/pages/admin/AdminCataloguePage.vue'),
+        },
+      ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CatalogueAdminResponse, CatalogueOverride } from '@/lib/types'
-import AdminNav from '@/components/AdminNav.vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -65,8 +64,6 @@ function enregistrerTexte(
 
 <template>
   <div class="grid gap-4">
-    <AdminNav />
-
     <Card>
       <CardHeader>
         <CardTitle class="text-lg">Catalogue</CardTitle>

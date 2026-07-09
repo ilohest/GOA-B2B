@@ -22,6 +22,17 @@ export const InvitationBodySchema = z.object({
   email: z.email('Adresse email invalide').optional(),
 })
 
+export const InvitationsBulkSchema = z.object({
+  invitations: z.array(InvitationBodySchema).min(1).max(100),
+})
+
+export const BulkParamsSchema = z
+  .object({
+    idsClients: z.array(z.number().int().positive()).min(1).max(250),
+    idClientTournee: z.number().int().positive().optional(),
+  })
+  .refine((v) => v.idClientTournee != null, 'Aucun paramètre à appliquer')
+
 export const OverridePatchSchema = z
   .object({
     visible: z.boolean().optional(),

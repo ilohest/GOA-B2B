@@ -36,13 +36,32 @@ export class EasybeerBanError extends Error {
   }
 }
 
+/**
+ * Disjoncteur : pendant un ban, TOUTE requête vers l'API prolonge le ban
+ * (vérifié 2026-07-09 : durées annoncées qui repartent à la hausse). Dès
+ * qu'un ban est détecté, on échoue localement jusqu'à l'échéance (+ marge)
+ * sans plus toucher l'API.
+ */
+let banniJusqua = 0
+const MARGE_BAN_MS = 10_000
+
 /** Sérialise un appel Easybeer dans la file globale (espacement garanti). */
 function passerParLaFile<T>(fn: () => Promise<T>): Promise<T> {
   const execution = fileAttente.then(async () => {
+    if (Date.now() < banniJusqua) {
+      throw new EasybeerBanError(Math.ceil((banniJusqua - Date.now()) / 1000))
+    }
     const attente = dernierAppel + MIN_INTERVAL_MS - Date.now()
     if (attente > 0) await new Promise((r) => setTimeout(r, attente))
     dernierAppel = Date.now()
-    return fn()
+    try {
+      return await fn()
+    } catch (e) {
+      if (e instanceof EasybeerBanError) {
+        banniJusqua = Date.now() + e.retryAfterSeconds * 1000 + MARGE_BAN_MS
+      }
+      throw e
+    }
   })
   // La file survit aux erreurs (l'échec est propagé à l'appelant seulement).
   fileAttente = execution.catch(() => {})
@@ -62,9 +81,13 @@ async function eb<T>(method: string, path: string, body?: unknown): Promise<{ st
     })
     const text = await res.text()
 
+    // Rate-limit : 400 avec texte « banned » OU 429 standard (vu 2026-07-09).
     if (res.status === 400 && text.includes('banned')) {
       const secondes = Number(/Try again in (\d+) seconds/.exec(text)?.[1] ?? 60)
       throw new EasybeerBanError(secondes)
+    }
+    if (res.status === 429) {
+      throw new EasybeerBanError(Number(res.headers.get('retry-after') ?? 60))
     }
 
     let json: unknown
@@ -94,9 +117,17 @@ export interface ModeleTauxTVA {
 export interface ModeleAdresse {
   ligne1?: string
   ligne2?: string
+  ligne3?: string
   codePostal?: string
   ville?: string
   pays?: string
+  complete?: string
+}
+
+export interface ModeleClientTournee {
+  idClientTournee?: number
+  libelle?: string
+  minimumCommande?: number
 }
 
 export interface ModeleClientType {
@@ -126,6 +157,9 @@ export interface ModeleClient {
   typeRemise2?: string
   typeLivraisonFav?: string
   tags?: string[] | string
+  tournee?: { idClientTournee?: number; libelle?: string; minimumCommande?: number } | null
+  listeRemises?: Record<string, unknown>[]
+  adresseLivraisonDefaut?: ModeleAdresse & { complete?: string }
 }
 
 export interface ListePagineeOfModeleClient {
@@ -186,6 +220,28 @@ export async function getClient(idClient: number): Promise<ModeleClient | null> 
   if (status === 404) return null
   if (status !== 200) throw new Error(`Easybeer ${status} sur /parametres/client/edition/${idClient}`)
   return json?.idClient != null ? json : null
+}
+
+/** GET /parametres/client/tournee — tournées (zones de livraison directe). */
+export async function listeTournees(): Promise<ModeleClientTournee[]> {
+  const { status, json } = await eb<ModeleClientTournee[]>('GET', '/parametres/client/tournee')
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /parametres/client/tournee`)
+  return Array.isArray(json) ? json : []
+}
+
+/**
+ * POST /parametres/client/tournee/attribuer — attribution BULK d'une tournée
+ * (✅ validé en réel 2026-07-08, cf. EASYBEER.md).
+ */
+export async function attribuerTournee(idClientTournee: number, idsClients: number[]): Promise<void> {
+  const { status, json } = await eb<{ succes?: boolean; message?: string }>(
+    'POST',
+    '/parametres/client/tournee/attribuer',
+    { idClientTournee, idsClients },
+  )
+  if (status !== 200 || json?.succes === false) {
+    throw new Error(`Easybeer ${status} sur tournee/attribuer — ${json?.message ?? 'échec'}`)
+  }
 }
 
 // --- Types / grilles ---
@@ -385,11 +441,56 @@ export async function supprimerCommande(idCommande: number): Promise<void> {
 export interface CommandeResume {
   idCommande?: number
   numero?: number
-  etat?: { code?: string; libelle?: string } | string
+  client?: { idClient?: number; nom?: string; numero?: string }
+  etat?: { code?: string; libelle?: string; couleur?: string } | string
   paiementEtat?: { code?: string; libelle?: string } | string
   totalTTC?: number
   totalHT?: number
-  dateCreation?: string
+  dateCreation?: string | number
+  /** Flag natif Easybeer (résumé de liste). */
+  estModifiable?: boolean
+}
+
+export interface ListeCommandesPage {
+  liste: CommandeResume[]
+  totalElements: number
+  totalPages: number
+}
+
+/** Une page brute de /commande/liste (tous clients, tri numero CROISSANT — seul tri fiable). */
+async function pageCommandes(numeroPage: number, nombreParPage: number): Promise<ListeCommandesPage> {
+  const params = new URLSearchParams({
+    colonneTri: 'numero',
+    numeroPage: String(numeroPage),
+    nombreParPage: String(nombreParPage),
+  })
+  const { status, json } = await eb<ListeCommandesPage>('POST', `/commande/liste/DEVIS?${params.toString()}`, {
+    inclureArchive: true,
+  })
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/liste (admin)`)
+  return { liste: json?.liste ?? [], totalElements: json?.totalElements ?? 0, totalPages: json?.totalPages ?? 1 }
+}
+
+/**
+ * Les N commandes les plus récentes, tous clients (usage admin).
+ * Contraintes API (vérifiées 2026-07-09) : seul tri fiable = `numero`
+ * CROISSANT (`mode`/`dateCreation` inopérants) et `totalElements`/`totalPages`
+ * sont FAUX sur cet endpoint → scan séquentiel jusqu'à une page incomplète,
+ * puis on garde la fin et on inverse. Volume GOA (~1 500 commandes/an) : ~15
+ * appels max, sérialisés par la file — usage admin ponctuel uniquement.
+ */
+export async function listeCommandesRecentes(
+  limite = 100,
+): Promise<{ commandes: CommandeResume[]; totalElements: number }> {
+  const parPage = 100
+  const PAGES_MAX = 40 // garde-fou
+  let toutes: CommandeResume[] = []
+  for (let page = 1; page <= PAGES_MAX; page++) {
+    const p = await pageCommandes(page, parPage)
+    toutes = [...toutes, ...p.liste]
+    if (p.liste.length < parPage) break
+  }
+  return { commandes: toutes.slice(-limite).reverse(), totalElements: toutes.length }
 }
 
 /**

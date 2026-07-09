@@ -50,6 +50,12 @@
     (espacement 200 ms) a re-déclenché un ban, et la durée annoncée **augmente** (220 s → 298 s).
     Probable fenêtre glissante / quota par minute. Espacement adopté : **400 ms** (2,5 req/s) —
     à ajuster si nouveau ban.
+  - ⚠️ 2026-07-09 : l'API renvoie AUSSI des **HTTP 429** (en plus du 400 « banned »), y compris
+    APRÈS la fin annoncée d'un ban — prévoir les deux formes et des attentes généreuses.
+  - ⚠️⚠️ **Requêter PENDANT un ban le PROLONGE** (durées annoncées qui remontent : 3 s → 60 s →
+    134 s en insistant). Parade implémentée : **disjoncteur serveur** (`easybeer.ts`) — pendant un
+    ban connu, échec local immédiat sans appel réseau, jusqu'à l'échéance annoncée + marge.
+    Attention aussi aux refetchs automatiques du front (focus fenêtre) qui peuvent entretenir un ban.
 - **Conséquence d'archi : NE JAMAIS appeler Easybeer en direct à chaque requête client.** Un trafic client
   normal ferait throttler la plateforme en continu.
 - **Pattern obligatoire** : un **job de synchro serveur** récupère le catalogue (produits, prix, stock, images)
@@ -117,6 +123,7 @@
 | **`idClient` casse l'autocomplete produit** | `GET /stock/produits/autocomplete?idClient=...` → **500**. L'appeler **sans** `idClient`. |
 | **Grille tarifaire ≠ type CRM** | Le client porte un `type` (ex. `GMS`, idClientType 20680) qui est une **sous-catégorie CRM**. La vraie **grille tarifaire** est la **racine** de cette hiérarchie (`idParent` vide), ex. `client PRO` (idClientType 17849). Résoudre en remontant `idParent`. |
 | **500 opaques** | Beaucoup d'erreurs de validation renvoient `{ "succes": false, "message": "Une erreur inconnue s'est produite…", "map": {} }` (HTTP 500/400) sans indice. Approche : partir d'un objet complet connu-valide et réduire. |
+| **Pagination de `commande/liste` : métadonnées FAUSSES et tri figé** | ✅ Vérifié 2026-07-09 : `totalElements`/`totalPages` renvoyés par `POST /commande/liste` (sans idClient) sont incohérents (ex. totalElements=4 pour 3/page alors qu'il y a 200+ commandes). Le `mode` (DESC/desc) est ignoré, `colonneTri=dateCreation` renvoie vide → **seul tri fiable : `numero` croissant**. Pour « les plus récentes », scanner séquentiellement jusqu'à une page incomplète puis inverser. |
 | **Filtre `idsClients` IGNORÉ sur `client/liste`** | ✅ Vérifié en réel (2026-07-08) : `POST /parametres/client/liste` avec body `{ idsClients: [601666] }` renvoie **tous les clients** (239) comme si le filtre n'existait pas — aucun message d'erreur. Pour lire UN client, utiliser **`GET /parametres/client/edition/{idClient}`**. (Piège vicieux : le premier client de la liste triée par nom était justement le client de test 588074 → le POC semblait fonctionner par pure coïncidence.) |
 | **Réponse de succès non standard** | Voir §4 — `/commande/enregistrer` répond `{ "map": { "id", "numero", "message" } }`, pas un `{idCommande}`. |
 

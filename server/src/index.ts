@@ -11,7 +11,10 @@ import {
   listeTypesClient,
   resoudreGrilleRacine,
   listeProduitsAutocomplete,
+  listeCommandesRecentes,
   listeCommandesClient,
+  listeTournees,
+  attribuerTournee,
   enregistrerCommande,
   modifierCommande,
   detailCommande,
@@ -19,7 +22,14 @@ import {
   type ProduitAutocomplete,
 } from './easybeer.js'
 import { lireCacheClient, lireCatalogue, syncTout } from './sync.js'
-import { CommandeBodySchema, InvitationBodySchema, OverridePatchSchema, parserBody } from './schemas.js'
+import {
+  BulkParamsSchema,
+  CommandeBodySchema,
+  InvitationBodySchema,
+  InvitationsBulkSchema,
+  OverridePatchSchema,
+  parserBody,
+} from './schemas.js'
 import {
   catalogueAdmin,
   catalogueClient,
@@ -104,6 +114,13 @@ const ETATS_NON_MODIFIABLES = new Set(['LIVREE', 'ANNULEE'])
 
 const codeEtat = (etat: unknown): string =>
   typeof etat === 'string' ? etat : ((etat as { code?: string } | null)?.code ?? '')
+
+/** Normalise l'état Easybeer en { code, libelle, couleur } pour l'affichage. */
+function etatAffichage(etat: unknown): { code: string; libelle: string; couleur: string | null } {
+  if (typeof etat === 'string') return { code: etat, libelle: etat, couleur: null }
+  const e = (etat ?? {}) as { code?: string; libelle?: string; couleur?: string }
+  return { code: e.code ?? '', libelle: e.libelle ?? e.code ?? '', couleur: e.couleur ?? null }
+}
 
 /**
  * Résout et valide les lignes d'une commande depuis le CACHE (produits
@@ -242,7 +259,8 @@ app.get('/api/commandes', requireAuth, async (c) => {
       totalTTC: r.totalTTC ?? null,
       totalHT: r.totalHT ?? null,
       dateCreation: ts(r.dateCreation) || null,
-      modifiable: !ETATS_NON_MODIFIABLES.has(codeEtat(r.etat)),
+      etat: etatAffichage(r.etat),
+      modifiable: r.estModifiable ?? !ETATS_NON_MODIFIABLES.has(codeEtat(r.etat)),
     }))
     .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
   return c.json({ commandes })
@@ -429,27 +447,26 @@ app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
 })
 
 /**
- * Invite un client Easybeer : crée le compte Firebase (sans mot de passe),
- * écrit users/{uid} = { easybeerIdClient, role client, status invited } et
- * génère un lien « créez votre mot de passe » (page /activer de l'app).
- * Ré-appelable pour le même email → régénère simplement un lien frais.
+ * Cœur de l'invitation (réutilisé en unitaire et en masse) : crée le compte
+ * Firebase (sans mot de passe), écrit users/{uid}, génère un lien « créez
+ * votre mot de passe » (page /activer). Idempotent (ré-invitation = lien frais).
+ * ⚠️ N'ENVOIE RIEN : l'email partira via SMTP quand il sera configuré (prod).
  */
-app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
-  const db = getDb()
-  const adminAuth = getAdminAuth()
-  if (!db || !adminAuth) return c.json({ error: 'Firebase non configuré' }, 501)
+async function inviterClient(
+  db: NonNullable<ReturnType<typeof getDb>>,
+  adminAuth: NonNullable<ReturnType<typeof getAdminAuth>>,
+  adminUid: string,
+  easybeerIdClient: number,
+  emailOverride?: string,
+): Promise<
+  | { ok: true; email: string; lien: string; dejaActif: boolean; client: { idClient?: number; nom?: string; numero?: string } }
+  | { ok: false; erreur: string }
+> {
+  const client = await getClient(easybeerIdClient)
+  if (!client) return { ok: false, erreur: `Client Easybeer ${easybeerIdClient} introuvable` }
 
-  const parse = parserBody(InvitationBodySchema, await c.req.json().catch(() => null))
-  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
-  const body = parse.data
-
-  const client = await getClient(body.easybeerIdClient)
-  if (!client) return c.json({ error: `Client Easybeer ${body.easybeerIdClient} introuvable` }, 404)
-
-  const email = (body.email ?? client.emailPrincipal ?? '').trim().toLowerCase()
-  if (!email) {
-    return c.json({ error: "Ce client n'a pas d'email dans Easybeer — saisissez une adresse." }, 400)
-  }
+  const email = (emailOverride ?? client.emailPrincipal ?? '').trim().toLowerCase()
+  if (!email) return { ok: false, erreur: `${client.nom ?? easybeerIdClient} : pas d'email dans Easybeer` }
 
   // Compte Firebase : réutilisé s'il existe déjà (ré-invitation), sinon créé
   // sans mot de passe (connexion impossible tant que le lien n'est pas utilisé).
@@ -457,20 +474,17 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
   const uid = existing?.uid ?? (await adminAuth.createUser({ email })).uid
 
   const prev = (await db.collection('users').doc(uid).get()).data() ?? {}
-  await db
-    .collection('users')
-    .doc(uid)
-    .set(
-      {
-        email,
-        easybeerIdClient: body.easybeerIdClient,
-        role: prev.role ?? 'client',
-        status: prev.status === 'active' ? 'active' : 'invited',
-        invitedAt: Date.now(),
-        invitedBy: c.get('user').uid,
-      },
-      { merge: true },
-    )
+  await db.collection('users').doc(uid).set(
+    {
+      email,
+      easybeerIdClient,
+      role: prev.role ?? 'client',
+      status: prev.status === 'active' ? 'active' : 'invited',
+      invitedAt: Date.now(),
+      invitedBy: adminUid,
+    },
+    { merge: true },
+  )
 
   // Lien Firebase natif → on extrait l'oobCode pour pointer vers NOTRE page
   // /activer (même mécanique en prod, aucune page Firebase hébergée).
@@ -478,14 +492,133 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
   const oobCode = new URL(resetLink).searchParams.get('oobCode')
   const lien = `${config.invite.baseUrl}?oobCode=${encodeURIComponent(oobCode ?? '')}&email=${encodeURIComponent(email)}`
 
-  // TODO V1 : envoi automatique par email (SMTP_URL) ; en attendant, lien à copier.
-  return c.json({
+  return {
     ok: true,
     email,
     lien,
     dejaActif: prev.status === 'active',
     client: { idClient: client.idClient, nom: client.nom, numero: client.numero },
+  }
+}
+
+/** Invitation d'UN client. */
+app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  const adminAuth = getAdminAuth()
+  if (!db || !adminAuth) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const parse = parserBody(InvitationBodySchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+
+  const res = await inviterClient(db, adminAuth, c.get('user').uid, parse.data.easybeerIdClient, parse.data.email)
+  if (!res.ok) return c.json({ error: res.erreur }, 400)
+  return c.json(res)
+})
+
+/**
+ * Invitations en MASSE : un lien par client sélectionné. L'email d'invitation
+ * sera envoyé automatiquement quand SMTP sera branché ; d'ici là, les liens
+ * sont renvoyés à l'admin (copie manuelle).
+ */
+app.post('/api/admin/invitations/bulk', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  const adminAuth = getAdminAuth()
+  if (!db || !adminAuth) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const parse = parserBody(InvitationsBulkSchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+
+  const adminUid = c.get('user').uid
+  const resultats = []
+  for (const inv of parse.data.invitations) {
+    try {
+      const res = await inviterClient(db, adminAuth, adminUid, inv.easybeerIdClient, inv.email)
+      resultats.push({ easybeerIdClient: inv.easybeerIdClient, ...res })
+    } catch (e) {
+      resultats.push({ easybeerIdClient: inv.easybeerIdClient, ok: false as const, erreur: (e as Error).message })
+    }
+  }
+  return c.json({ resultats, reussies: resultats.filter((r) => r.ok).length })
+})
+
+/**
+ * Fiche client détaillée (admin) : paramètres commerciaux Easybeer +
+ * historique de commandes + comptes plateforme liés.
+ */
+app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
+  const idClient = Number(c.req.param('id'))
+  if (!Number.isFinite(idClient)) return c.json({ error: 'idClient invalide' }, 400)
+
+  const [client, commandesBrutes] = await Promise.all([getClient(idClient), listeCommandesClient(idClient)])
+  if (!client) return c.json({ error: 'Client introuvable' }, 404)
+
+  const ts = (v: unknown) => (v == null ? 0 : new Date(v as string | number).getTime() || 0)
+  const commandes = commandesBrutes
+    .map((r) => ({
+      idCommande: r.idCommande,
+      numero: r.numero,
+      etat: etatAffichage(r.etat),
+      totalTTC: r.totalTTC ?? null,
+      dateCreation: ts(r.dateCreation) || null,
+    }))
+    .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
+
+  const comptes: { email: string; status: string }[] = []
+  const db = getDb()
+  if (db) {
+    const snap = await db.collection('users').where('easybeerIdClient', '==', idClient).get()
+    for (const doc of snap.docs) {
+      const d = doc.data()
+      comptes.push({ email: (d.email as string) ?? '?', status: (d.status as string) ?? 'invited' })
+    }
+  }
+
+  return c.json({
+    client: {
+      idClient: client.idClient,
+      nom: client.nom ?? null,
+      raisonSociale: client.raisonSociale ?? null,
+      numero: client.numero ?? null,
+      emailPrincipal: client.emailPrincipal ?? null,
+      telephonePrincipal: client.telephonePrincipal ?? null,
+      adresseFacturation: client.adresse?.complete ?? null,
+      adresseLivraison: client.adresseLivraisonDefaut?.complete ?? null,
+      categorie: client.type?.libelle ?? null,
+      minimumCommande: client.minimumCommande ?? client.minimumCommandeAutorise ?? null,
+      fraisLivraisonHT: client.fraisLivraisonHT ?? null,
+      remise: client.remise ?? null,
+      remise2: client.remise2 ?? null,
+      typeRemise2: client.typeRemise2 ?? null,
+      nbRemisesCiblees: client.listeRemises?.length ?? 0,
+      typeLivraisonFav: client.typeLivraisonFav || null,
+      tournee: client.tournee?.libelle ?? null,
+      tags: client.tags ?? null,
+    },
+    commandes,
+    comptes,
+    easybeerAppUrl: config.easybeer.appUrl,
   })
+})
+
+/** Tournées Easybeer (référentiel pour l'attribution en masse). */
+app.get('/api/admin/tournees', requireAuth, requireAdmin, async (c) => {
+  return c.json({ tournees: await listeTournees() })
+})
+
+/**
+ * Paramètres clients en MASSE. V1 : attribution de tournée (endpoint bulk
+ * natif Easybeer, ✅ validé en réel). Mode de livraison et minimum : à venir
+ * (code enum / écriture fiche complète à valider — cf. EASYBEER.md).
+ */
+app.post('/api/admin/clients/bulk-params', requireAuth, requireAdmin, async (c) => {
+  const parse = parserBody(BulkParamsSchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+  const { idsClients, idClientTournee } = parse.data
+
+  if (idClientTournee != null) {
+    await attribuerTournee(idClientTournee, idsClients)
+  }
+  return c.json({ ok: true, clients: idsClients.length })
 })
 
 // ---- Admin : gestion du catalogue (visible / nom / photo / rupture) ----
@@ -507,6 +640,30 @@ app.put('/api/admin/catalogue/:idStockBouteille', requireAuth, requireAdmin, asy
   if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
   const override = await majOverride(db, id, parse.data)
   return c.json({ ok: true, override })
+})
+
+// ---- Admin : commandes (tous clients) ----
+
+/** Les ~100 commandes les plus récentes de la brasserie (lecture directe Easybeer). */
+app.get('/api/admin/commandes', requireAuth, requireAdmin, async (c) => {
+  const res = await listeCommandesRecentes(100)
+  const ts = (v: unknown) => (v == null ? 0 : new Date(v as string | number).getTime() || 0)
+  const commandes = res.commandes.map((r) => ({
+    idCommande: r.idCommande,
+    numero: r.numero,
+    client: r.client
+      ? { idClient: r.client.idClient ?? null, nom: r.client.nom ?? null, numero: r.client.numero ?? null }
+      : null,
+    etat: etatAffichage(r.etat),
+    paiement: typeof r.paiementEtat === 'string' ? r.paiementEtat : (r.paiementEtat?.libelle ?? null),
+    totalTTC: r.totalTTC ?? null,
+    dateCreation: ts(r.dateCreation) || null,
+  }))
+  return c.json({
+    commandes,
+    totalElements: res.totalElements,
+    easybeerAppUrl: config.easybeer.appUrl,
+  })
 })
 
 // ---- Admin : synchro du cache ----

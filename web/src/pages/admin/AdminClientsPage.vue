@@ -1,20 +1,23 @@
 <script setup lang="ts">
-import { computed, h, ref } from 'vue'
+import { computed, h, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import {
-  FlexRender,
-  getCoreRowModel,
-  useVueTable,
-  type ColumnDef,
-} from '@tanstack/vue-table'
+import { FlexRender, getCoreRowModel, useVueTable, type ColumnDef } from '@tanstack/vue-table'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
-import type { AdminClientsResponse, ClientEasybeer, InvitationResponse, SyncReport } from '@/lib/types'
+import type {
+  AdminClientsResponse,
+  ClientEasybeer,
+  InvitationBulkResultat,
+  InvitationResponse,
+  SyncReport,
+  Tournee,
+} from '@/lib/types'
 import { dateHeureFr } from '@/lib/format'
-import AdminNav from '@/components/AdminNav.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -25,15 +28,18 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+
+const router = useRouter()
+const queryClient = useQueryClient()
 
 // --- Liste des clients Easybeer (pagination serveur) ---
 
@@ -55,9 +61,26 @@ function lancerRecherche() {
   recherche.value = rechercheInput.value.trim()
 }
 
-// --- Invitation ---
+// --- Sélection (checkbox, multi-pages) ---
 
-const queryClient = useQueryClient()
+const selection = reactive(new Set<number>())
+
+const idsPage = computed(() =>
+  (data.value?.liste ?? []).map((c) => c.idClient).filter((id): id is number => id != null),
+)
+const toutSelectionne = computed(
+  () => idsPage.value.length > 0 && idsPage.value.every((id) => selection.has(id)),
+)
+
+function basculerTout(coche: boolean) {
+  for (const id of idsPage.value) {
+    if (coche) selection.add(id)
+    else selection.delete(id)
+  }
+}
+
+// --- Invitation unitaire ---
+
 const dialogOuvert = ref(false)
 const cible = ref<ClientEasybeer | null>(null)
 const emailInvitation = ref('')
@@ -88,11 +111,59 @@ function envoyerInvitation() {
   })
 }
 
-async function copierLien() {
-  if (!resultat.value) return
-  await navigator.clipboard.writeText(resultat.value.lien)
+async function copier(texte: string) {
+  await navigator.clipboard.writeText(texte)
   toast.success('Lien copié — envoyez-le au client.')
 }
+
+// --- Invitations en masse ---
+
+const dialogBulkInvitations = ref(false)
+const resultatsBulk = ref<InvitationBulkResultat[] | null>(null)
+
+const bulkInvitations = useMutation({
+  mutationFn: () =>
+    api.post<{ resultats: InvitationBulkResultat[]; reussies: number }>('/admin/invitations/bulk', {
+      invitations: [...selection].map((easybeerIdClient) => ({ easybeerIdClient })),
+    }),
+  onSuccess: (res) => {
+    resultatsBulk.value = res.resultats
+    toast.success(`${res.reussies}/${res.resultats.length} invitation(s) générée(s).`)
+    selection.clear()
+    queryClient.invalidateQueries({ queryKey: ['admin', 'clients'] })
+  },
+  onError: (e) => toast.error((e as Error).message),
+})
+
+function ouvrirBulkInvitations() {
+  resultatsBulk.value = null
+  dialogBulkInvitations.value = true
+}
+
+// --- Attribution de tournée en masse ---
+
+const dialogTournee = ref(false)
+const tourneeChoisie = ref<string>('')
+
+const tournees = useQuery({
+  queryKey: ['admin', 'tournees'],
+  queryFn: () => api.get<{ tournees: Tournee[] }>('/admin/tournees'),
+  enabled: dialogTournee,
+})
+
+const bulkTournee = useMutation({
+  mutationFn: () =>
+    api.post('/admin/clients/bulk-params', {
+      idsClients: [...selection],
+      idClientTournee: Number(tourneeChoisie.value),
+    }),
+  onSuccess: () => {
+    toast.success(`Tournée attribuée à ${selection.size} client(s).`)
+    selection.clear()
+    dialogTournee.value = false
+  },
+  onError: (e) => toast.error((e as Error).message),
+})
 
 // --- Synchro du cache Easybeer ---
 
@@ -120,6 +191,28 @@ const compteDe = (c: ClientEasybeer) =>
   c.idClient != null ? data.value?.comptes?.[c.idClient] : undefined
 
 const columns: ColumnDef<ClientEasybeer>[] = [
+  {
+    id: 'selection',
+    header: () =>
+      h(Checkbox, {
+        modelValue: toutSelectionne.value,
+        'aria-label': 'Tout sélectionner',
+        'onUpdate:modelValue': (v: boolean | 'indeterminate') => basculerTout(v === true),
+      }),
+    cell: ({ row }) => {
+      const id = row.original.idClient
+      if (id == null) return null
+      return h(Checkbox, {
+        modelValue: selection.has(id),
+        'aria-label': `Sélectionner ${row.original.nom}`,
+        'onUpdate:modelValue': (v: boolean | 'indeterminate') => {
+          if (v === true) selection.add(id)
+          else selection.delete(id)
+        },
+        onClick: (e: Event) => e.stopPropagation(),
+      })
+    },
+  },
   {
     id: 'commerce',
     header: 'Commerce',
@@ -164,7 +257,10 @@ const columns: ColumnDef<ClientEasybeer>[] = [
           {
             variant: compte ? 'ghost' : 'outline',
             size: 'sm',
-            onClick: () => ouvrirInvitation(row.original),
+            onClick: (e: Event) => {
+              e.stopPropagation()
+              ouvrirInvitation(row.original)
+            },
           },
           () => (compte ? 'Ré-inviter' : 'Inviter'),
         ),
@@ -183,12 +279,14 @@ const table = useVueTable({
 })
 
 const totalPages = computed(() => data.value?.totalPages ?? 1)
+
+function ouvrirFiche(client: ClientEasybeer) {
+  if (client.idClient != null) router.push(`/admin/clients/${client.idClient}`)
+}
 </script>
 
 <template>
   <div class="grid gap-4">
-    <AdminNav />
-
     <Card>
       <CardHeader>
         <CardTitle class="text-lg">Synchronisation Easybeer</CardTitle>
@@ -218,27 +316,38 @@ const totalPages = computed(() => data.value?.totalPages ?? 1)
       <CardHeader>
         <CardTitle class="text-lg">Clients</CardTitle>
         <CardDescription>
-          Liste lue depuis Easybeer. Invitez un client pour lui créer un accès à la plateforme.
+          Liste lue depuis Easybeer. Cliquez sur un client pour sa fiche ; cochez pour les
+          actions en masse.
         </CardDescription>
       </CardHeader>
       <CardContent class="grid gap-4">
         <form class="flex gap-2" @submit.prevent="lancerRecherche">
-          <Input
-            v-model="rechercheInput"
-            placeholder="Rechercher un commerce…"
-            class="max-w-xs"
-            :aria-label="'Rechercher un client'"
-          />
+          <Input v-model="rechercheInput" placeholder="Rechercher un commerce…" class="max-w-xs" />
           <Button type="submit" variant="secondary">Rechercher</Button>
         </form>
+
+        <!-- Barre d'actions en masse -->
+        <div
+          v-if="selection.size > 0"
+          class="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/50 px-3 py-2"
+        >
+          <p class="text-sm font-medium">{{ selection.size }} sélectionné(s)</p>
+          <Button size="sm" :disabled="bulkInvitations.isPending.value" @click="ouvrirBulkInvitations">
+            Inviter la sélection
+          </Button>
+          <Button size="sm" variant="outline" @click="dialogTournee = true">
+            Attribuer une tournée
+          </Button>
+          <Button size="sm" variant="ghost" class="text-muted-foreground" @click="selection.clear()">
+            Tout désélectionner
+          </Button>
+        </div>
 
         <div v-if="isPending" class="grid gap-2">
           <Skeleton v-for="i in 6" :key="i" class="h-10 w-full" />
         </div>
 
-        <p v-else-if="isError" class="text-sm text-destructive">
-          {{ (error as Error)?.message }}
-        </p>
+        <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
         <template v-else>
           <div class="overflow-x-auto rounded-lg border">
@@ -255,7 +364,12 @@ const totalPages = computed(() => data.value?.totalPages ?? 1)
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow v-for="row in table.getRowModel().rows" :key="row.id">
+                <TableRow
+                  v-for="row in table.getRowModel().rows"
+                  :key="row.id"
+                  class="cursor-pointer"
+                  @click="ouvrirFiche(row.original)"
+                >
                   <TableCell v-for="cell in row.getVisibleCells()" :key="cell.id">
                     <FlexRender :render="cell.column.columnDef.cell" :props="cell.getContext()" />
                   </TableCell>
@@ -272,40 +386,30 @@ const totalPages = computed(() => data.value?.totalPages ?? 1)
           <div class="flex items-center justify-between text-sm text-muted-foreground">
             <span>{{ data?.totalElements ?? 0 }} clients — page {{ page }} / {{ totalPages }}</span>
             <div class="flex gap-2">
-              <Button variant="outline" size="sm" :disabled="page <= 1" @click="page--">
-                Précédent
-              </Button>
-              <Button variant="outline" size="sm" :disabled="page >= totalPages" @click="page++">
-                Suivant
-              </Button>
+              <Button variant="outline" size="sm" :disabled="page <= 1" @click="page--">Précédent</Button>
+              <Button variant="outline" size="sm" :disabled="page >= totalPages" @click="page++">Suivant</Button>
             </div>
           </div>
         </template>
       </CardContent>
     </Card>
 
+    <!-- Invitation unitaire -->
     <Dialog v-model:open="dialogOuvert">
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Inviter {{ cible?.nom ?? cible?.raisonSociale }}</DialogTitle>
           <DialogDescription>
-            Un lien « créez votre mot de passe » sera généré pour ce client
-            ({{ cible?.numero }}).
+            Un lien « créez votre mot de passe » sera généré pour ce client ({{ cible?.numero }}).
           </DialogDescription>
         </DialogHeader>
 
         <div v-if="!resultat" class="grid gap-4">
           <div class="grid gap-1.5">
             <Label for="email-invitation">Email du compte</Label>
-            <Input
-              id="email-invitation"
-              v-model="emailInvitation"
-              type="email"
-              placeholder="email@commerce.fr"
-            />
+            <Input id="email-invitation" v-model="emailInvitation" type="email" placeholder="email@commerce.fr" />
             <p class="text-xs text-muted-foreground">
-              Pré-rempli avec l'email Easybeer du client. Modifiable (ex. autre acheteur du
-              même commerce).
+              Pré-rempli avec l'email Easybeer du client. Modifiable (ex. autre acheteur du même commerce).
             </p>
           </div>
           <DialogFooter>
@@ -327,9 +431,86 @@ const totalPages = computed(() => data.value?.totalPages ?? 1)
           </div>
           <DialogFooter class="gap-2">
             <Button variant="secondary" @click="dialogOuvert = false">Fermer</Button>
-            <Button @click="copierLien">Copier le lien</Button>
+            <Button @click="copier(resultat!.lien)">Copier le lien</Button>
           </DialogFooter>
         </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Invitations en masse -->
+    <Dialog v-model:open="dialogBulkInvitations">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Inviter {{ resultatsBulk ? 'la sélection' : `${selection.size} client(s)` }}</DialogTitle>
+          <DialogDescription>
+            Une invitation individuelle est générée par client (email Easybeer de sa fiche).
+            L'envoi automatique par email s'activera avec le SMTP — d'ici là, copiez les liens.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="!resultatsBulk" class="grid gap-4">
+          <DialogFooter>
+            <Button variant="secondary" @click="dialogBulkInvitations = false">Annuler</Button>
+            <Button :disabled="bulkInvitations.isPending.value" @click="bulkInvitations.mutate()">
+              {{ bulkInvitations.isPending.value ? 'Génération…' : 'Générer les invitations' }}
+            </Button>
+          </DialogFooter>
+        </div>
+
+        <div v-else class="grid max-h-80 gap-2 overflow-y-auto">
+          <div
+            v-for="r in resultatsBulk"
+            :key="r.easybeerIdClient"
+            class="flex items-center justify-between gap-3 rounded-lg border p-2"
+          >
+            <div class="min-w-0 text-sm">
+              <template v-if="r.ok">
+                <p class="truncate font-medium">{{ r.client?.nom ?? r.easybeerIdClient }}</p>
+                <p class="truncate text-xs text-muted-foreground">{{ r.email }}</p>
+              </template>
+              <p v-else class="text-xs text-destructive">{{ r.erreur }}</p>
+            </div>
+            <Button v-if="r.ok && r.lien" size="sm" variant="outline" @click="copier(r.lien)">
+              Copier le lien
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Tournée en masse -->
+    <Dialog v-model:open="dialogTournee">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Attribuer une tournée</DialogTitle>
+          <DialogDescription>
+            La tournée sera appliquée aux {{ selection.size }} client(s) sélectionné(s)
+            (écriture directe dans Easybeer).
+          </DialogDescription>
+        </DialogHeader>
+        <div class="grid gap-1.5">
+          <Label>Tournée</Label>
+          <Select v-model="tourneeChoisie">
+            <SelectTrigger class="w-full">
+              <SelectValue placeholder="Choisir une tournée…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="t in tournees.data.value?.tournees ?? []"
+                :key="t.idClientTournee"
+                :value="String(t.idClientTournee)"
+              >
+                {{ t.libelle }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <Button variant="secondary" @click="dialogTournee = false">Annuler</Button>
+          <Button :disabled="!tourneeChoisie || bulkTournee.isPending.value" @click="bulkTournee.mutate()">
+            {{ bulkTournee.isPending.value ? 'Attribution…' : 'Attribuer' }}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   </div>

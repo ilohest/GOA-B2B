@@ -11,6 +11,8 @@ export const config = {
 
   easybeer: {
     target: process.env.EASYBEER_API_TARGET ?? 'https://api.easybeer.fr',
+    // Interface web Easybeer (liens « ouvrir dans Easybeer » côté admin).
+    appUrl: process.env.EASYBEER_APP_URL ?? 'https://app.easybeer.fr',
     username: required('EASYBEER_USERNAME', process.env.EASYBEER_USERNAME),
     password: required('EASYBEER_PASSWORD', process.env.EASYBEER_PASSWORD),
   },

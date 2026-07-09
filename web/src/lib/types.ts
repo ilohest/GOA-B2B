@@ -91,6 +91,12 @@ export interface MeResponse {
   idGrilleTarifaire: number | null
 }
 
+export interface EtatCommande {
+  code: string
+  libelle: string
+  couleur: string | null
+}
+
 export interface CommandeResume {
   idCommande: number
   numero: number | null
@@ -98,7 +104,72 @@ export interface CommandeResume {
   totalHT: number | null
   /** Epoch millis (normalisé côté serveur). */
   dateCreation: number | null
+  etat: EtatCommande
   modifiable: boolean
+}
+
+export interface AdminCommandeResume {
+  idCommande: number
+  numero: number | null
+  client: { idClient: number | null; nom: string | null; numero: string | null } | null
+  etat: EtatCommande
+  paiement: string | null
+  totalTTC: number | null
+  dateCreation: number | null
+}
+
+export interface AdminCommandesResponse {
+  commandes: AdminCommandeResume[]
+  totalElements: number
+  easybeerAppUrl: string
+}
+
+export interface AdminClientDetail {
+  client: {
+    idClient: number
+    nom: string | null
+    raisonSociale: string | null
+    numero: string | null
+    emailPrincipal: string | null
+    telephonePrincipal: string | null
+    adresseFacturation: string | null
+    adresseLivraison: string | null
+    categorie: string | null
+    minimumCommande: number | null
+    fraisLivraisonHT: number | null
+    remise: string | null
+    remise2: string | null
+    typeRemise2: string | null
+    nbRemisesCiblees: number
+    typeLivraisonFav: string | null
+    tournee: string | null
+    tags: string[] | string | null
+  }
+  commandes: {
+    idCommande: number
+    numero: number | null
+    etat: EtatCommande
+    totalTTC: number | null
+    dateCreation: number | null
+  }[]
+  comptes: { email: string; status: string }[]
+  easybeerAppUrl: string
+}
+
+export interface Tournee {
+  idClientTournee?: number
+  libelle?: string
+  minimumCommande?: number
+}
+
+export interface InvitationBulkResultat {
+  easybeerIdClient: number
+  ok: boolean
+  email?: string
+  lien?: string
+  dejaActif?: boolean
+  client?: { idClient?: number; nom?: string; numero?: string }
+  erreur?: string
 }
 
 export interface CommandeDetail {

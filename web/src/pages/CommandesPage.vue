@@ -6,6 +6,7 @@ import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CommandeDetail, CommandeEdition, CommandeResume } from '@/lib/types'
 import { dateFr, prixFr } from '@/lib/format'
+import EtatBadge from '@/components/EtatBadge.vue'
 import { usePanier } from '@/composables/usePanier'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -98,9 +99,10 @@ async function modifier(commande: CommandeResume) {
         <li v-for="cmd in data.commandes" :key="cmd.idCommande" class="py-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <button class="text-left" @click="basculerDetail(cmd.idCommande)">
-              <p class="text-sm font-medium">
+              <p class="flex items-center gap-2 text-sm font-medium">
                 Commande n° {{ cmd.numero ?? cmd.idCommande }}
-                <span class="ml-1 text-xs text-muted-foreground">
+                <EtatBadge :etat="cmd.etat" />
+                <span class="text-xs text-muted-foreground">
                   {{ detailOuvert === cmd.idCommande ? '▲' : '▼' }}
                 </span>
               </p>
@@ -119,6 +121,7 @@ async function modifier(commande: CommandeResume) {
               >
                 {{ chargement === cmd.idCommande ? 'Chargement…' : 'Modifier' }}
               </Button>
+              <p v-else class="text-xs text-muted-foreground">Non modifiable</p>
             </div>
           </div>
 

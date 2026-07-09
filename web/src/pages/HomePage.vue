@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
@@ -8,6 +9,7 @@ import { prixFr } from '@/lib/format'
 import { useMe } from '@/composables/useMe'
 import { usePanier } from '@/composables/usePanier'
 import ProduitCard from '@/components/catalogue/ProduitCard.vue'
+import PanierRecap from '@/components/catalogue/PanierRecap.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -22,7 +24,13 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 
+const router = useRouter()
 const { data, isPending, isError, error } = useMe()
+
+// L'admin n'a pas d'espace boutique : direction l'administration.
+watchEffect(() => {
+  if (data.value?.user.role === 'admin') router.replace('/admin')
+})
 
 const catalogue = useQuery({
   queryKey: ['catalogue'],
@@ -43,7 +51,9 @@ const lignesDetail = computed(() =>
   lignes.value
     .map((l) => {
       const produit = produitsParId.value.get(l.idStockBouteille)
-      return produit ? { ...l, produit, sousTotal: (produit.prixHT ?? 0) * l.quantite } : null
+      return produit
+        ? { ...l, libelle: produit.libelle, produit, sousTotal: (produit.prixHT ?? 0) * l.quantite }
+        : null
     })
     .filter((l): l is NonNullable<typeof l> => l !== null),
 )
@@ -51,6 +61,10 @@ const lignesDetail = computed(() =>
 const totalHT = computed(() => lignesDetail.value.reduce((somme, l) => somme + l.sousTotal, 0))
 const minimum = computed(() => data.value?.client?.minimumCommande ?? null)
 const sousMinimum = computed(() => minimum.value != null && totalHT.value < minimum.value)
+const panierVisible = computed(() => nbCartons.value > 0 || modification.value != null)
+
+/** Volet détail de la barre mobile. */
+const barreDepliee = ref(false)
 
 // --- Envoi de la commande ---
 
@@ -86,6 +100,7 @@ const envoi = useMutation({
     }
     vider()
     commentaire.value = ''
+    barreDepliee.value = false
     queryClient.invalidateQueries({ queryKey: ['commandes'] })
   },
   onError: (e) => toast.error((e as Error).message),
@@ -95,101 +110,177 @@ function ouvrirRecap() {
   confirmation.value = null
   dialogOuvert.value = true
 }
+
+function annulerModification() {
+  vider()
+  commentaire.value = ''
+  barreDepliee.value = false
+}
 </script>
 
 <template>
-  <div class="grid gap-4 pb-24">
-    <Card>
-      <CardHeader>
-        <CardTitle class="text-lg">Mon compte</CardTitle>
-        <CardDescription>Informations lues depuis Easybeer</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div v-if="isPending" class="grid gap-2">
-          <Skeleton class="h-5 w-2/3" />
-          <Skeleton class="h-4 w-1/2" />
-        </div>
-        <p v-else-if="isError" class="text-sm text-destructive">
-          Impossible de charger votre compte : {{ (error as Error)?.message }}
-        </p>
-        <dl v-else-if="data?.client" class="grid gap-2 text-sm">
-          <div class="flex items-baseline justify-between gap-4">
-            <dt class="text-muted-foreground">Commerce</dt>
-            <dd class="text-right font-medium">{{ data.client.nom ?? data.client.raisonSociale }}</dd>
-          </div>
-          <div class="flex items-baseline justify-between gap-4">
-            <dt class="text-muted-foreground">N° client</dt>
-            <dd class="text-right">{{ data.client.numero }}</dd>
-          </div>
-          <div v-if="minimum != null" class="flex items-baseline justify-between gap-4">
-            <dt class="text-muted-foreground">Minimum de commande</dt>
-            <dd class="text-right">{{ prixFr(minimum) }} HT</dd>
-          </div>
-        </dl>
-        <p v-else class="text-sm text-muted-foreground">
-          Votre compte n'est pas encore relié à une fiche client — contactez GOA.
-        </p>
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader>
-        <CardTitle class="text-lg">Nos kombuchas</CardTitle>
-        <CardDescription>Prix HT, selon vos conditions tarifaires.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div v-if="catalogue.isPending.value" class="grid gap-3 sm:grid-cols-2">
-          <Skeleton v-for="i in 4" :key="i" class="h-32 w-full" />
-        </div>
-
-        <p v-else-if="catalogue.isError.value" class="text-sm text-destructive">
-          Impossible de charger le catalogue : {{ (catalogue.error.value as Error)?.message }}
-        </p>
-
-        <p v-else-if="!catalogue.data.value?.produits.length" class="text-sm text-muted-foreground">
-          Le catalogue n'est pas encore disponible — revenez bientôt.
-        </p>
-
-        <div v-else class="grid gap-3 sm:grid-cols-2">
-          <ProduitCard
-            v-for="p in catalogue.data.value.produits"
-            :key="p.idStockBouteille"
-            :produit="p"
-            :quantite="quantites[p.idStockBouteille] ?? 0"
-            @changer="(delta) => changer(p.idStockBouteille, delta)"
-          />
-        </div>
-      </CardContent>
-    </Card>
-
-    <!-- Barre panier -->
-    <div v-if="nbCartons > 0 || modification" class="fixed inset-x-0 bottom-0 z-20 px-4 pb-4">
+  <div class="grid items-start gap-4 pb-28 lg:grid-cols-[minmax(0,1fr)_20rem] lg:pb-4">
+    <!-- Colonne principale -->
+    <div class="grid gap-4">
+      <!-- Bandeau mode modification -->
       <div
-        class="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 rounded-xl border bg-background p-3 shadow-lg"
+        v-if="modification"
+        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
       >
-        <div class="text-sm">
-          <p v-if="modification" class="text-xs font-medium text-primary">
+        <p class="text-sm">
+          <span class="font-semibold text-primary">
             Modification de la commande n° {{ modification.numero ?? modification.idCommande }}
+          </span>
+          <span class="text-muted-foreground">
+            — ajustez les quantités ci-dessous puis validez. La nouvelle version annule et
+            remplace la précédente.
+          </span>
+        </p>
+        <Button variant="outline" size="sm" @click="annulerModification">Annuler</Button>
+      </div>
+
+      <Card v-if="!modification">
+        <CardHeader>
+          <CardTitle class="text-lg">Mon compte</CardTitle>
+          <CardDescription>Informations lues depuis Easybeer</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div v-if="isPending" class="grid gap-2">
+            <Skeleton class="h-5 w-2/3" />
+            <Skeleton class="h-4 w-1/2" />
+          </div>
+          <p v-else-if="isError" class="text-sm text-destructive">
+            Impossible de charger votre compte : {{ (error as Error)?.message }}
           </p>
-          <p class="font-semibold">{{ nbCartons }} carton{{ nbCartons > 1 ? 's' : '' }} — {{ prixFr(totalHT) }} HT</p>
-          <p v-if="sousMinimum" class="text-xs text-destructive">
-            Minimum de commande : {{ prixFr(minimum!) }} HT
+          <dl v-else-if="data?.client" class="grid gap-2 text-sm sm:grid-cols-3 sm:gap-4">
+            <div>
+              <dt class="text-muted-foreground">Commerce</dt>
+              <dd class="font-medium">{{ data.client.nom ?? data.client.raisonSociale }}</dd>
+            </div>
+            <div>
+              <dt class="text-muted-foreground">N° client</dt>
+              <dd>{{ data.client.numero }}</dd>
+            </div>
+            <div v-if="minimum != null">
+              <dt class="text-muted-foreground">Minimum de commande</dt>
+              <dd>{{ prixFr(minimum) }} HT</dd>
+            </div>
+          </dl>
+          <p v-else class="text-sm text-muted-foreground">
+            Votre compte n'est pas encore relié à une fiche client — contactez GOA.
           </p>
-          <button
-            v-if="modification"
-            class="text-xs text-muted-foreground underline underline-offset-2"
-            @click="vider(); commentaire = ''"
-          >
-            Annuler la modification
-          </button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-lg">Nos kombuchas</CardTitle>
+          <CardDescription>Prix HT, selon vos conditions tarifaires.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div v-if="catalogue.isPending.value" class="grid gap-3 sm:grid-cols-2">
+            <Skeleton v-for="i in 4" :key="i" class="h-64 w-full" />
+          </div>
+
+          <p v-else-if="catalogue.isError.value" class="text-sm text-destructive">
+            Impossible de charger le catalogue : {{ (catalogue.error.value as Error)?.message }}
+          </p>
+
+          <p v-else-if="!catalogue.data.value?.produits.length" class="text-sm text-muted-foreground">
+            Le catalogue n'est pas encore disponible — revenez bientôt.
+          </p>
+
+          <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <ProduitCard
+              v-for="p in catalogue.data.value.produits"
+              :key="p.idStockBouteille"
+              :produit="p"
+              :quantite="quantites[p.idStockBouteille] ?? 0"
+              @changer="(delta) => changer(p.idStockBouteille, delta)"
+            />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    <!-- Colonne récap (desktop) -->
+    <aside class="sticky top-20 hidden lg:block">
+      <Card>
+        <CardHeader>
+          <CardTitle class="text-lg">
+            {{ modification ? `Modification n° ${modification.numero ?? modification.idCommande}` : 'Votre commande' }}
+          </CardTitle>
+          <CardDescription v-if="modification">
+            La nouvelle version annule et remplace la précédente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum">
+            <Button
+              class="mt-2 w-full"
+              size="lg"
+              :disabled="sousMinimum || nbCartons === 0"
+              @click="ouvrirRecap"
+            >
+              {{ modification ? 'Mettre à jour' : 'Commander' }}
+            </Button>
+            <Button
+              v-if="modification"
+              variant="ghost"
+              class="w-full text-muted-foreground"
+              @click="annulerModification"
+            >
+              Annuler la modification
+            </Button>
+          </PanierRecap>
+        </CardContent>
+      </Card>
+    </aside>
+
+    <!-- Barre panier (mobile) : résumé + volet détail dépliable -->
+    <div v-if="panierVisible" class="fixed inset-x-0 bottom-0 z-20 px-4 pb-4 lg:hidden">
+      <div class="mx-auto w-full max-w-5xl rounded-xl border bg-background shadow-lg">
+        <div v-if="barreDepliee" class="border-b p-4">
+          <p v-if="modification" class="mb-2 text-xs font-medium text-primary">
+            Modification de la commande n° {{ modification.numero ?? modification.idCommande }} —
+            la nouvelle version annule et remplace la précédente.
+          </p>
+          <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum">
+            <button
+              v-if="modification"
+              class="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
+              @click="annulerModification"
+            >
+              Annuler la modification
+            </button>
+          </PanierRecap>
         </div>
-        <Button size="lg" :disabled="sousMinimum || nbCartons === 0" @click="ouvrirRecap">
-          {{ modification ? 'Mettre à jour' : 'Commander' }}
-        </Button>
+        <div class="flex items-center justify-between gap-3 p-3">
+          <button
+            class="min-w-0 flex-1 text-left"
+            :aria-expanded="barreDepliee"
+            aria-label="Voir le détail du panier"
+            @click="barreDepliee = !barreDepliee"
+          >
+            <p v-if="modification" class="text-xs font-medium text-primary">
+              Modification n° {{ modification.numero ?? modification.idCommande }}
+            </p>
+            <p class="text-sm font-semibold">
+              {{ nbCartons }} carton{{ nbCartons > 1 ? 's' : '' }} — {{ prixFr(totalHT) }} HT
+              <span class="ml-1 text-muted-foreground">{{ barreDepliee ? '▾' : '▴' }}</span>
+            </p>
+            <p v-if="sousMinimum" class="text-xs text-destructive">
+              Minimum : {{ prixFr(minimum!) }} HT
+            </p>
+          </button>
+          <Button size="lg" :disabled="sousMinimum || nbCartons === 0" @click="ouvrirRecap">
+            {{ modification ? 'Mettre à jour' : 'Commander' }}
+          </Button>
+        </div>
       </div>
     </div>
 
-    <!-- Récap + confirmation -->
+    <!-- Confirmation -->
     <Dialog v-model:open="dialogOuvert">
       <DialogContent class="sm:max-w-md">
         <template v-if="!confirmation">
@@ -201,20 +292,7 @@ function ouvrirRecap() {
               {{ modification ? 'Cette version annule et remplace la précédente.' : "Vérifiez les quantités avant l'envoi." }}
             </DialogDescription>
           </DialogHeader>
-          <ul class="grid gap-2 text-sm">
-            <li
-              v-for="l in lignesDetail"
-              :key="l.idStockBouteille"
-              class="flex items-baseline justify-between gap-3"
-            >
-              <span>{{ l.produit.libelle }} × {{ l.quantite }}</span>
-              <span class="font-medium tabular-nums">{{ prixFr(l.sousTotal) }}</span>
-            </li>
-            <li class="flex items-baseline justify-between gap-3 border-t pt-2 font-semibold">
-              <span>Total HT</span>
-              <span class="tabular-nums">{{ prixFr(totalHT) }}</span>
-            </li>
-          </ul>
+          <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum" />
           <div class="grid gap-1.5">
             <Label for="commentaire">Commentaire (facultatif)</Label>
             <Textarea
