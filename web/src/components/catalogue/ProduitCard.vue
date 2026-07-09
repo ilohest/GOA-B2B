@@ -63,12 +63,13 @@ const imageEnErreur = ref(false)
       </span>
     </div>
 
-    <div class="flex flex-1 flex-col justify-between gap-3 p-4">
+    <div class="flex flex-1 flex-col gap-3 p-4">
       <h3 class="leading-snug font-medium" :class="produit.rupture ? 'text-muted-foreground' : ''">
         {{ produit.libelle }}
       </h3>
 
-      <div class="flex items-end justify-between gap-2">
+      <!-- Prix + ajout au panier, en bas de carte -->
+      <div class="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <p v-if="produit.prixHT != null" class="flex items-baseline gap-1">
           <span
             class="text-lg font-semibold tracking-tight"
@@ -82,6 +83,7 @@ const imageEnErreur = ref(false)
 
         <QuantiteStepper
           v-if="!produit.rupture && produit.prixHT != null"
+          class="shrink-0"
           :quantite="quantite"
           :pas="produit.pas"
           :libelle="produit.libelle"

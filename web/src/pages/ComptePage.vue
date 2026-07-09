@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useMe } from '@/composables/useMe'
-import { prixFr } from '@/lib/format'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -13,11 +12,6 @@ const lignes = computed(() => {
   return [
     { label: 'Commerce', valeur: client.nom ?? client.raisonSociale },
     { label: 'N° client', valeur: client.numero },
-    { label: 'Catégorie', valeur: client.type?.libelle },
-    {
-      label: 'Minimum de commande',
-      valeur: client.minimumCommande != null ? `${prixFr(client.minimumCommande)} HT` : null,
-    },
     { label: 'Email du compte', valeur: data.value?.user.email },
   ]
 })
