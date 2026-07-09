@@ -383,10 +383,17 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
     réelle complète** (edition), **purger récursivement tous les `id*`** (sauf `idClientType`) et les
     sous-entités (`listeAdresseLivraison`, `listeRemises`, `tournee`, `numero`…), changer nom/email →
     **200 `{"id":<idClient>}`** (encore un format de réponse différent : ni `map.id`, ni objet complet).
-  - **Codes type de livraison** — validés : `TRANSPORTEUR` → « Livraison par transporteur »,
-    `ENLEVEMENT` → « Enlèvement par le client ». Éliminés (200 mais rien stocké) : `NOS_SOINS`,
-    `LIVREUR`, `DIRECT`, `SERVICE`, `LIVRAISON_TRANSPORTEUR`. Restent à trouver : « livraison par
-    nos soins » (le mode des tournées GOA !), « avec service », « point de retrait ».
+  - **Codes type de livraison** — ✅ validés (écriture + relecture) : `TRANSPORTEUR` → « Livraison
+    par transporteur », `ENLEVEMENT` → « Enlèvement par le client », `POINT_RETRAIT` → « Point de
+    retrait / Point relais ». ❌ Éliminés (200 mais rien stocké — échec silencieux) : `NOS_SOINS`,
+    `PAR_NOS_SOINS`, `LIVRAISON_NOS_SOINS`?, `LIVREUR`, `DIRECT`, `LIVRAISON`, `LIVRAISON_DIRECTE`,
+    `SERVICE`, `AVEC_SERVICE`, `LIVRAISON_TRANSPORTEUR`. **Restent introuvables : « livraison par
+    nos soins » (mode des tournées GOA !) et « livraison avec service »** → demander à GOA de régler
+    UN client dans l'UI Easybeer sur « livraison par nos soins », puis relire sa fiche pour capter le
+    code exact (plus fiable que de continuer à deviner).
+  - **Suppression de client** : ✅ `GET /parametres/client/supprimer/{id}` → 200 `{}`, relecture
+    ensuite en 400 (client bien disparu). Nettoyage du banc d'essai TERMINÉ (client fictif 824612 et
+    tournée « ZZZ TEST » supprimés, tournées réelles AGEN/LIBOURNE/LIMOGES intactes, ids 5050-5052).
   - **Type de livraison préféré** : `type-livraison/attribuer` accepte `typeLivraisonFavFormulaire:
     ["TRANSPORTEUR"]` → ✅ `typeLivraisonFav` = « Livraison par transporteur ». ⚠️ Le candidat
     `LIVRAISON_TRANSPORTEUR` répond 200 mais ne stocke RIEN dans `typeLivraisonFav` (échec silencieux) —

@@ -252,6 +252,7 @@ export async function attribuerTournee(idClientTournee: number, idsClients: numb
 export const CODES_TYPE_LIVRAISON: Record<string, string> = {
   TRANSPORTEUR: 'Livraison par transporteur',
   ENLEVEMENT: 'Enlèvement par le client',
+  POINT_RETRAIT: 'Point de retrait / Point relais',
 }
 
 /** POST /parametres/client/type-livraison/attribuer — bulk, échec silencieux possible. */
