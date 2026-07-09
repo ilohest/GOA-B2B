@@ -234,28 +234,62 @@ export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResu
 
 // --- Lectures du cache (avec remplissage au premier accès) ---
 
+/**
+ * Rejoue un remplissage de cache mais NE PROPAGE PAS un ban : si Easybeer est
+ * indisponible et qu'aucune donnée n'est encore en cache, renvoie un résultat
+ * vide marqué `indisponible` (l'admin voit un message + bouton Actualiser au
+ * lieu d'une erreur 503). Un `refresh` explicite qui échoue, lui, remonte
+ * l'erreur (l'admin a demandé une action).
+ */
+async function lireCacheOuRemplir(
+  db: Firestore,
+  chemin: string,
+  cle: 'clients' | 'commandes',
+  remplir: (db: Firestore) => Promise<unknown[]>,
+  forcerRefresh: boolean,
+): Promise<{ items: unknown[]; syncedAt: number | null; indisponible?: boolean }> {
+  const snap = forcerRefresh ? null : await db.doc(chemin).get()
+  if (snap?.exists) {
+    const d = snap.data() as Record<string, unknown>
+    return { items: (d[cle] as unknown[]) ?? [], syncedAt: (d.syncedAt as number) ?? null }
+  }
+  try {
+    const items = await remplir(db)
+    return { items, syncedAt: Date.now() }
+  } catch (e) {
+    if (e instanceof EasybeerBanError && !forcerRefresh) {
+      // Repli : dernière version du cache si elle existe, sinon vide + drapeau.
+      const secours = await db.doc(chemin).get()
+      if (secours.exists) {
+        const d = secours.data() as Record<string, unknown>
+        return { items: (d[cle] as unknown[]) ?? [], syncedAt: (d.syncedAt as number) ?? null }
+      }
+      return { items: [], syncedAt: null, indisponible: true }
+    }
+    throw e
+  }
+}
+
 export async function lireListeClients(
   db: Firestore,
   forcerRefresh = false,
-): Promise<{ clients: ClientResume[]; syncedAt: number }> {
-  if (!forcerRefresh) {
-    const snap = await db.doc('cache/clientsListe').get()
-    if (snap.exists) return snap.data() as { clients: ClientResume[]; syncedAt: number }
-  }
-  const clients = await syncListeClients(db)
-  return { clients, syncedAt: Date.now() }
+): Promise<{ clients: ClientResume[]; syncedAt: number | null; indisponible?: boolean }> {
+  const res = await lireCacheOuRemplir(db, 'cache/clientsListe', 'clients', syncListeClients, forcerRefresh)
+  return { clients: res.items as ClientResume[], syncedAt: res.syncedAt, indisponible: res.indisponible }
 }
 
 export async function lireCommandesRecentes(
   db: Firestore,
   forcerRefresh = false,
-): Promise<{ commandes: CommandeResumeCache[]; syncedAt: number }> {
-  if (!forcerRefresh) {
-    const snap = await db.doc('cache/commandesRecentes').get()
-    if (snap.exists) return snap.data() as { commandes: CommandeResumeCache[]; syncedAt: number }
-  }
-  const commandes = await syncCommandesRecentes(db)
-  return { commandes, syncedAt: Date.now() }
+): Promise<{ commandes: CommandeResumeCache[]; syncedAt: number | null; indisponible?: boolean }> {
+  const res = await lireCacheOuRemplir(
+    db,
+    'cache/commandesRecentes',
+    'commandes',
+    syncCommandesRecentes,
+    forcerRefresh,
+  )
+  return { commandes: res.items as CommandeResumeCache[], syncedAt: res.syncedAt, indisponible: res.indisponible }
 }
 
 // --- Lectures du cache (catalogue / référentiels / clients) ---

@@ -6,12 +6,14 @@ import { api } from '@/lib/api'
 import type { AdminCommandesResponse } from '@/lib/types'
 import { dateFr, dateHeureFr, prixFr } from '@/lib/format'
 import EtatBadge from '@/components/EtatBadge.vue'
+import CommandeDetailDialog from '@/components/admin/CommandeDetailDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const queryClient = useQueryClient()
+const commandeOuverte = ref<number | null>(null)
 
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'commandes'],
@@ -61,6 +63,14 @@ const commandesAffichees = computed(() =>
 
       <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
+      <p
+        v-else-if="data?.indisponible"
+        class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
+      >
+        Les commandes ne sont pas encore en cache et l'API Easybeer est momentanément saturée.
+        Réessayez « Actualiser depuis Easybeer » dans quelques minutes.
+      </p>
+
       <template v-else>
         <div class="overflow-x-auto rounded-lg border">
           <Table>
@@ -76,7 +86,12 @@ const commandesAffichees = computed(() =>
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="cmd in commandesAffichees" :key="cmd.idCommande">
+              <TableRow
+                v-for="cmd in commandesAffichees"
+                :key="cmd.idCommande"
+                class="cursor-pointer"
+                @click="commandeOuverte = cmd.idCommande"
+              >
                 <TableCell class="font-medium">{{ cmd.numero ?? cmd.idCommande }}</TableCell>
                 <TableCell>
                   <RouterLink
@@ -96,13 +111,7 @@ const commandesAffichees = computed(() =>
                 <TableCell class="text-right font-medium tabular-nums">
                   {{ cmd.totalTTC != null ? prixFr(cmd.totalTTC) : '—' }}
                 </TableCell>
-                <TableCell class="text-right">
-                  <Button variant="ghost" size="sm" as-child>
-                    <a :href="data?.easybeerAppUrl" target="_blank" rel="noopener">
-                      Ouvrir Easybeer ↗
-                    </a>
-                  </Button>
-                </TableCell>
+                <TableCell class="text-right text-muted-foreground">Détail →</TableCell>
               </TableRow>
               <TableRow v-if="!data?.commandes.length">
                 <TableCell colspan="7" class="h-16 text-center text-muted-foreground">
@@ -129,5 +138,10 @@ const commandesAffichees = computed(() =>
         </div>
       </template>
     </CardContent>
+
+    <CommandeDetailDialog
+      v-model:id-commande="commandeOuverte"
+      :easybeer-app-url="data?.easybeerAppUrl"
+    />
   </Card>
 </template>

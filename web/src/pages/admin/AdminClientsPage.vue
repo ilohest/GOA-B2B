@@ -352,6 +352,14 @@ function ouvrirFiche(client: ClientResume) {
 
         <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
+        <p
+          v-else-if="data?.indisponible"
+          class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
+        >
+          Les clients ne sont pas encore en cache et l'API Easybeer est momentanément saturée.
+          Réessayez « Actualiser depuis Easybeer » dans quelques minutes.
+        </p>
+
         <template v-else>
           <div class="overflow-x-auto rounded-lg border">
             <Table>

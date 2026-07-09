@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { z } from 'zod'
 import { toast } from 'vue-sonner'
@@ -27,6 +27,13 @@ const resetting = ref(false)
 const redirectTo = computed(() => {
   const r = route.query.redirect
   return typeof r === 'string' && r.startsWith('/') ? r : '/'
+})
+
+// Message discret quand la session a expiré (redirection auto depuis l'app).
+onMounted(() => {
+  if (route.query.expired != null) {
+    toast.info('Votre session a expiré — reconnectez-vous.')
+  }
 })
 
 function messageFirebase(code: string): string {

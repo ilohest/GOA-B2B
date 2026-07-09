@@ -48,7 +48,8 @@ export interface ClientResume {
 export interface AdminClientsResponse {
   clients: ClientResume[]
   comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }>
-  syncedAt: number
+  syncedAt: number | null
+  indisponible?: boolean
 }
 
 export interface AdminDashboardResponse {
@@ -137,7 +138,8 @@ export interface AdminCommandeResume {
 
 export interface AdminCommandesResponse {
   commandes: AdminCommandeResume[]
-  syncedAt: number
+  syncedAt: number | null
+  indisponible?: boolean
   easybeerAppUrl: string
 }
 
@@ -193,6 +195,7 @@ export interface CommandeDetail {
   idCommande: number
   numero: number | null
   reference: string | null
+  etat?: EtatCommande
   totalHT: number | null
   totalTTC: number | null
   remiseTotale: number | null

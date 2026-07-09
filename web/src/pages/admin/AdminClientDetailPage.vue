@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import { api } from '@/lib/api'
 import type { AdminClientDetail } from '@/lib/types'
 import { dateFr, prixFr } from '@/lib/format'
 import EtatBadge from '@/components/EtatBadge.vue'
+import CommandeDetailDialog from '@/components/admin/CommandeDetailDialog.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +14,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 const route = useRoute()
 const idClient = computed(() => Number(route.params.id))
+
+const commandeOuverte = ref<number | null>(null)
 
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'client', idClient],
@@ -142,25 +145,31 @@ const conditions = computed(() => [
         <CardContent>
           <p v-if="!data?.commandes.length" class="text-sm text-muted-foreground">Aucune commande.</p>
           <ul v-else class="divide-y">
-            <li
-              v-for="cmd in data.commandes"
-              :key="cmd.idCommande"
-              class="flex flex-wrap items-center justify-between gap-3 py-2.5"
-            >
-              <div class="flex items-center gap-2">
-                <p class="text-sm font-medium">n° {{ cmd.numero ?? cmd.idCommande }}</p>
-                <EtatBadge :etat="cmd.etat" />
-              </div>
-              <div class="flex items-center gap-4 text-sm">
-                <span class="text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</span>
-                <span class="font-medium tabular-nums">
-                  {{ cmd.totalTTC != null ? `${prixFr(cmd.totalTTC)} TTC` : '—' }}
-                </span>
-              </div>
+            <li v-for="cmd in data.commandes" :key="cmd.idCommande">
+              <button
+                class="flex w-full flex-wrap items-center justify-between gap-3 py-2.5 text-left transition-colors hover:bg-muted/40"
+                @click="commandeOuverte = cmd.idCommande"
+              >
+                <div class="flex items-center gap-2">
+                  <p class="text-sm font-medium">n° {{ cmd.numero ?? cmd.idCommande }}</p>
+                  <EtatBadge :etat="cmd.etat" />
+                </div>
+                <div class="flex items-center gap-4 text-sm">
+                  <span class="text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</span>
+                  <span class="font-medium tabular-nums">
+                    {{ cmd.totalTTC != null ? `${prixFr(cmd.totalTTC)} TTC` : '—' }}
+                  </span>
+                </div>
+              </button>
             </li>
           </ul>
         </CardContent>
       </Card>
     </template>
+
+    <CommandeDetailDialog
+      v-model:id-commande="commandeOuverte"
+      :easybeer-app-url="data?.easybeerAppUrl"
+    />
   </div>
 </template>

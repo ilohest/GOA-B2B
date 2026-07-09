@@ -9,3 +9,21 @@ export const dateFr = (ts: number | null | undefined): string =>
 
 export const dateHeureFr = (ts: number | null | undefined): string =>
   ts ? new Date(ts).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—'
+
+/** Décomposition des totaux d'une commande : Sous-total HT, Remise, TVA, consigne, Total TTC. */
+export function decomposerTotaux(detail: {
+  totalHT: number | null
+  totalTTC: number | null
+  remiseTotale: number | null
+  totalConsigne: number | null
+}): { label: string; valeur: string; fort?: boolean }[] {
+  const lignes: { label: string; valeur: string; fort?: boolean }[] = []
+  if (detail.totalHT != null) lignes.push({ label: 'Sous-total HT', valeur: prixFr(detail.totalHT) })
+  if (detail.remiseTotale) lignes.push({ label: 'Remise', valeur: `− ${prixFr(detail.remiseTotale)}` })
+  if (detail.totalHT != null && detail.totalTTC != null) {
+    lignes.push({ label: 'TVA (5,5 %)', valeur: prixFr(Math.max(0, detail.totalTTC - detail.totalHT)) })
+  }
+  if (detail.totalConsigne) lignes.push({ label: 'dont consigne', valeur: prixFr(detail.totalConsigne) })
+  if (detail.totalTTC != null) lignes.push({ label: 'Total TTC', valeur: prixFr(detail.totalTTC), fort: true })
+  return lignes
+}

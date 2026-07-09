@@ -40,7 +40,7 @@ async function onLogout() {
         <RouterLink :to="estAdmin ? '/admin' : '/'" class="flex items-center gap-2">
           <BrandLogo variante="rond" />
           <span class="hidden text-sm font-semibold tracking-widest text-primary uppercase sm:inline">
-            GOA Kombucha
+            GOA B2B
           </span>
         </RouterLink>
         <div class="flex items-center gap-2">
