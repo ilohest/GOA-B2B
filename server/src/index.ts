@@ -4,7 +4,7 @@ import { cors } from 'hono/cors'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.js'
 import { requireAuth, requireAdmin } from './auth.js'
-import { getDb, getAdminAuth } from './firebase.js'
+import { getDb, getAdminAuth, getBucket } from './firebase.js'
 import {
   listeClients,
   getClient,
@@ -640,6 +640,85 @@ app.put('/api/admin/catalogue/:idStockBouteille', requireAuth, requireAdmin, asy
   if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
   const override = await majOverride(db, id, parse.data)
   return c.json({ ok: true, override })
+})
+
+// ---- Photos produits (Firebase Storage, servies par le serveur) ----
+
+const TYPES_IMAGE = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+])
+const TAILLE_MAX_PHOTO = 5 * 1024 * 1024 // 5 Mo
+
+/**
+ * Upload de la photo d'un produit (multipart, champ `photo`). Stockée dans
+ * Storage sous produits/{idStockBouteille} ; l'override pointe vers notre
+ * endpoint de service avec un cache-buster.
+ */
+app.post('/api/admin/catalogue/:idStockBouteille/photo', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  const bucket = getBucket()
+  if (!db || !bucket) return c.json({ error: 'Firebase non configuré' }, 501)
+  const id = Number(c.req.param('idStockBouteille'))
+  if (!Number.isFinite(id)) return c.json({ error: 'idStockBouteille invalide' }, 400)
+
+  const body = await c.req.parseBody()
+  const photo = body.photo
+  if (!(photo instanceof File)) return c.json({ error: 'Fichier manquant (champ « photo »)' }, 400)
+  if (!TYPES_IMAGE.has(photo.type)) {
+    return c.json({ error: 'Format non supporté — utilisez JPEG, PNG ou WebP' }, 400)
+  }
+  if (photo.size > TAILLE_MAX_PHOTO) {
+    return c.json({ error: 'Image trop lourde (5 Mo maximum)' }, 400)
+  }
+
+  await bucket.file(`produits/${id}`).save(Buffer.from(await photo.arrayBuffer()), {
+    contentType: photo.type,
+    resumable: false,
+    metadata: { cacheControl: 'public, max-age=31536000, immutable' },
+  })
+
+  const override = await majOverride(db, id, { photoUrl: `/api/photos/produits/${id}?v=${Date.now()}` })
+  return c.json({ ok: true, override })
+})
+
+/** Retire la photo d'un produit (fichier + override). */
+app.delete('/api/admin/catalogue/:idStockBouteille/photo', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  const bucket = getBucket()
+  if (!db || !bucket) return c.json({ error: 'Firebase non configuré' }, 501)
+  const id = Number(c.req.param('idStockBouteille'))
+  if (!Number.isFinite(id)) return c.json({ error: 'idStockBouteille invalide' }, 400)
+
+  await bucket.file(`produits/${id}`).delete({ ignoreNotFound: true })
+  const override = await majOverride(db, id, { photoUrl: '' })
+  return c.json({ ok: true, override })
+})
+
+/**
+ * Service PUBLIC des photos produits (les <img> ne portent pas de token ;
+ * ce sont des visuels non sensibles). Cache long — l'URL change à chaque
+ * upload (cache-buster `v`).
+ */
+app.get('/api/photos/produits/:idStockBouteille', async (c) => {
+  const bucket = getBucket()
+  if (!bucket) return c.json({ error: 'Stockage non configuré' }, 501)
+  const id = Number(c.req.param('idStockBouteille'))
+  if (!Number.isFinite(id)) return c.json({ error: 'id invalide' }, 400)
+
+  const fichier = bucket.file(`produits/${id}`)
+  const [existe] = await fichier.exists()
+  if (!existe) return c.json({ error: 'Photo introuvable' }, 404)
+
+  const [meta] = await fichier.getMetadata()
+  const [contenu] = await fichier.download()
+  return new Response(new Uint8Array(contenu), {
+    headers: {
+      'Content-Type': (meta.contentType as string) ?? 'image/jpeg',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  })
 })
 
 // ---- Admin : commandes (tous clients) ----

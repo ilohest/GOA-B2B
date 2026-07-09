@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Tout accès Storage passe par le serveur Hono (Admin SDK, qui ignore ces
+// règles). Aucun accès direct depuis le navigateur.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

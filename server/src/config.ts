@@ -24,6 +24,7 @@ export const config = {
     emulators: process.env.FIREBASE_EMULATORS === 'true',
     emulatorAuthHost: process.env.FIREBASE_AUTH_EMULATOR_HOST ?? 'localhost:9099',
     emulatorFirestoreHost: process.env.FIRESTORE_EMULATOR_HOST ?? 'localhost:8080',
+    emulatorStorageHost: process.env.FIREBASE_STORAGE_EMULATOR_HOST ?? 'localhost:9199',
   },
 
   // Synchro périodique Easybeer → cache (0 = désactivée ; en prod, Cloud Scheduler).

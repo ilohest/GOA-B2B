@@ -14,7 +14,11 @@ import { readFileSync } from 'node:fs'
 import { initializeApp, cert, type App } from 'firebase-admin/app'
 import { getAuth, type Auth, type DecodedIdToken } from 'firebase-admin/auth'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { getStorage } from 'firebase-admin/storage'
 import { config } from './config.js'
+
+/** Type dérivé pour éviter le conflit CJS/ESM de @google-cloud/storage. */
+type Bucket = ReturnType<ReturnType<typeof getStorage>['bucket']>
 
 let app: App | null = null
 let initTried = false
@@ -27,8 +31,9 @@ function ensureApp(): App | null {
     // Le SDK Admin détecte les émulateurs via ces variables d'environnement.
     process.env.FIREBASE_AUTH_EMULATOR_HOST = config.firebase.emulatorAuthHost
     process.env.FIRESTORE_EMULATOR_HOST = config.firebase.emulatorFirestoreHost
+    process.env.FIREBASE_STORAGE_EMULATOR_HOST = config.firebase.emulatorStorageHost
     const projectId = config.firebase.projectId ?? 'demo-goa-kombucha'
-    app = initializeApp({ projectId })
+    app = initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` })
     console.log(
       `[firebase] Admin en mode ÉMULATEURS (projet ${projectId}, auth ${config.firebase.emulatorAuthHost}, firestore ${config.firebase.emulatorFirestoreHost}).`,
     )
@@ -42,7 +47,11 @@ function ensureApp(): App | null {
   }
   try {
     const serviceAccount = JSON.parse(readFileSync(path, 'utf8'))
-    app = initializeApp({ credential: cert(serviceAccount), projectId: config.firebase.projectId })
+    app = initializeApp({
+      credential: cert(serviceAccount),
+      projectId: config.firebase.projectId,
+      storageBucket: config.firebase.projectId ? `${config.firebase.projectId}.appspot.com` : undefined,
+    })
     console.log('[firebase] Admin initialisé (clé de service).')
   } catch (e) {
     console.error('[firebase] Échec init Admin :', (e as Error).message)
@@ -54,6 +63,11 @@ function ensureApp(): App | null {
 export function getDb(): Firestore | null {
   const a = ensureApp()
   return a ? getFirestore(a) : null
+}
+
+export function getBucket(): Bucket | null {
+  const a = ensureApp()
+  return a ? getStorage(a).bucket() : null
 }
 
 export function getAdminAuth(): Auth | null {
