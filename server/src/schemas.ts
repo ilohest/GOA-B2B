@@ -30,8 +30,13 @@ export const BulkParamsSchema = z
   .object({
     idsClients: z.array(z.number().int().positive()).min(1).max(250),
     idClientTournee: z.number().int().positive().optional(),
+    typeLivraison: z.string().max(40).optional(),
+    minimumCommande: z.number().min(0).max(100000).optional(),
   })
-  .refine((v) => v.idClientTournee != null, 'Aucun paramètre à appliquer')
+  .refine(
+    (v) => v.idClientTournee != null || v.typeLivraison != null || v.minimumCommande != null,
+    'Aucun paramètre à appliquer',
+  )
 
 export const OverridePatchSchema = z
   .object({

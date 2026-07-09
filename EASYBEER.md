@@ -377,6 +377,23 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
   délai de paiement. Modèle produit = produit fini (saveur) × contenant × colisage (idLot) = idStockBouteille.
   Désynchro colisage 0,35L : Jotform 12×35cL vs Easybeer Carton de 18 → à confirmer. Jotform = flux prod à reproduire.
 
+- **2026-07-09 (banc d'essai clients fictifs — écritures validées)** :
+  - **Création de client** : `POST /parametres/client/enregistrer` échoue en 500 opaque avec un
+    payload minimal (nom+type+email+adresse ne suffisent PAS). ✅ Recette : partir d'une **fiche
+    réelle complète** (edition), **purger récursivement tous les `id*`** (sauf `idClientType`) et les
+    sous-entités (`listeAdresseLivraison`, `listeRemises`, `tournee`, `numero`…), changer nom/email →
+    **200 `{"id":<idClient>}`** (encore un format de réponse différent : ni `map.id`, ni objet complet).
+  - **Type de livraison préféré** : `type-livraison/attribuer` accepte `typeLivraisonFavFormulaire:
+    ["TRANSPORTEUR"]` → ✅ `typeLivraisonFav` = « Livraison par transporteur ». ⚠️ Le candidat
+    `LIVRAISON_TRANSPORTEUR` répond 200 mais ne stocke RIEN dans `typeLivraisonFav` (échec silencieux) —
+    toujours RELIRE après écriture. Codes des 4 autres modes encore à découvrir (probablement `ENLEVEMENT`,
+    `NOS_SOINS`?, `SERVICE`?, `POINT_RETRAIT`? — à tester sur le client fictif).
+  - **Minimum de commande** : ✅ relire la fiche complète → modifier `minimumCommande` +
+    `minimumCommandeAutorise` → re-`POST client/enregistrer` (upsert, `{"id"}`) → relecture OK (42),
+    fiche intacte (nom, type, email).
+  - ⚠️ Reste à nettoyer suite à un ban de fin de script : client fictif **824612** + tournée
+    « ZZZ TEST TOURNEE » (création tournée répond probablement `{"id"}` aussi, extraction ratée).
+
 - **2026-07-08 (dev V1, étape 8)** : ⚠️ **`GET /commande/edition/{id}` renvoie 400
   « Cette commande n'est pas modifiable ! » sur les commandes LIVREE/archivées** — c'est un endpoint
   d'ÉDITION, pas de lecture. Pour lire n'importe quelle commande (détail, historique) →

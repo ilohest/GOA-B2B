@@ -244,6 +244,45 @@ export async function attribuerTournee(idClientTournee: number, idsClients: numb
   }
 }
 
+/**
+ * Codes du « type de livraison préféré » VALIDÉS par écriture+relecture sur
+ * client fictif (2026-07-09). ⚠️ Un code inconnu répond 200 mais ne stocke
+ * RIEN (échec silencieux) → toujours relire après écriture.
+ */
+export const CODES_TYPE_LIVRAISON: Record<string, string> = {
+  TRANSPORTEUR: 'Livraison par transporteur',
+}
+
+/** POST /parametres/client/type-livraison/attribuer — bulk, échec silencieux possible. */
+export async function attribuerTypeLivraison(code: string, idsClients: number[]): Promise<void> {
+  const { status, json } = await eb<{ succes?: boolean; message?: string }>(
+    'POST',
+    '/parametres/client/type-livraison/attribuer',
+    { idsClients, typeLivraisonFavFormulaire: [code] },
+  )
+  if (status !== 200 || json?.succes === false) {
+    throw new Error(`Easybeer ${status} sur type-livraison/attribuer — ${json?.message ?? 'échec'}`)
+  }
+}
+
+/**
+ * Écrit le minimum de commande d'UN client : relecture de la fiche complète →
+ * modification → re-POST (upsert, recette validée sur client fictif 2026-07-09).
+ */
+export async function majMinimumClient(idClient: number, minimum: number): Promise<void> {
+  const fiche = await getClient(idClient)
+  if (!fiche) throw new Error(`client ${idClient} introuvable`)
+  const payload = { ...fiche, minimumCommande: minimum, minimumCommandeAutorise: minimum }
+  const { status, json } = await eb<{ succes?: boolean; message?: string; id?: number }>(
+    'POST',
+    '/parametres/client/enregistrer',
+    payload,
+  )
+  if (status !== 200 || json?.succes === false) {
+    throw new Error(`Easybeer ${status} sur client/enregistrer (minimum) — ${json?.message ?? 'échec'}`)
+  }
+}
+
 // --- Types / grilles ---
 
 /** GET /parametres/client/type — types de client (racines = grilles tarifaires). */

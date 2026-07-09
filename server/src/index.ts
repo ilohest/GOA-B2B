@@ -13,6 +13,9 @@ import {
   listeCommandesClient,
   listeTournees,
   attribuerTournee,
+  attribuerTypeLivraison,
+  majMinimumClient,
+  CODES_TYPE_LIVRAISON,
   enregistrerCommande,
   modifierCommande,
   detailCommande,
@@ -611,25 +614,76 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
   })
 })
 
-/** Tournées Easybeer (référentiel pour l'attribution en masse). */
+/** Référentiels pour les paramètres en masse : tournées + modes de livraison validés. */
 app.get('/api/admin/tournees', requireAuth, requireAdmin, async (c) => {
-  return c.json({ tournees: await listeTournees() })
+  return c.json({
+    tournees: await listeTournees(),
+    typesLivraison: Object.entries(CODES_TYPE_LIVRAISON).map(([code, libelle]) => ({ code, libelle })),
+  })
 })
 
 /**
- * Paramètres clients en MASSE. V1 : attribution de tournée (endpoint bulk
- * natif Easybeer, ✅ validé en réel). Mode de livraison et minimum : à venir
- * (code enum / écriture fiche complète à valider — cf. EASYBEER.md).
+ * Paramètres clients en MASSE (écritures Easybeer validées sur client fictif) :
+ * tournée (bulk natif), mode de livraison (bulk natif + relecture de contrôle,
+ * échec silencieux possible), minimum HT (fiche par fiche, 2 appels/client).
  */
 app.post('/api/admin/clients/bulk-params', requireAuth, requireAdmin, async (c) => {
   const parse = parserBody(BulkParamsSchema, await c.req.json().catch(() => null))
   if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
-  const { idsClients, idClientTournee } = parse.data
+  const { idsClients, idClientTournee, typeLivraison, minimumCommande } = parse.data
+
+  if (typeLivraison != null && !(typeLivraison in CODES_TYPE_LIVRAISON)) {
+    return c.json({ error: `Mode de livraison inconnu : ${typeLivraison}` }, 400)
+  }
+  if (minimumCommande != null && idsClients.length > 30) {
+    return c.json({ error: 'Minimum en masse : 30 clients maximum par lot (2 appels Easybeer par client)' }, 400)
+  }
+
+  const erreurs: string[] = []
 
   if (idClientTournee != null) {
     await attribuerTournee(idClientTournee, idsClients)
   }
-  return c.json({ ok: true, clients: idsClients.length })
+
+  if (typeLivraison != null) {
+    await attribuerTypeLivraison(typeLivraison, idsClients)
+    // Relecture de contrôle sur le premier client (échec silencieux documenté).
+    const controle = await getClient(idsClients[0])
+    if (!controle?.typeLivraisonFav) {
+      erreurs.push('Mode de livraison : la relecture de contrôle est vide — vérifier dans Easybeer')
+    }
+  }
+
+  if (minimumCommande != null) {
+    for (const idClient of idsClients) {
+      try {
+        await majMinimumClient(idClient, minimumCommande)
+      } catch (e) {
+        erreurs.push(`minimum client ${idClient} : ${(e as Error).message}`)
+      }
+    }
+  }
+
+  // Rafraîchit le cache des clients à compte concernés (minimum affiché côté boutique).
+  const db = getDb()
+  if (db && (minimumCommande != null || typeLivraison != null)) {
+    for (const idClient of idsClients) {
+      const ref = db.doc(`cacheClients/${idClient}`)
+      if ((await ref.get()).exists) {
+        await ref.set(
+          {
+            client: {
+              ...(minimumCommande != null ? { minimumCommande } : {}),
+              ...(typeLivraison != null ? { typeLivraisonFav: CODES_TYPE_LIVRAISON[typeLivraison] } : {}),
+            },
+          },
+          { merge: true },
+        )
+      }
+    }
+  }
+
+  return c.json({ ok: erreurs.length === 0, clients: idsClients.length, erreurs })
 })
 
 // ---- Admin : gestion du catalogue (visible / nom / photo / rupture) ----

@@ -158,30 +158,50 @@ function ouvrirBulkInvitations() {
   dialogBulkInvitations.value = true
 }
 
-// --- Attribution de tournée en masse ---
+// --- Paramètres en masse (tournée / mode de livraison / minimum) ---
 
-const dialogTournee = ref(false)
+const dialogParams = ref(false)
 const tourneeChoisie = ref<string>('')
+const livraisonChoisie = ref<string>('')
+const minimumSaisi = ref<string>('')
 
-const tournees = useQuery({
+const referentiels = useQuery({
   queryKey: ['admin', 'tournees'],
-  queryFn: () => api.get<{ tournees: Tournee[] }>('/admin/tournees'),
-  enabled: dialogTournee,
+  queryFn: () =>
+    api.get<{ tournees: Tournee[]; typesLivraison: { code: string; libelle: string }[] }>('/admin/tournees'),
+  enabled: dialogParams,
 })
 
-const bulkTournee = useMutation({
+const bulkParams = useMutation({
   mutationFn: () =>
-    api.post('/admin/clients/bulk-params', {
+    api.post<{ ok: boolean; clients: number; erreurs: string[] }>('/admin/clients/bulk-params', {
       idsClients: [...selection],
-      idClientTournee: Number(tourneeChoisie.value),
+      ...(tourneeChoisie.value ? { idClientTournee: Number(tourneeChoisie.value) } : {}),
+      ...(livraisonChoisie.value ? { typeLivraison: livraisonChoisie.value } : {}),
+      ...(minimumSaisi.value.trim() !== '' ? { minimumCommande: Number(minimumSaisi.value) } : {}),
     }),
-  onSuccess: () => {
-    toast.success(`Tournée attribuée à ${selection.size} client(s).`)
+  onSuccess: (res) => {
+    if (res.erreurs.length) {
+      toast.warning(`Appliqué avec ${res.erreurs.length} avertissement(s) : ${res.erreurs[0]}`)
+    } else {
+      toast.success(`Paramètres appliqués à ${res.clients} client(s).`)
+    }
     selection.clear()
-    dialogTournee.value = false
+    dialogParams.value = false
+    tourneeChoisie.value = ''
+    livraisonChoisie.value = ''
+    minimumSaisi.value = ''
   },
   onError: (e) => toast.error((e as Error).message),
 })
+
+const bulkParamsValide = computed(
+  () =>
+    (tourneeChoisie.value || livraisonChoisie.value || minimumSaisi.value.trim() !== '') &&
+    (minimumSaisi.value.trim() === '' || Number(minimumSaisi.value) >= 0) &&
+    // Minimum = 2 appels Easybeer par client : lot limité à 30 (limite serveur).
+    (minimumSaisi.value.trim() === '' || selection.size <= 30),
+)
 
 // --- Table ---
 
@@ -318,8 +338,8 @@ function ouvrirFiche(client: ClientResume) {
           <Button size="sm" :disabled="bulkInvitations.isPending.value" @click="ouvrirBulkInvitations">
             Inviter la sélection
           </Button>
-          <Button size="sm" variant="outline" @click="dialogTournee = true">
-            Attribuer une tournée
+          <Button size="sm" variant="outline" @click="dialogParams = true">
+            Paramètres en masse
           </Button>
           <Button size="sm" variant="ghost" class="text-muted-foreground" @click="selection.clear()">
             Tout désélectionner
@@ -469,37 +489,77 @@ function ouvrirFiche(client: ClientResume) {
       </DialogContent>
     </Dialog>
 
-    <!-- Tournée en masse -->
-    <Dialog v-model:open="dialogTournee">
+    <!-- Paramètres en masse -->
+    <Dialog v-model:open="dialogParams">
       <DialogContent class="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Attribuer une tournée</DialogTitle>
+          <DialogTitle>Paramètres en masse</DialogTitle>
           <DialogDescription>
-            La tournée sera appliquée aux {{ selection.size }} client(s) sélectionné(s)
-            (écriture directe dans Easybeer).
+            Appliqués aux {{ selection.size }} client(s) sélectionné(s), directement dans
+            Easybeer. Ne renseignez que ce que vous voulez modifier.
           </DialogDescription>
         </DialogHeader>
-        <div class="grid gap-1.5">
-          <Label>Tournée</Label>
-          <Select v-model="tourneeChoisie">
-            <SelectTrigger class="w-full">
-              <SelectValue placeholder="Choisir une tournée…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem
-                v-for="t in tournees.data.value?.tournees ?? []"
-                :key="t.idClientTournee"
-                :value="String(t.idClientTournee)"
-              >
-                {{ t.libelle }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+
+        <div class="grid gap-4">
+          <div class="grid gap-1.5">
+            <Label>Tournée</Label>
+            <Select v-model="tourneeChoisie">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Ne pas modifier" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="t in referentiels.data.value?.tournees ?? []"
+                  :key="t.idClientTournee"
+                  :value="String(t.idClientTournee)"
+                >
+                  {{ t.libelle }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div class="grid gap-1.5">
+            <Label>Mode de livraison</Label>
+            <Select v-model="livraisonChoisie">
+              <SelectTrigger class="w-full">
+                <SelectValue placeholder="Ne pas modifier" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="t in referentiels.data.value?.typesLivraison ?? []"
+                  :key="t.code"
+                  :value="t.code"
+                >
+                  {{ t.libelle }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-xs text-muted-foreground">
+              Seuls les modes validés sur le compte Easybeer sont proposés.
+            </p>
+          </div>
+
+          <div class="grid gap-1.5">
+            <Label for="minimum-bulk">Minimum de commande HT (€)</Label>
+            <Input
+              id="minimum-bulk"
+              v-model="minimumSaisi"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Ne pas modifier"
+            />
+            <p v-if="minimumSaisi.trim() !== '' && selection.size > 30" class="text-xs text-destructive">
+              Le minimum s'écrit fiche par fiche : 30 clients maximum par lot.
+            </p>
+          </div>
         </div>
+
         <DialogFooter>
-          <Button variant="secondary" @click="dialogTournee = false">Annuler</Button>
-          <Button :disabled="!tourneeChoisie || bulkTournee.isPending.value" @click="bulkTournee.mutate()">
-            {{ bulkTournee.isPending.value ? 'Attribution…' : 'Attribuer' }}
+          <Button variant="secondary" @click="dialogParams = false">Annuler</Button>
+          <Button :disabled="!bulkParamsValide || bulkParams.isPending.value" @click="bulkParams.mutate()">
+            {{ bulkParams.isPending.value ? 'Application…' : 'Appliquer' }}
           </Button>
         </DialogFooter>
       </DialogContent>
