@@ -13,6 +13,7 @@ import type {
   Tournee,
 } from '@/lib/types'
 import { dateHeureFr } from '@/lib/format'
+import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -319,14 +320,7 @@ function ouvrirFiche(client: ClientResume) {
             class="max-w-xs"
             @input="surRecherche"
           />
-          <Button
-            variant="outline"
-            size="sm"
-            :disabled="actualisation.isPending.value"
-            @click="actualisation.mutate()"
-          >
-            {{ actualisation.isPending.value ? 'Actualisation…' : 'Actualiser depuis Easybeer' }}
-          </Button>
+          <BoutonActualiser :pending="actualisation.isPending.value" @click="actualisation.mutate()" />
         </div>
 
         <!-- Barre d'actions en masse -->

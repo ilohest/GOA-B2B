@@ -45,6 +45,12 @@ export class EasybeerBanError extends Error {
 let banniJusqua = 0
 const MARGE_BAN_MS = 10_000
 
+/** État du disjoncteur (lecture instantanée, aucun appel réseau). */
+export function etatBanEasybeer(): { banni: boolean; secondesRestantes: number } {
+  const restant = banniJusqua - Date.now()
+  return restant > 0 ? { banni: true, secondesRestantes: Math.ceil(restant / 1000) } : { banni: false, secondesRestantes: 0 }
+}
+
 /** Sérialise un appel Easybeer dans la file globale (espacement garanti). */
 function passerParLaFile<T>(fn: () => Promise<T>): Promise<T> {
   const execution = fileAttente.then(async () => {

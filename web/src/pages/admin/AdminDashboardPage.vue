@@ -5,6 +5,7 @@ import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { AdminDashboardResponse, SyncReport } from '@/lib/types'
 import { dateHeureFr, prixFr } from '@/lib/format'
+import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -69,9 +70,13 @@ const stats = computed(() => {
           <template v-else>Aucune synchronisation complète pour l'instant.</template>
         </p>
       </div>
-      <Button variant="secondary" :disabled="synchro.isPending.value" @click="synchro.mutate()">
-        {{ synchro.isPending.value ? 'Synchronisation…' : 'Synchroniser Easybeer' }}
-      </Button>
+      <BoutonActualiser
+        variant="secondary"
+        label="Synchroniser Easybeer"
+        label-pending="Synchronisation…"
+        :pending="synchro.isPending.value"
+        @click="synchro.mutate()"
+      />
     </div>
 
     <div v-if="isPending" class="grid gap-4 sm:grid-cols-3">

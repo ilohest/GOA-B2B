@@ -7,6 +7,7 @@ import type { AdminCommandesResponse } from '@/lib/types'
 import { dateFr, dateHeureFr, prixFr } from '@/lib/format'
 import EtatBadge from '@/components/EtatBadge.vue'
 import CommandeDetailDialog from '@/components/admin/CommandeDetailDialog.vue'
+import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -48,14 +49,7 @@ const commandesAffichees = computed(() =>
     </CardHeader>
     <CardContent class="grid gap-4">
       <div>
-        <Button
-          variant="outline"
-          size="sm"
-          :disabled="actualisation.isPending.value"
-          @click="actualisation.mutate()"
-        >
-          {{ actualisation.isPending.value ? 'Actualisation…' : 'Actualiser depuis Easybeer' }}
-        </Button>
+        <BoutonActualiser :pending="actualisation.isPending.value" @click="actualisation.mutate()" />
       </div>
       <div v-if="isPending" class="grid gap-2">
         <Skeleton v-for="i in 6" :key="i" class="h-10 w-full" />

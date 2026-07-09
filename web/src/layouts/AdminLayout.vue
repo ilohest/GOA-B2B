@@ -3,12 +3,24 @@
  * Layout de l'administration : menu vertical à gauche (desktop, type Shopify),
  * onglets horizontaux sur mobile. Les sections sont des routes enfants.
  */
+import { onMounted } from 'vue'
+import { api } from '@/lib/api'
+import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
+
 const sections = [
   { to: '/admin', label: 'Tableau de bord', exact: true },
   { to: '/admin/clients', label: 'Clients' },
   { to: '/admin/commandes', label: 'Commandes' },
   { to: '/admin/catalogue', label: 'Catalogue' },
 ]
+
+// Amorce le compte à rebours si un ban est déjà en cours à l'entrée dans l'admin.
+onMounted(async () => {
+  const s = await api
+    .get<{ banni: boolean; secondesRestantes: number }>('/admin/statut-easybeer')
+    .catch(() => null)
+  if (s?.banni) signalerBanEasybeer(s.secondesRestantes)
+})
 </script>
 
 <template>

@@ -7,6 +7,7 @@
  * → déconnexion + retour au login (au lieu d'une erreur affichée au client).
  */
 import { firebaseAuth } from '../firebase'
+import { signalerBanEasybeer } from '../composables/useEasybeerBan'
 
 async function authHeader(forceRefresh = false): Promise<Record<string, string>> {
   const token = await firebaseAuth?.currentUser?.getIdToken(forceRefresh).catch(() => null)
@@ -55,7 +56,12 @@ async function requeteBrute(method: string, path: string, body?: unknown): Promi
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await requeteBrute(method, path, body)
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error((data as { error?: string }).error || `Erreur ${res.status}`)
+  if (!res.ok) {
+    // Rate-limit Easybeer : alimente le compte à rebours partagé.
+    const retry = (data as { retryAfterSeconds?: number }).retryAfterSeconds
+    if (res.status === 503 && typeof retry === 'number') signalerBanEasybeer(retry)
+    throw new Error((data as { error?: string }).error || `Erreur ${res.status}`)
+  }
   return data as T
 }
 

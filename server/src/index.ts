@@ -46,7 +46,7 @@ import {
   pasDeCommande,
 } from './catalogue.js'
 
-import { EasybeerBanError } from './easybeer.js'
+import { EasybeerBanError, etatBanEasybeer } from './easybeer.js'
 
 const app = new Hono()
 
@@ -789,6 +789,9 @@ app.get('/api/photos/produits/:idStockBouteille', async (c) => {
     },
   })
 })
+
+/** État du rate-limiting Easybeer (pour désactiver les boutons d'actualisation). */
+app.get('/api/admin/statut-easybeer', requireAuth, requireAdmin, (c) => c.json(etatBanEasybeer()))
 
 // ---- Admin : commandes (tous clients) ----
 
