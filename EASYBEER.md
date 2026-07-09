@@ -56,6 +56,12 @@
     134 s en insistant). Parade implémentée : **disjoncteur serveur** (`easybeer.ts`) — pendant un
     ban connu, échec local immédiat sans appel réseau, jusqu'à l'échéance annoncée + marge.
     Attention aussi aux refetchs automatiques du front (focus fenêtre) qui peuvent entretenir un ban.
+  - ⚠️⚠️⚠️ **Les durées annoncées ne sont PAS fiables** : ban toujours actif après 5 min 30 de
+    silence TOTAL (annonces successives 97 s → 134 s → 60 s, 2026-07-09 matin). Après une session
+    intensive, considérer le quota grillé pour 15-30 min minimum. Conséquence produit : ne JAMAIS
+    exposer une fonctionnalité client qui dépend d'un appel direct au moment T ; tout ce qui peut
+    être en cache doit l'être (c'est déjà l'architecture), et les vues admin en direct doivent
+    afficher l'erreur 503 proprement (fait : bandeau d'erreur + retryAfterSeconds).
 - **Conséquence d'archi : NE JAMAIS appeler Easybeer en direct à chaque requête client.** Un trafic client
   normal ferait throttler la plateforme en continu.
 - **Pattern obligatoire** : un **job de synchro serveur** récupère le catalogue (produits, prix, stock, images)
