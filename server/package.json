@@ -10,7 +10,8 @@
     "test": "vitest run",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "remplir-commandes": "tsx scripts/remplir-cache-commandes.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
