@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, reactive, ref } from 'vue'
+import { computed, h, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { FlexRender, getCoreRowModel, useVueTable, type ColumnDef } from '@tanstack/vue-table'
@@ -14,6 +14,8 @@ import type {
 } from '@/lib/types'
 import { dateHeureFr } from '@/lib/format'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
+import EasybeerIndisponible from '@/components/admin/EasybeerIndisponible.vue'
+import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,9 +39,13 @@ const queryClient = useQueryClient()
 
 // --- Clients : servis depuis le CACHE serveur (recherche/pagination locales) ---
 
-const { data, isPending, isError, error } = useQuery({
+const { data, isPending, isError, error, refetch, isFetching } = useQuery({
   queryKey: ['admin', 'clients'],
   queryFn: () => api.get<AdminClientsResponse>('/admin/clients'),
+})
+
+watch(data, (d) => {
+  if (d?.indisponible && d.retryAfterSeconds) signalerBanEasybeer(d.retryAfterSeconds)
 })
 
 const actualisation = useMutation({
@@ -346,13 +352,11 @@ function ouvrirFiche(client: ClientResume) {
 
         <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
-        <p
+        <EasybeerIndisponible
           v-else-if="data?.indisponible"
-          class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
-        >
-          Les clients ne sont pas encore en cache et l'API Easybeer est momentanément saturée.
-          Réessayez « Actualiser depuis Easybeer » dans quelques minutes.
-        </p>
+          :pending="isFetching"
+          @reessayer="refetch()"
+        />
 
         <template v-else>
           <div class="overflow-x-auto rounded-lg border">

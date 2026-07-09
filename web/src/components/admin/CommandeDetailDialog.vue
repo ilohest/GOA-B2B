@@ -9,6 +9,7 @@ import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CommandeDetail } from '@/lib/types'
 import { decomposerTotaux, prixFr } from '@/lib/format'
+import { useEasybeerBan } from '@/composables/useEasybeerBan'
 import EtatBadge from '@/components/EtatBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -25,11 +26,14 @@ const ouvert = computed({
 })
 
 const idCommande = computed(() => props.idCommande)
-const { data, isPending, isError, error } = useQuery({
+const { data, isPending, isError, error, refetch, isFetching } = useQuery({
   queryKey: ['admin', 'commande', idCommande],
   queryFn: () => api.get<CommandeDetail>(`/admin/commandes/${props.idCommande}`),
   enabled: computed(() => props.idCommande != null),
+  retry: false,
 })
+
+const { banni, secondesRestantes } = useEasybeerBan()
 
 const totaux = computed(() => (data.value ? decomposerTotaux(data.value) : []))
 
@@ -74,7 +78,21 @@ watch(
         <Skeleton class="h-16 w-full" />
       </div>
 
-      <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
+      <!-- Ban Easybeer : message doux + réessai, plutôt qu'une erreur rouge -->
+      <div v-else-if="isError && banni" class="grid justify-items-center gap-3 py-4 text-center">
+        <p class="text-sm text-muted-foreground">
+          Le détail est lu en direct dans Easybeer, momentanément saturé.
+          Réessayez dans {{ secondesRestantes }} s.
+        </p>
+        <Button variant="outline" size="sm" :disabled="isFetching || banni" @click="refetch()">
+          {{ isFetching ? 'Chargement…' : `Réessayez dans ${secondesRestantes} s` }}
+        </Button>
+      </div>
+
+      <div v-else-if="isError" class="grid justify-items-center gap-3 py-4 text-center">
+        <p class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
+        <Button variant="outline" size="sm" :disabled="isFetching" @click="refetch()">Réessayer</Button>
+      </div>
 
       <div v-else-if="data" class="grid gap-4">
         <ul class="grid gap-1.5 text-sm">

@@ -461,7 +461,13 @@ app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
     lireListeClients(db, c.req.query('refresh') === '1'),
     comptesParClient(),
   ])
-  return c.json({ clients, comptes, syncedAt, indisponible: indisponible ?? false })
+  return c.json({
+    clients,
+    comptes,
+    syncedAt,
+    indisponible: indisponible ?? false,
+    retryAfterSeconds: indisponible ? etatBanEasybeer().secondesRestantes : 0,
+  })
 })
 
 /**
@@ -803,7 +809,13 @@ app.get('/api/admin/commandes', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
   const { commandes, syncedAt, indisponible } = await lireCommandesRecentes(db, c.req.query('refresh') === '1')
-  return c.json({ commandes, syncedAt, indisponible: indisponible ?? false, easybeerAppUrl: config.easybeer.appUrl })
+  return c.json({
+    commandes,
+    syncedAt,
+    indisponible: indisponible ?? false,
+    retryAfterSeconds: indisponible ? etatBanEasybeer().secondesRestantes : 0,
+    easybeerAppUrl: config.easybeer.appUrl,
+  })
 })
 
 /** Détail d'une commande (n'importe laquelle) pour l'admin. */

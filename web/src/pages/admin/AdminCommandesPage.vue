@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { AdminCommandesResponse } from '@/lib/types'
 import { dateFr, dateHeureFr, prixFr } from '@/lib/format'
+import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
 import EtatBadge from '@/components/EtatBadge.vue'
 import CommandeDetailDialog from '@/components/admin/CommandeDetailDialog.vue'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
-import { Button } from '@/components/ui/button'
+import EasybeerIndisponible from '@/components/admin/EasybeerIndisponible.vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -16,9 +17,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 const queryClient = useQueryClient()
 const commandeOuverte = ref<number | null>(null)
 
-const { data, isPending, isError, error } = useQuery({
+const { data, isPending, isError, error, refetch, isFetching } = useQuery({
   queryKey: ['admin', 'commandes'],
   queryFn: () => api.get<AdminCommandesResponse>('/admin/commandes'),
+})
+
+// Alimente le compte à rebours partagé quand la donnée n'est pas dispo.
+watch(data, (d) => {
+  if (d?.indisponible && d.retryAfterSeconds) signalerBanEasybeer(d.retryAfterSeconds)
 })
 
 const actualisation = useMutation({
@@ -57,13 +63,11 @@ const commandesAffichees = computed(() =>
 
       <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
-      <p
+      <EasybeerIndisponible
         v-else-if="data?.indisponible"
-        class="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground"
-      >
-        Les commandes ne sont pas encore en cache et l'API Easybeer est momentanément saturée.
-        Réessayez « Actualiser depuis Easybeer » dans quelques minutes.
-      </p>
+        :pending="isFetching"
+        @reessayer="refetch()"
+      />
 
       <template v-else>
         <div class="overflow-x-auto rounded-lg border">

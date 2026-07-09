@@ -50,6 +50,7 @@ export interface AdminClientsResponse {
   comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }>
   syncedAt: number | null
   indisponible?: boolean
+  retryAfterSeconds?: number
 }
 
 export interface AdminDashboardResponse {
@@ -140,6 +141,7 @@ export interface AdminCommandesResponse {
   commandes: AdminCommandeResume[]
   syncedAt: number | null
   indisponible?: boolean
+  retryAfterSeconds?: number
   easybeerAppUrl: string
 }
 
