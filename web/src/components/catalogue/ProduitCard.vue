@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
- * Carte produit du catalogue client.
+ * Carte produit du catalogue client (rendu premium).
  *
  * - Emplacement image : `photoUrl` de l'override admin, sinon placeholder de
- *   marque (pastille GOA sur fond neutre).
+ *   marque (pastille GOA sur fond doux).
  * - Rupture : produit TOUJOURS visible mais grisé (photo désaturée), mention
  *   « Victime de son succès » en rouge, pas de stepper.
  */
@@ -25,53 +25,61 @@ const imageEnErreur = ref(false)
 
 <template>
   <article
-    class="flex flex-col overflow-hidden rounded-xl border bg-card transition-shadow"
-    :class="produit.rupture ? 'opacity-75' : 'hover:shadow-md'"
+    class="group flex flex-col overflow-hidden rounded-2xl border bg-card transition-all duration-200"
+    :class="
+      produit.rupture
+        ? 'opacity-80'
+        : 'hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg'
+    "
   >
     <!-- Emplacement image (photo admin ou placeholder de marque) -->
-    <div class="relative aspect-[4/3] w-full bg-muted">
+    <div class="relative aspect-[4/3] w-full overflow-hidden bg-muted">
       <img
         v-if="produit.photoUrl && !imageEnErreur"
         :src="produit.photoUrl"
         :alt="produit.libelle"
         loading="lazy"
-        class="absolute inset-0 size-full object-cover"
-        :class="produit.rupture ? 'grayscale' : ''"
+        class="absolute inset-0 size-full object-cover transition-transform duration-300"
+        :class="produit.rupture ? 'grayscale' : 'group-hover:scale-[1.03]'"
         @error="imageEnErreur = true"
       />
-      <div v-else class="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+      <div
+        v-else
+        class="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-brand-50 to-muted"
+        aria-hidden="true"
+      >
         <img
           src="/brand/goa-rond.png"
           alt=""
-          class="size-16 rounded-full opacity-25"
+          class="size-16 rounded-full opacity-30"
           :class="produit.rupture ? 'grayscale' : ''"
         />
       </div>
+      <span
+        v-if="produit.rupture"
+        class="absolute top-3 left-3 rounded-full bg-background/90 px-2.5 py-1 text-xs font-semibold text-destructive shadow-sm backdrop-blur"
+      >
+        Victime de son succès
+      </span>
     </div>
 
     <div class="flex flex-1 flex-col justify-between gap-3 p-4">
-      <div class="grid gap-1">
-        <h3 class="font-medium" :class="produit.rupture ? 'text-muted-foreground' : ''">
-          {{ produit.libelle }}
-        </h3>
-        <p v-if="produit.rupture" class="text-sm font-semibold text-destructive">
-          Victime de son succès
-        </p>
-      </div>
+      <h3 class="leading-snug font-medium" :class="produit.rupture ? 'text-muted-foreground' : ''">
+        {{ produit.libelle }}
+      </h3>
 
       <div class="flex items-end justify-between gap-2">
-        <p class="text-sm text-muted-foreground">
-          <template v-if="produit.prixHT != null">
-            <span
-              class="text-base font-semibold"
-              :class="produit.rupture ? 'text-muted-foreground' : 'text-foreground'"
-            >
-              {{ prixFr(produit.prixHT) }}
-            </span>
-            HT
-          </template>
-          <template v-else>Prix sur demande</template>
+        <p v-if="produit.prixHT != null" class="flex items-baseline gap-1">
+          <span
+            class="text-lg font-semibold tracking-tight"
+            :class="produit.rupture ? 'text-muted-foreground' : ''"
+          >
+            {{ prixFr(produit.prixHT) }}
+          </span>
+          <span class="text-xs whitespace-nowrap text-muted-foreground">HT / carton</span>
         </p>
+        <p v-else class="text-sm text-muted-foreground">Prix sur demande</p>
+
         <QuantiteStepper
           v-if="!produit.rupture && produit.prixHT != null"
           :quantite="quantite"

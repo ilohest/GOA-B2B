@@ -1,10 +1,8 @@
 <script setup lang="ts">
 /**
- * Stepper de quantité mobile-first (gros boutons tactiles).
+ * Stepper de quantité en pilule, mobile-first (gros boutons tactiles).
  * `pas` = incrément imposé (ex. règle La Poste : 3 pour 35cl, 2 pour 1L).
  */
-import { Button } from '@/components/ui/button'
-
 withDefaults(
   defineProps<{
     quantite: number
@@ -21,29 +19,32 @@ const pluriel = (n: number) => (n > 1 ? `${n} cartons` : 'un carton')
 
 <template>
   <div class="flex flex-col items-end gap-1">
-    <div class="flex items-center gap-1">
-      <Button
-        variant="outline"
-        size="icon"
-        class="size-10 text-lg"
+    <div
+      class="inline-flex items-center rounded-full border bg-background shadow-xs transition-colors"
+      :class="quantite > 0 ? 'border-primary/40' : ''"
+    >
+      <button
+        class="grid size-10 place-items-center rounded-full text-lg text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
         :disabled="quantite === 0"
         :aria-label="`Retirer ${pluriel(pas)} de ${libelle}`"
         @click="emit('changer', -pas)"
       >
         −
-      </Button>
-      <span class="w-8 text-center text-base font-semibold tabular-nums" aria-live="polite">
+      </button>
+      <span
+        class="w-8 text-center text-base font-semibold tabular-nums"
+        :class="quantite > 0 ? 'text-primary' : ''"
+        aria-live="polite"
+      >
         {{ quantite }}
       </span>
-      <Button
-        variant="outline"
-        size="icon"
-        class="size-10 text-lg"
+      <button
+        class="grid size-10 place-items-center rounded-full text-lg text-muted-foreground transition-colors hover:text-foreground"
         :aria-label="`Ajouter ${pluriel(pas)} de ${libelle}`"
         @click="emit('changer', pas)"
       >
         +
-      </Button>
+      </button>
     </div>
     <p v-if="pas > 1" class="text-xs text-muted-foreground">par {{ pas }} (La Poste)</p>
   </div>

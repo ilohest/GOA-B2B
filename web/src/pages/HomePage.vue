@@ -139,68 +139,43 @@ function annulerModification() {
         <Button variant="outline" size="sm" @click="annulerModification">Annuler</Button>
       </div>
 
-      <Card v-if="!modification">
-        <CardHeader>
-          <CardTitle class="text-lg">Mon compte</CardTitle>
-          <CardDescription>Informations lues depuis Easybeer</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div v-if="isPending" class="grid gap-2">
-            <Skeleton class="h-5 w-2/3" />
-            <Skeleton class="h-4 w-1/2" />
-          </div>
-          <p v-else-if="isError" class="text-sm text-destructive">
-            Impossible de charger votre compte : {{ (error as Error)?.message }}
+      <section>
+        <div class="mb-5">
+          <h1 class="text-2xl font-semibold tracking-tight">Nos kombuchas</h1>
+          <p class="mt-1 text-sm text-muted-foreground">
+            <template v-if="data?.client">
+              {{ data.client.nom ?? data.client.raisonSociale }} — prix HT selon vos conditions
+              tarifaires<template v-if="minimum != null">, minimum de commande {{ prixFr(minimum) }} HT</template>.
+            </template>
+            <template v-else>Prix HT selon vos conditions tarifaires.</template>
           </p>
-          <dl v-else-if="data?.client" class="grid gap-2 text-sm sm:grid-cols-3 sm:gap-4">
-            <div>
-              <dt class="text-muted-foreground">Commerce</dt>
-              <dd class="font-medium">{{ data.client.nom ?? data.client.raisonSociale }}</dd>
-            </div>
-            <div>
-              <dt class="text-muted-foreground">N° client</dt>
-              <dd>{{ data.client.numero }}</dd>
-            </div>
-            <div v-if="minimum != null">
-              <dt class="text-muted-foreground">Minimum de commande</dt>
-              <dd>{{ prixFr(minimum) }} HT</dd>
-            </div>
-          </dl>
-          <p v-else class="text-sm text-muted-foreground">
-            Votre compte n'est pas encore relié à une fiche client — contactez GOA.
-          </p>
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle class="text-lg">Nos kombuchas</CardTitle>
-          <CardDescription>Prix HT, selon vos conditions tarifaires.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div v-if="catalogue.isPending.value" class="grid gap-3 sm:grid-cols-2">
-            <Skeleton v-for="i in 4" :key="i" class="h-64 w-full" />
-          </div>
+        <div v-if="catalogue.isPending.value || isPending" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <Skeleton v-for="i in 6" :key="i" class="h-72 w-full rounded-2xl" />
+        </div>
 
-          <p v-else-if="catalogue.isError.value" class="text-sm text-destructive">
-            Impossible de charger le catalogue : {{ (catalogue.error.value as Error)?.message }}
-          </p>
+        <p v-else-if="catalogue.isError.value" class="text-sm text-destructive">
+          Impossible de charger le catalogue : {{ (catalogue.error.value as Error)?.message }}
+        </p>
+        <p v-else-if="isError" class="text-sm text-destructive">
+          Impossible de charger votre compte : {{ (error as Error)?.message }}
+        </p>
 
-          <p v-else-if="!catalogue.data.value?.produits.length" class="text-sm text-muted-foreground">
-            Le catalogue n'est pas encore disponible — revenez bientôt.
-          </p>
+        <p v-else-if="!catalogue.data.value?.produits.length" class="text-sm text-muted-foreground">
+          Le catalogue n'est pas encore disponible — revenez bientôt.
+        </p>
 
-          <div v-else class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <ProduitCard
-              v-for="p in catalogue.data.value.produits"
-              :key="p.idStockBouteille"
-              :produit="p"
-              :quantite="quantites[p.idStockBouteille] ?? 0"
-              @changer="(delta) => changer(p.idStockBouteille, delta)"
-            />
-          </div>
-        </CardContent>
-      </Card>
+        <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <ProduitCard
+            v-for="p in catalogue.data.value.produits"
+            :key="p.idStockBouteille"
+            :produit="p"
+            :quantite="quantites[p.idStockBouteille] ?? 0"
+            @changer="(delta) => changer(p.idStockBouteille, delta)"
+          />
+        </div>
+      </section>
     </div>
 
     <!-- Colonne récap (desktop) -->

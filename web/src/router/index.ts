@@ -18,13 +18,24 @@ const router = createRouter({
     },
     {
       path: '/',
-      name: 'home',
-      component: () => import('@/pages/HomePage.vue'),
-    },
-    {
-      path: '/commandes',
-      name: 'commandes',
-      component: () => import('@/pages/CommandesPage.vue'),
+      component: () => import('@/layouts/ClientLayout.vue'),
+      children: [
+        {
+          path: '',
+          name: 'boutique',
+          component: () => import('@/pages/HomePage.vue'),
+        },
+        {
+          path: 'commandes',
+          name: 'commandes',
+          component: () => import('@/pages/CommandesPage.vue'),
+        },
+        {
+          path: 'compte',
+          name: 'compte',
+          component: () => import('@/pages/ComptePage.vue'),
+        },
+      ],
     },
     {
       path: '/admin',

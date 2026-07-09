@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { useAuth } from '@/composables/useAuth'
@@ -9,17 +9,15 @@ import BrandLogo from '@/components/BrandLogo.vue'
 import { Button } from '@/components/ui/button'
 import { Toaster } from '@/components/ui/sonner'
 
-const route = useRoute()
 const router = useRouter()
 const queryClient = useQueryClient()
 const { isAuthenticated, user, logout } = useAuth()
 const { data: me } = useMe()
 
 const estAdmin = computed(() => me.value?.user.role === 'admin')
-const estClient = computed(() => me.value != null && me.value.user.role !== 'admin')
 
-// Largeur utile : l'admin (tableaux + sidebar) exploite tout l'écran.
-const largeur = computed(() => (route.path.startsWith('/admin') ? 'max-w-7xl' : 'max-w-5xl'))
+// Largeur unifiée : client et admin ont chacun leur sidebar + colonnes.
+const largeur = 'max-w-7xl'
 
 async function onLogout() {
   try {
@@ -39,30 +37,12 @@ async function onLogout() {
       class="sticky top-0 z-10 border-b bg-background/80 backdrop-blur"
     >
       <div class="mx-auto flex h-14 w-full items-center justify-between gap-3 px-4" :class="largeur">
-        <nav class="flex items-center gap-4">
-          <RouterLink :to="estAdmin ? '/admin' : '/'" class="flex items-center gap-2">
-            <BrandLogo variante="rond" />
-            <span class="hidden text-sm font-semibold tracking-widest text-primary uppercase sm:inline">
-              GOA Kombucha
-            </span>
-          </RouterLink>
-          <RouterLink
-            v-if="estClient"
-            to="/commandes"
-            class="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            active-class="font-medium text-foreground"
-          >
-            Mes commandes
-          </RouterLink>
-          <RouterLink
-            v-if="estAdmin"
-            to="/admin"
-            class="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            active-class="font-medium text-foreground"
-          >
-            Administration
-          </RouterLink>
-        </nav>
+        <RouterLink :to="estAdmin ? '/admin' : '/'" class="flex items-center gap-2">
+          <BrandLogo variante="rond" />
+          <span class="hidden text-sm font-semibold tracking-widest text-primary uppercase sm:inline">
+            GOA Kombucha
+          </span>
+        </RouterLink>
         <div class="flex items-center gap-2">
           <span class="hidden text-sm text-muted-foreground sm:inline">{{ user?.email }}</span>
           <Button variant="outline" size="sm" @click="onLogout">Déconnexion</Button>
