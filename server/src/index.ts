@@ -978,6 +978,46 @@ app.get('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
   return c.json({ dernierSync: snap.data()?.dernierSync ?? null })
 })
 
+/** Diagnostic local de la synchro, sans aucun appel Easybeer. */
+app.get('/api/admin/sync/status', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const [banSnap, lockSnap, metaSnap] = await Promise.all([
+    db.doc('cache/easybeerBan').get(),
+    db.doc('cache/lock').get(),
+    db.doc('cache/meta').get(),
+  ])
+  const now = Date.now()
+  const persistedUntil = banSnap.data()?.until as number | undefined
+  const lockStartedAt = lockSnap.data()?.startedAt as number | undefined | null
+  const lockAgeMs = lockStartedAt ? now - lockStartedAt : null
+
+  return c.json({
+    now,
+    nowIso: new Date(now).toISOString(),
+    banMemoire: etatBanEasybeer(),
+    banPersiste: persistedUntil
+      ? {
+          until: persistedUntil,
+          untilIso: new Date(persistedUntil).toISOString(),
+          secondesRestantes: Math.max(0, Math.ceil((persistedUntil - now) / 1000)),
+          actif: persistedUntil > now,
+        }
+      : null,
+    verrou: lockStartedAt
+      ? {
+          startedAt: lockStartedAt,
+          startedAtIso: new Date(lockStartedAt).toISOString(),
+          ageMs: lockAgeMs,
+          ageMinutes: lockAgeMs == null ? null : Math.round(lockAgeMs / 60_000),
+        }
+      : null,
+    dernierSync: metaSnap.data()?.dernierSync ?? null,
+    syncIntervalMinutes: config.syncIntervalMinutes,
+  })
+})
+
 async function executerSyncCache() {
   const db = getDb()
   if (!db) return { status: 501, body: { error: 'Firebase non configuré' } }

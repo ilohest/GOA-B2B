@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
-import type { AdminDashboardResponse, SyncReport } from '@/lib/types'
+import type { AdminDashboardResponse, SyncReport, SyncStatusResponse } from '@/lib/types'
 import { dateHeureFr, prixFr } from '@/lib/format'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,11 @@ const { data, isPending, isError, error } = useQuery({
   queryFn: () => api.get<AdminDashboardResponse>('/admin/dashboard'),
 })
 
+const statutSync = useQuery({
+  queryKey: ['admin', 'sync-status'],
+  queryFn: () => api.get<SyncStatusResponse>('/admin/sync/status'),
+})
+
 const syncAncienne = computed(() => {
   const dernierSync = data.value?.dernierSync
   return !dernierSync || Date.now() - dernierSync > SYNC_ATTENTION_MS
@@ -29,7 +34,25 @@ const synchro = useMutation({
     toast.success(`Synchro terminée en ${Math.round(report.dureeMs / 1000)} s.`)
     queryClient.invalidateQueries()
   },
-  onError: (e) => toast.error((e as Error).message),
+  onError: (e) => {
+    toast.error((e as Error).message)
+    queryClient.invalidateQueries({ queryKey: ['admin', 'sync-status'] })
+  },
+})
+
+const diagnosticSync = computed(() => {
+  const s = statutSync.data.value
+  if (!s) return null
+  if (s.banMemoire.banni) {
+    return `Ban local actif : ${s.banMemoire.secondesRestantes} s restantes.`
+  }
+  if (s.banPersiste?.actif) {
+    return `Ban persisté jusqu'à ${dateHeureFr(s.banPersiste.until)}.`
+  }
+  if (s.verrou && (s.verrou.ageMinutes ?? 0) >= 15) {
+    return `Verrou de synchronisation ancien (${s.verrou.ageMinutes} min).`
+  }
+  return 'Aucun ban local actif détecté.'
 })
 
 const stats = computed(() => {
@@ -100,6 +123,9 @@ const stats = computed(() => {
             Lancez une synchronisation avant l'ouverture des commandes.
           </CardDescription>
         </CardHeader>
+        <CardContent v-if="diagnosticSync" class="pt-0">
+          <p class="text-sm text-amber-900">{{ diagnosticSync }}</p>
+        </CardContent>
       </Card>
 
       <div class="grid gap-4 sm:grid-cols-3">

@@ -100,6 +100,26 @@ export interface SyncReport {
   syncedAt: number
 }
 
+export interface SyncStatusResponse {
+  now: number
+  nowIso: string
+  banMemoire: { banni: boolean; secondesRestantes: number }
+  banPersiste: null | {
+    until: number
+    untilIso: string
+    secondesRestantes: number
+    actif: boolean
+  }
+  verrou: null | {
+    startedAt: number
+    startedAtIso: string
+    ageMs: number | null
+    ageMinutes: number | null
+  }
+  dernierSync: SyncReport | null
+  syncIntervalMinutes: number
+}
+
 export interface InvitationResponse {
   ok: boolean
   email: string
