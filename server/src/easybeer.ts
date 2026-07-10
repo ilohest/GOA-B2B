@@ -45,6 +45,23 @@ export class EasybeerBanError extends Error {
 let banniJusqua = 0
 const MARGE_BAN_MS = 10_000
 
+// Hook de persistance : notifié à chaque (dé)clenchement de ban pour que le
+// serveur puisse mémoriser l'échéance (Firestore) et la restaurer au démarrage,
+// évitant de re-taper l'API — donc de réarmer le ban — juste après un redémarrage.
+let surBanCallback: ((until: number) => void) | null = null
+export function surBan(cb: (until: number) => void): void {
+  surBanCallback = cb
+}
+function poserBan(until: number): void {
+  banniJusqua = until
+  surBanCallback?.(until)
+}
+
+/** Restaure une échéance de ban persistée (au démarrage du serveur). */
+export function restaurerBan(until: number): void {
+  if (until > banniJusqua) banniJusqua = until
+}
+
 /** État du disjoncteur (lecture instantanée, aucun appel réseau). */
 export function etatBanEasybeer(): { banni: boolean; secondesRestantes: number } {
   const restant = banniJusqua - Date.now()
@@ -64,7 +81,7 @@ function passerParLaFile<T>(fn: () => Promise<T>): Promise<T> {
       return await fn()
     } catch (e) {
       if (e instanceof EasybeerBanError) {
-        banniJusqua = Date.now() + e.retryAfterSeconds * 1000 + MARGE_BAN_MS
+        poserBan(Date.now() + e.retryAfterSeconds * 1000 + MARGE_BAN_MS)
       }
       throw e
     }

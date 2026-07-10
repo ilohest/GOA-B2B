@@ -27,7 +27,7 @@ import {
   lireCatalogue,
   lireCommandesRecentes,
   lireListeClients,
-  syncTout,
+  lancerSync,
 } from './sync.js'
 import {
   BulkParamsSchema,
@@ -46,7 +46,7 @@ import {
   pasDeCommande,
 } from './catalogue.js'
 
-import { EasybeerBanError, etatBanEasybeer } from './easybeer.js'
+import { EasybeerBanError, etatBanEasybeer, surBan, restaurerBan } from './easybeer.js'
 
 const app = new Hono()
 
@@ -900,25 +900,81 @@ app.get('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
   return c.json({ dernierSync: snap.data()?.dernierSync ?? null })
 })
 
-/** Déclenche une synchro complète Easybeer → cache. */
+/** Déclenche une synchro complète Easybeer → cache (verrou single-flight). */
 app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
-  const report = await syncTout(db)
-  return c.json({ ok: true, report })
+
+  // Ban connu → on n'attaque pas l'API (sinon on le prolonge) ; compte à rebours côté UI.
+  const avant = etatBanEasybeer()
+  if (avant.banni) {
+    return c.json(
+      { error: `API Easybeer saturée — réessayez dans ${avant.secondesRestantes} s`, retryAfterSeconds: avant.secondesRestantes },
+      503,
+    )
+  }
+
+  const res = await lancerSync(db)
+  if ('enCours' in res) return c.json({ error: 'Une synchronisation est déjà en cours.' }, 409)
+
+  // Un ban a pu survenir PENDANT la synchro (syncTout le consigne sans planter) :
+  // on le remonte pour que l'UI affiche le compte à rebours plutôt qu'un faux succès.
+  const apres = etatBanEasybeer()
+  if (apres.banni) {
+    return c.json(
+      { error: `API Easybeer saturée pendant la synchro — réessayez dans ${apres.secondesRestantes} s`, retryAfterSeconds: apres.secondesRestantes },
+      503,
+    )
+  }
+  return c.json({ ok: true, report: res.report })
 })
 
 // Synchro périodique optionnelle (SYNC_INTERVAL_MINUTES > 0). En prod, préférer
-// Cloud Scheduler → POST /api/admin/sync (étape 9).
+// Cloud Scheduler → POST /api/admin/sync (étape 9). Robuste : ne tape pas
+// l'API pendant un ban connu (sinon on le prolonge), et le verrou évite les
+// chevauchements.
 if (config.syncIntervalMinutes > 0) {
   setInterval(
-    () => {
+    async () => {
       const db = getDb()
-      if (db) syncTout(db).catch((e) => console.error('[sync] échec :', (e as Error).message))
+      if (!db) return
+      const ban = etatBanEasybeer()
+      if (ban.banni) {
+        console.log(`[sync] tick ignoré — ban Easybeer (${ban.secondesRestantes} s restantes).`)
+        return
+      }
+      try {
+        const res = await lancerSync(db)
+        if ('enCours' in res) console.log('[sync] tick ignoré — synchro déjà en cours.')
+      } catch (e) {
+        console.error('[sync] échec du tick :', (e as Error).message)
+      }
     },
     config.syncIntervalMinutes * 60_000,
   )
-  console.log(`[sync] synchro périodique toutes les ${config.syncIntervalMinutes} min.`)
+  console.log(`[sync] synchro périodique toutes les ${config.syncIntervalMinutes} min (ban-aware, verrouillée).`)
+}
+
+// Persistance de l'état du ban Easybeer : on mémorise l'échéance dans Firestore
+// à chaque ban, et on la restaure au démarrage — ainsi un redémarrage ne
+// re-tape pas l'API pendant un ban (ce qui le prolongerait).
+{
+  surBan((until) => {
+    getDb()?.doc('cache/easybeerBan').set({ until }).catch(() => {})
+  })
+  const db = getDb()
+  if (db) {
+    db.doc('cache/easybeerBan')
+      .get()
+      .then((snap) => {
+        const until = snap.data()?.until as number | undefined
+        if (until && until > Date.now()) {
+          restaurerBan(until)
+          console.log(`[easybeer] ban restauré depuis Firestore (${Math.ceil((until - Date.now()) / 1000)} s restantes).`)
+        }
+      })
+      .catch(() => {})
+  }
 }
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {

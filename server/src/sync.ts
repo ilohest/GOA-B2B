@@ -334,12 +334,33 @@ async function idsClientsAvecCompte(db: Firestore): Promise<number[]> {
 /**
  * Synchro complète : catalogue + référentiels + listes admin (clients,
  * commandes récentes) + fiche/prix de chaque client à compte.
+ *
+ * Robuste par construction : chaque section est isolée (try/catch), un échec
+ * (ban) n'abandonne pas les suivantes et n'écrase JAMAIS un cache par du vide —
+ * catalogue/référentiels retombent sur leur version en cache pour que la
+ * synchro des prix clients puisse continuer. Les erreurs sont consignées au
+ * rapport. Pour éviter les synchros concurrentes, passer par `lancerSync`.
  */
 export async function syncTout(db: Firestore): Promise<SyncReport> {
   const debut = Date.now()
   const erreurs: string[] = []
-  const produits = await syncCatalogue(db)
-  const types = await syncReferentiels(db)
+
+  // Catalogue + référentiels : repli sur le cache si la synchro échoue, pour
+  // que la suite (prix clients) dispose quand même de la liste produits/types.
+  let produits: ProduitAutocomplete[]
+  try {
+    produits = await syncCatalogue(db)
+  } catch (e) {
+    erreurs.push(`catalogue : ${(e as Error).message}`)
+    produits = (await lireCatalogue(db)).produits
+  }
+  let types: ModeleClientType[]
+  try {
+    types = await syncReferentiels(db)
+  } catch (e) {
+    erreurs.push(`référentiels : ${(e as Error).message}`)
+    types = await lireReferentiels(db)
+  }
 
   let listeClientsNb = 0
   try {
@@ -376,7 +397,35 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
   }
   await db.doc('cache/meta').set({ dernierSync: report })
   console.log(
-    `[sync] terminé en ${report.dureeMs} ms — ${report.produits} produits, ${clients.length} client(s).`,
+    `[sync] terminé en ${report.dureeMs} ms — ${report.produits} produits, ${clients.length} client(s)` +
+      (erreurs.length ? `, ${erreurs.length} section(s) en erreur` : '') +
+      '.',
   )
   return report
+}
+
+// --- Verrou single-flight : une seule synchro complète à la fois ---
+
+const VERROU_TTL_MS = 15 * 60 * 1000 // au-delà, un verrou est considéré périmé (sync crashée)
+
+/**
+ * Lance `syncTout` sous verrou Firestore : si une synchro tourne déjà (job
+ * périodique + clic admin simultanés, voire plusieurs instances Cloud Run),
+ * on n'en démarre pas une seconde. Renvoie `{ enCours: true }` dans ce cas.
+ */
+export async function lancerSync(db: Firestore): Promise<{ report: SyncReport } | { enCours: true }> {
+  const verrou = db.doc('cache/lock')
+  const acquis = await db.runTransaction(async (tx) => {
+    const debut = (await tx.get(verrou)).data()?.startedAt as number | undefined
+    if (debut && Date.now() - debut < VERROU_TTL_MS) return false
+    tx.set(verrou, { startedAt: Date.now() })
+    return true
+  })
+  if (!acquis) return { enCours: true }
+
+  try {
+    return { report: await syncTout(db) }
+  } finally {
+    await verrou.set({ startedAt: null, finishedAt: Date.now() }).catch(() => {})
+  }
 }
