@@ -5,11 +5,13 @@ import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { AdminCommandesResponse } from '@/lib/types'
 import { dateFr, dateHeureFr, prixFr } from '@/lib/format'
+import { easybeerLien } from '@/lib/easybeer'
 import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
 import EtatBadge from '@/components/EtatBadge.vue'
 import CommandeDetailDialog from '@/components/admin/CommandeDetailDialog.vue'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import EasybeerIndisponible from '@/components/admin/EasybeerIndisponible.vue'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -54,8 +56,13 @@ const commandesAffichees = computed(() =>
       </CardDescription>
     </CardHeader>
     <CardContent class="grid gap-4">
-      <div>
+      <div class="flex flex-wrap items-center gap-2">
         <BoutonActualiser :pending="actualisation.isPending.value" @click="actualisation.mutate()" />
+        <Button variant="ghost" size="sm" as-child>
+          <a :href="easybeerLien.commandes(data?.easybeerAppUrl)" target="_blank" rel="noopener">
+            Ouvrir dans Easybeer ↗
+          </a>
+        </Button>
       </div>
       <div v-if="isPending" class="grid gap-2">
         <Skeleton v-for="i in 6" :key="i" class="h-10 w-full" />

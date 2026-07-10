@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/vue-query'
 import { api } from '@/lib/api'
 import type { AdminClientDetail } from '@/lib/types'
 import { dateFr, prixFr } from '@/lib/format'
+import { easybeerLien } from '@/lib/easybeer'
 import EtatBadge from '@/components/EtatBadge.vue'
 import CommandeDetailDialog from '@/components/admin/CommandeDetailDialog.vue'
 import { Badge } from '@/components/ui/badge'
@@ -76,9 +77,18 @@ const conditions = computed(() => [
           <span class="ml-2 text-sm font-normal text-muted-foreground">{{ client?.numero }}</span>
         </h1>
       </div>
-      <Button variant="outline" size="sm" as-child>
-        <a :href="data?.easybeerAppUrl" target="_blank" rel="noopener">Ouvrir Easybeer ↗</a>
-      </Button>
+      <div class="flex flex-wrap gap-2">
+        <Button variant="ghost" size="sm" as-child>
+          <a :href="easybeerLien.grilleTarifaire(data?.easybeerAppUrl)" target="_blank" rel="noopener">
+            Grille tarifaire ↗
+          </a>
+        </Button>
+        <Button variant="outline" size="sm" as-child>
+          <a :href="easybeerLien.clients(data?.easybeerAppUrl)" target="_blank" rel="noopener">
+            Ouvrir dans Easybeer ↗
+          </a>
+        </Button>
+      </div>
     </div>
 
     <div v-if="isPending" class="grid gap-3">

@@ -9,6 +9,7 @@ import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CommandeDetail } from '@/lib/types'
 import { decomposerTotaux, prixFr } from '@/lib/format'
+import { easybeerLien } from '@/lib/easybeer'
 import { useEasybeerBan } from '@/composables/useEasybeerBan'
 import EtatBadge from '@/components/EtatBadge.vue'
 import { Button } from '@/components/ui/button'
@@ -137,8 +138,10 @@ watch(
           </Button>
         </div>
 
-        <Button v-if="easybeerAppUrl" variant="ghost" size="sm" class="justify-self-start" as-child>
-          <a :href="easybeerAppUrl" target="_blank" rel="noopener">Ouvrir dans Easybeer ↗</a>
+        <Button v-if="idCommande != null" variant="ghost" size="sm" class="justify-self-start" as-child>
+          <a :href="easybeerLien.commandeDetail(easybeerAppUrl, idCommande)" target="_blank" rel="noopener">
+            Ouvrir dans Easybeer ↗
+          </a>
         </Button>
       </div>
     </DialogContent>

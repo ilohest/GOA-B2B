@@ -13,6 +13,7 @@ import type {
   Tournee,
 } from '@/lib/types'
 import { dateHeureFr } from '@/lib/format'
+import { easybeerLien } from '@/lib/easybeer'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import EasybeerIndisponible from '@/components/admin/EasybeerIndisponible.vue'
 import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
@@ -327,6 +328,9 @@ function ouvrirFiche(client: ClientResume) {
             @input="surRecherche"
           />
           <BoutonActualiser :pending="actualisation.isPending.value" @click="actualisation.mutate()" />
+          <Button variant="ghost" size="sm" as-child>
+            <a :href="easybeerLien.clients()" target="_blank" rel="noopener">Ouvrir dans Easybeer ↗</a>
+          </Button>
         </div>
 
         <!-- Barre d'actions en masse -->
