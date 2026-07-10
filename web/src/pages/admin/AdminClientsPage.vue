@@ -39,7 +39,7 @@ const queryClient = useQueryClient()
 
 // --- Clients : servis depuis le CACHE serveur (recherche/pagination locales) ---
 
-const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'clients'],
   queryFn: () => api.get<AdminClientsResponse>('/admin/clients'),
 })
@@ -354,8 +354,8 @@ function ouvrirFiche(client: ClientResume) {
 
         <EasybeerIndisponible
           v-else-if="data?.indisponible"
-          :pending="isFetching"
-          @reessayer="refetch()"
+          :pending="actualisation.isPending.value"
+          @reessayer="actualisation.mutate()"
         />
 
         <template v-else>

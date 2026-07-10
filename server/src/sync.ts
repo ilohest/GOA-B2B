@@ -235,11 +235,12 @@ export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResu
 // --- Lectures du cache (avec remplissage au premier accès) ---
 
 /**
- * Rejoue un remplissage de cache mais NE PROPAGE PAS un ban : si Easybeer est
- * indisponible et qu'aucune donnée n'est encore en cache, renvoie un résultat
- * vide marqué `indisponible` (l'admin voit un message + bouton Actualiser au
- * lieu d'une erreur 503). Un `refresh` explicite qui échoue, lui, remonte
- * l'erreur (l'admin a demandé une action).
+ * ⚠️ Une lecture NORMALE (sans `forcerRefresh`) ne touche JAMAIS Easybeer :
+ * elle renvoie le cache, ou `indisponible` si le cache est vide. C'est capital
+ * pour le rate-limiting — chaque appel pendant un ban le prolonge, donc une
+ * simple visite de page ne doit rien déclencher. Seul un `refresh` EXPLICITE
+ * (bouton Synchroniser) appelle Easybeer, et un ban s'y propage (503 → compte
+ * à rebours côté UI).
  */
 async function lireCacheOuRemplir(
   db: Firestore,
@@ -248,23 +249,23 @@ async function lireCacheOuRemplir(
   remplir: (db: Firestore) => Promise<unknown[]>,
   forcerRefresh: boolean,
 ): Promise<{ items: unknown[]; syncedAt: number | null; indisponible?: boolean }> {
-  const snap = forcerRefresh ? null : await db.doc(chemin).get()
-  if (snap?.exists) {
-    const d = snap.data() as Record<string, unknown>
-    return { items: (d[cle] as unknown[]) ?? [], syncedAt: (d.syncedAt as number) ?? null }
+  const snap = await db.doc(chemin).get()
+  const cache = snap.exists ? (snap.data() as Record<string, unknown>) : null
+
+  if (!forcerRefresh) {
+    // Lecture normale : cache uniquement, aucun appel Easybeer.
+    if (cache) return { items: (cache[cle] as unknown[]) ?? [], syncedAt: (cache.syncedAt as number) ?? null }
+    return { items: [], syncedAt: null, indisponible: true }
   }
+
+  // Refresh explicite : on tente Easybeer. En cas de ban, repli sur le cache
+  // existant si possible, sinon on laisse remonter l'erreur (503 + compte à rebours).
   try {
     const items = await remplir(db)
     return { items, syncedAt: Date.now() }
   } catch (e) {
-    if (e instanceof EasybeerBanError && !forcerRefresh) {
-      // Repli : dernière version du cache si elle existe, sinon vide + drapeau.
-      const secours = await db.doc(chemin).get()
-      if (secours.exists) {
-        const d = secours.data() as Record<string, unknown>
-        return { items: (d[cle] as unknown[]) ?? [], syncedAt: (d.syncedAt as number) ?? null }
-      }
-      return { items: [], syncedAt: null, indisponible: true }
+    if (e instanceof EasybeerBanError && cache) {
+      return { items: (cache[cle] as unknown[]) ?? [], syncedAt: (cache.syncedAt as number) ?? null }
     }
     throw e
   }

@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 const queryClient = useQueryClient()
 const commandeOuverte = ref<number | null>(null)
 
-const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'commandes'],
   queryFn: () => api.get<AdminCommandesResponse>('/admin/commandes'),
 })
@@ -65,8 +65,8 @@ const commandesAffichees = computed(() =>
 
       <EasybeerIndisponible
         v-else-if="data?.indisponible"
-        :pending="isFetching"
-        @reessayer="refetch()"
+        :pending="actualisation.isPending.value"
+        @reessayer="actualisation.mutate()"
       />
 
       <template v-else>
