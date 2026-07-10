@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { z } from 'zod'
 import { toast } from 'vue-sonner'
+import { EyeIcon, EyeOffIcon } from '@lucide/vue'
 import { useAuth } from '@/composables/useAuth'
 import BrandLogo from '@/components/BrandLogo.vue'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ const form = reactive({ email: '', password: '' })
 const fieldErrors = reactive<{ email?: string; password?: string }>({})
 const submitting = ref(false)
 const resetting = ref(false)
+const motDePasseVisible = ref(false)
 
 const redirectTo = computed(() => {
   const r = route.query.redirect
@@ -120,13 +122,26 @@ async function onResetPassword() {
           </div>
           <div class="grid gap-1.5">
             <Label for="password">Mot de passe</Label>
-            <Input
-              id="password"
-              v-model="form.password"
-              type="password"
-              autocomplete="current-password"
-              :aria-invalid="Boolean(fieldErrors.password)"
-            />
+            <div class="relative">
+              <Input
+                id="password"
+                v-model="form.password"
+                :type="motDePasseVisible ? 'text' : 'password'"
+                autocomplete="current-password"
+                class="pr-10"
+                :aria-invalid="Boolean(fieldErrors.password)"
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground hover:text-foreground"
+                :aria-label="motDePasseVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                :aria-pressed="motDePasseVisible"
+                @click="motDePasseVisible = !motDePasseVisible"
+              >
+                <EyeOffIcon v-if="motDePasseVisible" class="size-4" />
+                <EyeIcon v-else class="size-4" />
+              </button>
+            </div>
             <p v-if="fieldErrors.password" class="text-sm text-destructive">{{ fieldErrors.password }}</p>
           </div>
           <Button type="submit" class="w-full" :disabled="submitting">
