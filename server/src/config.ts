@@ -40,6 +40,9 @@ export const config = {
     // journée complète, puis on bloque l'envoi plutôt que d'utiliser un prix
     // potentiellement obsolète.
     prixMaxAgeMinutes: Number(process.env.PRIX_CACHE_MAX_AGE_MINUTES ?? 2160),
+    // Cache admin des commandes globales : fenêtre volontairement courte pour
+    // limiter le volume utile lu/affiché pendant les tests Easybeer.
+    adminCommandesJours: Number(process.env.ADMIN_COMMANDES_CACHE_DAYS ?? 30),
   },
 
   // En dev, tant que Firebase n'est pas configuré, on court-circuite l'auth.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resoudreGrilleRacine, type ModeleClientType } from '../src/easybeer.js'
+import { filtrerCommandesDepuis, resoudreGrilleRacine, type ModeleClientType } from '../src/easybeer.js'
 
 describe('resoudreGrilleRacine', () => {
   const types: ModeleClientType[] = [
@@ -29,5 +29,24 @@ describe('resoudreGrilleRacine', () => {
       { idClientType: 2, idParent: 1 },
     ]
     expect(resoudreGrilleRacine(1, cycle)).toBeDefined()
+  })
+})
+
+describe('filtrerCommandesDepuis', () => {
+  it('conserve uniquement les commandes créées après la date seuil', () => {
+    const seuil = Date.UTC(2026, 6, 1)
+    const commandes = [
+      { idCommande: 1, dateCreation: '2026-06-30T23:59:59.000Z' },
+      { idCommande: 2, dateCreation: '2026-07-01T00:00:00.000Z' },
+      { idCommande: 3, dateCreation: Date.UTC(2026, 6, 2) },
+      { idCommande: 4 },
+    ]
+
+    expect(filtrerCommandesDepuis(commandes, seuil).map((cmd) => cmd.idCommande)).toEqual([2, 3])
+  })
+
+  it('laisse la liste intacte sans date seuil', () => {
+    const commandes = [{ idCommande: 1 }, { idCommande: 2 }]
+    expect(filtrerCommandesDepuis(commandes, null)).toBe(commandes)
   })
 })

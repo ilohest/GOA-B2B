@@ -59,5 +59,8 @@ Le compte client est lié au client Easybeer de test 588074 (CL000083).
   **Synchroniser Easybeer** depuis l'admin si le nouveau prix doit être visible
   immédiatement. Sinon, il sera pris en compte à la prochaine synchronisation
   nocturne.
+- Le cache admin des commandes globales charge par défaut les **30 derniers
+  jours** (`ADMIN_COMMANDES_CACHE_DAYS=30`) pour limiter le volume utile pendant
+  les tests Easybeer.
 - Le tableau de bord admin signale une synchronisation trop ancienne afin de
   vérifier le cache avant l'ouverture des commandes.

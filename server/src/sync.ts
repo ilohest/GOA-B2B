@@ -17,6 +17,7 @@
  * sous le radar du rate-limiting.
  */
 import type { Firestore } from 'firebase-admin/firestore'
+import { config } from './config.js'
 import {
   EasybeerBanError,
   getClient,
@@ -299,11 +300,16 @@ function resumerCommandeClient(r: CommandeResume): CommandeClientCache | null {
   }
 }
 
-/** Les ~200 commandes les plus récentes, en un doc de cache. */
+/** Les commandes admin récentes, en un doc de cache. */
 export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResumeCache[]> {
-  const { commandes } = await listeCommandesRecentes(200)
+  const depuisMs = Date.now() - config.cache.adminCommandesJours * 24 * 60 * 60 * 1000
+  const { commandes } = await listeCommandesRecentes(200, depuisMs)
   const resumees = commandes.map(resumerCommande)
-  await db.doc('cache/commandesRecentes').set({ commandes: resumees, syncedAt: Date.now() })
+  await db.doc('cache/commandesRecentes').set({
+    commandes: resumees,
+    syncedAt: Date.now(),
+    periodeJours: config.cache.adminCommandesJours,
+  })
   return resumees
 }
 

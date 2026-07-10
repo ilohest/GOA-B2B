@@ -942,7 +942,7 @@ app.get('/api/admin/statut-easybeer', requireAuth, requireAdmin, (c) => c.json(e
 // ---- Admin : commandes (tous clients) ----
 
 /**
- * Les ~200 commandes les plus récentes, depuis le CACHE (resynchro via
+ * Les commandes récentes (30 jours par défaut), depuis le CACHE (resynchro via
  * `?refresh=1` ou le job de synchro) — plus d'appel Easybeer par visite.
  */
 app.get('/api/admin/commandes', requireAuth, requireAdmin, async (c) => {

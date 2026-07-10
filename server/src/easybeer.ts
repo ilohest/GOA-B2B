@@ -23,9 +23,9 @@ const BASIC_AUTH =
  * file unique avec espacement minimal — aucun code appelant ne peut créer de
  * rafale, même sous trafic concurrent.
  */
-// 400 ms (2,5 req/s) : un run à ~5 req/s soutenus a déclenché un ban malgré la
-// limite annoncée de 10 req/s (fenêtre glissante probable, bans croissants).
-const MIN_INTERVAL_MS = 400
+// 1000 ms (1 req/s) : volontairement conservateur. Easybeer annonce 10 req/s,
+// mais des runs plus rapides ont déclenché des bans sur fenêtre glissante.
+const MIN_INTERVAL_MS = 1000
 let fileAttente: Promise<unknown> = Promise.resolve()
 let dernierAppel = 0
 
@@ -540,11 +540,12 @@ async function pageCommandes(numeroPage: number, nombreParPage: number): Promise
  * Contraintes API (vérifiées 2026-07-09) : seul tri fiable = `numero`
  * CROISSANT (`mode`/`dateCreation` inopérants) et `totalElements`/`totalPages`
  * sont FAUX sur cet endpoint → scan séquentiel jusqu'à une page incomplète,
- * puis on garde la fin et on inverse. Volume GOA (~1 500 commandes/an) : ~15
- * appels max, sérialisés par la file — usage admin ponctuel uniquement.
+ * puis on garde la fin et on inverse. `depuisMs` filtre ensuite côté serveur :
+ * Easybeer ne fournit pas de filtre date fiable pour la liste globale.
  */
 export async function listeCommandesRecentes(
   limite = 100,
+  depuisMs: number | null = null,
 ): Promise<{ commandes: CommandeResume[]; totalElements: number }> {
   const parPage = 100
   const PAGES_MAX = 40 // garde-fou
@@ -554,7 +555,16 @@ export async function listeCommandesRecentes(
     toutes = [...toutes, ...p.liste]
     if (p.liste.length < parPage) break
   }
-  return { commandes: toutes.slice(-limite).reverse(), totalElements: toutes.length }
+  const filtrees = filtrerCommandesDepuis(toutes, depuisMs)
+  return { commandes: filtrees.slice(-limite).reverse(), totalElements: toutes.length }
+}
+
+export function filtrerCommandesDepuis(commandes: CommandeResume[], depuisMs: number | null): CommandeResume[] {
+  if (depuisMs == null) return commandes
+  return commandes.filter((cmd) => {
+    const ts = cmd.dateCreation == null ? 0 : new Date(cmd.dateCreation).getTime() || 0
+    return ts >= depuisMs
+  })
 }
 
 /**
