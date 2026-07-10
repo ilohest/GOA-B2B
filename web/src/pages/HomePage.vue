@@ -61,7 +61,16 @@ const lignesDetail = computed(() =>
 const totalHT = computed(() => lignesDetail.value.reduce((somme, l) => somme + l.sousTotal, 0))
 const minimum = computed(() => data.value?.client?.minimumCommande ?? null)
 const sousMinimum = computed(() => minimum.value != null && totalHT.value < minimum.value)
+const lignesPrixExpires = computed(() => lignesDetail.value.filter((l) => !l.produit.prixEstFrais))
+const commandeBloqueeParPrix = computed(() => lignesPrixExpires.value.length > 0)
 const panierVisible = computed(() => nbCartons.value > 0 || modification.value != null)
+const agePrixCatalogue = computed(() => {
+  const ageMs = catalogue.data.value?.prixPlusAncienAgeMs
+  if (ageMs == null) return null
+  const minutes = Math.max(1, Math.ceil(ageMs / 60_000))
+  if (minutes < 60) return `${minutes} min`
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`
+})
 
 /** Volet détail de la barre mobile. */
 const barreDepliee = ref(false)
@@ -149,6 +158,9 @@ function annulerModification() {
             </template>
             <template v-else>Prix HT selon vos conditions tarifaires.</template>
           </p>
+          <p v-if="agePrixCatalogue" class="mt-1 text-xs text-muted-foreground">
+            Tarifs synchronisés il y a {{ agePrixCatalogue }}.
+          </p>
         </div>
 
         <div v-if="catalogue.isPending.value || isPending" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -191,10 +203,13 @@ function annulerModification() {
         </CardHeader>
         <CardContent>
           <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum">
+            <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
+              Un tarif du panier doit être resynchronisé par GOA avant commande.
+            </p>
             <Button
               class="mt-2 w-full"
               size="lg"
-              :disabled="sousMinimum || nbCartons === 0"
+              :disabled="sousMinimum || commandeBloqueeParPrix || nbCartons === 0"
               @click="ouvrirRecap"
             >
               {{ modification ? 'Mettre à jour' : 'Commander' }}
@@ -221,6 +236,9 @@ function annulerModification() {
             la nouvelle version annule et remplace la précédente.
           </p>
           <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum">
+            <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
+              Un tarif du panier doit être resynchronisé par GOA avant commande.
+            </p>
             <button
               v-if="modification"
               class="justify-self-start text-xs text-muted-foreground underline underline-offset-2"
@@ -248,7 +266,7 @@ function annulerModification() {
               Minimum : {{ prixFr(minimum!) }} HT
             </p>
           </button>
-          <Button size="lg" :disabled="sousMinimum || nbCartons === 0" @click="ouvrirRecap">
+          <Button size="lg" :disabled="sousMinimum || commandeBloqueeParPrix || nbCartons === 0" @click="ouvrirRecap">
             {{ modification ? 'Mettre à jour' : 'Commander' }}
           </Button>
         </div>
@@ -278,7 +296,15 @@ function annulerModification() {
             />
           </div>
           <DialogFooter>
-            <Button class="w-full" size="lg" :disabled="envoi.isPending.value" @click="envoi.mutate()">
+            <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
+              Un tarif du panier doit être resynchronisé par GOA avant commande.
+            </p>
+            <Button
+              class="w-full"
+              size="lg"
+              :disabled="envoi.isPending.value || commandeBloqueeParPrix"
+              @click="envoi.mutate()"
+            >
               {{ envoi.isPending.value ? 'Envoi…' : modification ? 'Confirmer la modification' : 'Confirmer la commande' }}
             </Button>
           </DialogFooter>

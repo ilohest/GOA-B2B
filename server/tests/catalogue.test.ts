@@ -94,4 +94,24 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
     const sansTag = catalogueClient(produits, overrides, null, null)
     expect(sansTag.every((p) => p.pas === 1)).toBe(true)
   })
+
+  it('marque les prix frais et expirés par produit', () => {
+    const maintenant = Date.now()
+    const res = catalogueClient(
+      produits,
+      overrides,
+      { '1': 27.3, '2': 19.9 },
+      null,
+      { '1': maintenant - 30_000, '2': maintenant - 120_000 },
+      60_000,
+    )
+    expect(res.find((p) => p.idStockBouteille === 1)).toMatchObject({
+      prixHT: 27.3,
+      prixEstFrais: true,
+    })
+    expect(res.find((p) => p.idStockBouteille === 2)).toMatchObject({
+      prixHT: 19.9,
+      prixEstFrais: false,
+    })
+  })
 })

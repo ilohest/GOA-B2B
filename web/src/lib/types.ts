@@ -79,6 +79,8 @@ export interface ProduitCatalogueClient {
   photoUrl: string | null
   rupture: boolean
   prixHT: number | null
+  prixUpdatedAt: number | null
+  prixEstFrais: boolean
   /** Incrément de quantité imposé (1 sauf clients La Poste : 3 ou 2). */
   pas: number
 }
@@ -86,6 +88,8 @@ export interface ProduitCatalogueClient {
 export interface CatalogueClientResponse {
   produits: ProduitCatalogueClient[]
   syncedAt: number
+  prixMaxAgeMinutes: number
+  prixPlusAncienAgeMs: number | null
 }
 
 export interface SyncReport {

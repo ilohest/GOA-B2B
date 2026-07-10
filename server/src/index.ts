@@ -23,11 +23,14 @@ import {
   type ProduitAutocomplete,
 } from './easybeer.js'
 import {
+  agePrixMs,
+  CacheIndisponibleError,
   lireCacheClient,
   lireCatalogue,
   lireCommandesRecentes,
   lireListeClients,
   lancerSync,
+  prixEstFrais,
 } from './sync.js'
 import {
   BulkParamsSchema,
@@ -55,6 +58,9 @@ app.use('*', cors({ origin: config.webOrigin, credentials: true }))
 app.onError((err, c) => {
   if (err instanceof EasybeerBanError) {
     return c.json({ error: err.message, retryAfterSeconds: err.retryAfterSeconds }, 503)
+  }
+  if (err instanceof CacheIndisponibleError) {
+    return c.json({ error: err.message, code: err.code }, 503)
   }
   console.error('[server]', err)
   return c.json({ error: err.message || 'Erreur interne' }, 500)
@@ -108,9 +114,23 @@ app.get('/api/catalogue', requireAuth, async (c) => {
 
   const [{ produits, syncedAt }, overrides] = await Promise.all([lireCatalogue(db), lireOverrides(db)])
   const cacheClient = user.easybeerIdClient != null ? await lireCacheClient(db, user.easybeerIdClient) : null
+  const prixMaxAgeMs = config.cache.prixMaxAgeMinutes * 60_000
+  const produitsClient = catalogueClient(
+    produits,
+    overrides,
+    cacheClient?.prix ?? null,
+    cacheClient?.client.tags,
+    cacheClient?.prixUpdatedAt,
+    prixMaxAgeMs,
+  )
+  const ages = produitsClient
+    .map((p) => (p.prixUpdatedAt == null ? null : Date.now() - p.prixUpdatedAt))
+    .filter((age): age is number => age != null)
   return c.json({
-    produits: catalogueClient(produits, overrides, cacheClient?.prix ?? null, cacheClient?.client.tags),
+    produits: produitsClient,
     syncedAt,
+    prixMaxAgeMinutes: config.cache.prixMaxAgeMinutes,
+    prixPlusAncienAgeMs: ages.length ? Math.max(...ages) : null,
   })
 })
 
@@ -171,6 +191,13 @@ async function resoudreLignes(
     const prixUnitaireHT = cacheClient.prix[String(l.idStockBouteille)]
     if (prixUnitaireHT == null) {
       return ko(`Pas de tarif défini pour « ${override.displayName || produit.libelle} » — contactez GOA`)
+    }
+    if (!prixEstFrais(cacheClient, l.idStockBouteille, config.cache.prixMaxAgeMinutes * 60_000)) {
+      const ageMinutes = agePrixMs(cacheClient, l.idStockBouteille)
+      const ageTexte = ageMinutes == null ? 'inconnu' : `${Math.ceil(ageMinutes / 60_000)} min`
+      return ko(
+        `Tarif à resynchroniser pour « ${override.displayName || produit.libelle} » (âge : ${ageTexte}). Contactez GOA avant de commander.`,
+      )
     }
     lignes.push({ produit, quantite: l.quantite, prixUnitaireHT })
   }

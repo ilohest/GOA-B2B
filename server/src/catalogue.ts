@@ -77,6 +77,8 @@ export interface ProduitCatalogueClient {
   photoUrl: string | null
   rupture: boolean
   prixHT: number | null
+  prixUpdatedAt: number | null
+  prixEstFrais: boolean
   /** Incrément de quantité imposé (1 sauf clients La Poste : 3 ou 2). */
   pas: number
 }
@@ -91,19 +93,27 @@ export function catalogueClient(
   overrides: Record<string, CatalogueOverride>,
   prixClient: Record<string, number> | null,
   tagsClient: unknown = null,
+  prixUpdatedAt: Record<string, number> | null = null,
+  prixMaxAgeMs = Infinity,
 ): ProduitCatalogueClient[] {
   const tags = normaliserTags(tagsClient)
+  const now = Date.now()
   return produits
     .filter((p) => overrides[String(p.idStockBouteille)]?.visible)
     .map((p) => {
       const o = overrides[String(p.idStockBouteille)]
+      const id = String(p.idStockBouteille)
+      const updatedAt = prixUpdatedAt?.[id] ?? null
+      const prixHT = prixClient?.[id] ?? null
       return {
         idStockBouteille: p.idStockBouteille,
         libelle: o.displayName || p.libelle,
         libelleEasybeer: p.libelle,
         photoUrl: o.photoUrl || null,
         rupture: o.rupture,
-        prixHT: prixClient?.[String(p.idStockBouteille)] ?? null,
+        prixHT,
+        prixUpdatedAt: updatedAt,
+        prixEstFrais: prixHT != null && updatedAt != null && now - updatedAt <= prixMaxAgeMs,
         pas: pasDeCommande(p.libelle, tags),
       }
     })

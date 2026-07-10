@@ -4,8 +4,7 @@
  *
  * - Emplacement image : `photoUrl` de l'override admin, sinon placeholder de
  *   marque (pastille GOA sur fond doux).
- * - Rupture : produit TOUJOURS visible mais grisé (photo désaturée), mention
- *   « Victime de son succès » en rouge, pas de stepper.
+ * - Rupture / prix expiré : produit visible mais pas commandable.
  */
 import { ref } from 'vue'
 import type { ProduitCatalogueClient } from '@/lib/types'
@@ -61,6 +60,12 @@ const imageEnErreur = ref(false)
       >
         Victime de son succès
       </span>
+      <span
+        v-else-if="produit.prixHT != null && !produit.prixEstFrais"
+        class="absolute top-3 left-3 rounded-full bg-background/90 px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm backdrop-blur"
+      >
+        Tarif à resynchroniser
+      </span>
     </div>
 
     <div class="flex flex-1 flex-col gap-3 p-4">
@@ -82,7 +87,7 @@ const imageEnErreur = ref(false)
         <p v-else class="text-sm text-muted-foreground">Prix sur demande</p>
 
         <QuantiteStepper
-          v-if="!produit.rupture && produit.prixHT != null"
+          v-if="!produit.rupture && produit.prixHT != null && produit.prixEstFrais"
           class="shrink-0"
           :quantite="quantite"
           :pas="produit.pas"
@@ -90,6 +95,9 @@ const imageEnErreur = ref(false)
           @changer="(delta) => emit('changer', delta)"
         />
       </div>
+      <p v-if="produit.prixHT != null && !produit.prixEstFrais" class="text-xs text-amber-700">
+        GOA doit resynchroniser ce tarif avant commande.
+      </p>
     </div>
   </article>
 </template>

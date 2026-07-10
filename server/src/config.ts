@@ -34,6 +34,12 @@ export const config = {
   // Passer à false en prod pour créer de vraies commandes.
   commandeEstDevis: process.env.COMMANDE_EST_DEVIS !== 'false',
 
+  cache: {
+    // Au-delà, on affiche encore le catalogue mais on bloque l'envoi d'une
+    // commande : Easybeer reste la source de vérité des prix.
+    prixMaxAgeMinutes: Number(process.env.PRIX_CACHE_MAX_AGE_MINUTES ?? 60),
+  },
+
   // En dev, tant que Firebase n'est pas configuré, on court-circuite l'auth.
   authDisabled: process.env.AUTH_DISABLED === 'true',
   devEasybeerIdClient: Number(process.env.DEV_EASYBEER_ID_CLIENT ?? 588074),

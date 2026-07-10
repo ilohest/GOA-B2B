@@ -84,6 +84,8 @@ export interface CacheClientDoc {
   client: ClientCache
   idGrilleTarifaire: number | null
   prix: Record<string, number>
+  /** Timestamp par prix réussi. Indispensable quand une synchro est partielle. */
+  prixUpdatedAt: Record<string, number>
   syncedAt: number
 }
 
@@ -96,6 +98,28 @@ export interface SyncReport {
   erreurs?: string[]
   dureeMs: number
   syncedAt: number
+}
+
+export class CacheIndisponibleError extends Error {
+  constructor(public code: string, message: string) {
+    super(message)
+    this.name = 'CacheIndisponibleError'
+  }
+}
+
+export function prixEstFrais(
+  cache: Pick<CacheClientDoc, 'prixUpdatedAt'>,
+  idStockBouteille: number,
+  maxAgeMs: number,
+  now = Date.now(),
+): boolean {
+  const updatedAt = cache.prixUpdatedAt[String(idStockBouteille)]
+  return typeof updatedAt === 'number' && now - updatedAt <= maxAgeMs
+}
+
+export function agePrixMs(cache: Pick<CacheClientDoc, 'prixUpdatedAt'>, idStockBouteille: number, now = Date.now()) {
+  const updatedAt = cache.prixUpdatedAt[String(idStockBouteille)]
+  return typeof updatedAt === 'number' ? Math.max(0, now - updatedAt) : null
 }
 
 /** Catalogue commun (1 appel). */
@@ -138,6 +162,10 @@ export async function syncClient(
   // manquants. Cf. rate-limiting : une synchro peut être partielle.
   const existant = (await db.doc(`cacheClients/${idClient}`).get()).data() as CacheClientDoc | undefined
   const prix: Record<string, number> = { ...(existant?.prix ?? {}) }
+  const prixUpdatedAt: Record<string, number> = {
+    ...(existant?.prixUpdatedAt ??
+      Object.fromEntries(Object.keys(existant?.prix ?? {}).map((id) => [id, existant?.syncedAt ?? 0]))),
+  }
 
   if (idClientType != null) {
     for (const p of produits) {
@@ -147,7 +175,11 @@ export async function syncClient(
           () => getPrix(p.idStockBouteille, idClientType, idClient),
           (r) => r != null,
         )
-        if (res?.prixHT != null) prix[String(p.idStockBouteille)] = res.prixHT
+        if (res?.prixHT != null) {
+          const id = String(p.idStockBouteille)
+          prix[id] = res.prixHT
+          prixUpdatedAt[id] = Date.now()
+        }
       } catch (e) {
         // Ban en cours → inutile de marteler les produits suivants : on garde
         // ce qu'on a (prix déjà en cache préservés) et on abandonne cette passe.
@@ -157,7 +189,7 @@ export async function syncClient(
     }
   }
 
-  const doc: CacheClientDoc = { client: allegerClient(fiche), idGrilleTarifaire, prix, syncedAt: Date.now() }
+  const doc: CacheClientDoc = { client: allegerClient(fiche), idGrilleTarifaire, prix, prixUpdatedAt, syncedAt: Date.now() }
   await db.doc(`cacheClients/${idClient}`).set(doc)
   return doc
 }
@@ -306,23 +338,28 @@ export async function lireCommandesRecentes(
 export async function lireCatalogue(db: Firestore): Promise<{ produits: ProduitAutocomplete[]; syncedAt: number }> {
   const snap = await db.doc('cache/catalogue').get()
   if (snap.exists) return snap.data() as { produits: ProduitAutocomplete[]; syncedAt: number }
-  const produits = await syncCatalogue(db)
-  return { produits, syncedAt: Date.now() }
+  throw new CacheIndisponibleError('catalogue_manquant', 'Catalogue non synchronisé')
 }
 
 export async function lireReferentiels(db: Firestore): Promise<ModeleClientType[]> {
   const snap = await db.doc('cache/referentiels').get()
   if (snap.exists) return (snap.data() as { typesClient: ModeleClientType[] }).typesClient
-  return syncReferentiels(db)
+  throw new CacheIndisponibleError('referentiels_manquants', 'Référentiels Easybeer non synchronisés')
 }
 
-/** Cache client, rempli à la volée au premier accès (ex. premier login après invitation). */
+/** Cache client strict : une lecture applicative normale ne déclenche jamais Easybeer. */
 export async function lireCacheClient(db: Firestore, idClient: number): Promise<CacheClientDoc> {
   const snap = await db.doc(`cacheClients/${idClient}`).get()
-  if (snap.exists) return snap.data() as CacheClientDoc
-  const { produits } = await lireCatalogue(db)
-  const types = await lireReferentiels(db)
-  return syncClient(db, idClient, types, produits)
+  if (!snap.exists) {
+    throw new CacheIndisponibleError('client_cache_manquant', `Cache client ${idClient} non synchronisé`)
+  }
+  const data = snap.data() as CacheClientDoc
+  return {
+    ...data,
+    prixUpdatedAt:
+      data.prixUpdatedAt ??
+      Object.fromEntries(Object.keys(data.prix ?? {}).map((id) => [id, data.syncedAt ?? 0])),
+  }
 }
 
 /** Ids des clients Easybeer liés à au moins un compte plateforme. */
@@ -352,14 +389,24 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
     produits = await syncCatalogue(db)
   } catch (e) {
     erreurs.push(`catalogue : ${(e as Error).message}`)
-    produits = (await lireCatalogue(db)).produits
+    try {
+      produits = (await lireCatalogue(db)).produits
+    } catch (cacheError) {
+      erreurs.push(`catalogue cache : ${(cacheError as Error).message}`)
+      produits = []
+    }
   }
   let types: ModeleClientType[]
   try {
     types = await syncReferentiels(db)
   } catch (e) {
     erreurs.push(`référentiels : ${(e as Error).message}`)
-    types = await lireReferentiels(db)
+    try {
+      types = await lireReferentiels(db)
+    } catch (cacheError) {
+      erreurs.push(`référentiels cache : ${(cacheError as Error).message}`)
+      types = []
+    }
   }
 
   let listeClientsNb = 0
