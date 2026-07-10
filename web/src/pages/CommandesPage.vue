@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useQuery } from '@tanstack/vue-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CommandeDetail, CommandeEdition, CommandeResume, CommandesClientResponse } from '@/lib/types'
@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 
 const router = useRouter()
+const queryClient = useQueryClient()
 const { chargerCommande } = usePanier()
 
 const { data, isPending, isError, error } = useQuery({
@@ -21,6 +22,15 @@ const { data, isPending, isError, error } = useQuery({
 })
 
 const chargement = ref<number | null>(null)
+
+const chargementHistorique = useMutation({
+  mutationFn: () => api.get<CommandesClientResponse>('/commandes?refresh=1'),
+  onSuccess: (res) => {
+    queryClient.setQueryData(['commandes'], res)
+    toast.success('Historique chargé.')
+  },
+  onError: (e) => toast.error((e as Error).message),
+})
 
 // --- Détail dépliable (lignes + documents) ---
 
@@ -113,9 +123,19 @@ async function modifier(commande: CommandeResume) {
           Historique Easybeer temporairement indisponible. Affichage des commandes envoyées depuis cette plateforme.
         </p>
 
-        <p v-if="data?.indisponible && !data.commandes.length" class="text-sm text-muted-foreground">
-          Votre historique sera disponible après la prochaine synchronisation.
-        </p>
+        <div v-if="data?.indisponible && !data.commandes.length" class="grid justify-items-start gap-2">
+          <p class="text-sm text-muted-foreground">
+            Votre historique n'est pas encore en cache.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="chargementHistorique.isPending.value"
+            @click="chargementHistorique.mutate()"
+          >
+            {{ chargementHistorique.isPending.value ? 'Chargement…' : "Charger l'historique" }}
+          </Button>
+        </div>
 
         <p v-else-if="!data?.commandes.length" class="text-sm text-muted-foreground">
           Aucune commande pour l'instant.

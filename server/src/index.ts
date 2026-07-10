@@ -32,6 +32,7 @@ import {
   lireListeClients,
   lancerSync,
   prixEstFrais,
+  syncCommandesClient,
   type CommandeClientCache,
 } from './sync.js'
 import {
@@ -359,6 +360,10 @@ app.get('/api/commandes', requireAuth, async (c) => {
       }))
       .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
     return c.json({ commandes, direct: true })
+  }
+  if (c.req.query('refresh') === '1') {
+    const commandes = await syncCommandesClient(db, user.easybeerIdClient)
+    return c.json({ commandes, syncedAt: Date.now(), indisponible: false })
   }
   try {
     const { commandes, syncedAt } = await lireCommandesClientCache(db, user.easybeerIdClient)
