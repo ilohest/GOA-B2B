@@ -61,7 +61,7 @@ const imageEnErreur = ref(false)
         Victime de son succès
       </span>
       <span
-        v-else-if="produit.prixHT != null && !produit.prixEstFrais"
+        v-else-if="produit.prixHT == null || !produit.prixEstFrais"
         class="absolute top-3 left-3 rounded-full bg-background/90 px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm backdrop-blur"
       >
         Tarif en vérification
@@ -75,7 +75,7 @@ const imageEnErreur = ref(false)
 
       <!-- Prix + ajout au panier, en bas de carte -->
       <div class="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <p v-if="produit.prixHT != null" class="flex items-baseline gap-1">
+        <p v-if="produit.prixHT != null && produit.prixEstFrais" class="flex items-baseline gap-1">
           <span
             class="text-lg font-semibold tracking-tight"
             :class="produit.rupture ? 'text-muted-foreground' : ''"
@@ -84,7 +84,7 @@ const imageEnErreur = ref(false)
           </span>
           <span class="text-xs whitespace-nowrap text-muted-foreground">HT / carton</span>
         </p>
-        <p v-else class="text-sm text-muted-foreground">Prix sur demande</p>
+        <p v-else class="text-sm text-amber-700">Tarif en vérification</p>
 
         <QuantiteStepper
           v-if="!produit.rupture && produit.prixHT != null && produit.prixEstFrais"
@@ -95,7 +95,7 @@ const imageEnErreur = ref(false)
           @changer="(delta) => emit('changer', delta)"
         />
       </div>
-      <p v-if="produit.prixHT != null && !produit.prixEstFrais" class="text-xs text-amber-700">
+      <p v-if="produit.prixHT == null || !produit.prixEstFrais" class="text-xs text-amber-700">
         Commande temporairement indisponible pour ce produit.
       </p>
     </div>
