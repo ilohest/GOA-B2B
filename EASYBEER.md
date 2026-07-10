@@ -56,6 +56,12 @@
     134 s en insistant). Parade implémentée : **disjoncteur serveur** (`easybeer.ts`) — pendant un
     ban connu, échec local immédiat sans appel réseau, jusqu'à l'échéance annoncée + marge.
     Attention aussi aux refetchs automatiques du front (focus fenêtre) qui peuvent entretenir un ban.
+  - 📄 **La doc Swagger (`easybeer-api-docs.json`, v2.3.0) ne dit RIEN sur le rate-limiting**
+    (vérifié 2026-07-10) : codes de réponse documentés = seulement 200/201/401/403/404 (pas de 429 ni
+    503), aucun en-tête de réponse documenté (donc pas de `Retry-After`/`X-RateLimit-*` officiel),
+    aucune mention de quota. La seule limite « officielle » vient du message d'erreur runtime
+    (« Limit of 10 requests per second »). → Limites réelles à obtenir auprès du support
+    (`easybeer.fr@gmail.com`, « Dev-Team »). Message envoyé le 2026-07-10 (voir `message-support-easybeer.md`).
   - ⚠️⚠️⚠️ **Les durées annoncées ne sont PAS fiables** : ban toujours actif après 5 min 30 de
     silence TOTAL (annonces successives 97 s → 134 s → 60 s, 2026-07-09 matin). Après une session
     intensive, considérer le quota grillé pour 15-30 min minimum. Conséquence produit : ne JAMAIS
