@@ -151,8 +151,8 @@ async function modifier(commande: CommandeResume) {
               >
                 {{ chargement === cmd.idCommande ? 'Chargement…' : 'Modifier' }}
               </Button>
-              <p v-else class="text-xs text-muted-foreground">
-                {{ data?.source === 'local' ? 'Détail indisponible' : 'Non modifiable' }}
+              <p v-else-if="data?.source === 'local'" class="text-xs text-muted-foreground">
+                Détail indisponible
               </p>
             </div>
           </div>
