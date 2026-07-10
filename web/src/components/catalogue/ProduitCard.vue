@@ -60,12 +60,6 @@ const imageEnErreur = ref(false)
       >
         Victime de son succès
       </span>
-      <span
-        v-else-if="produit.prixHT == null || !produit.prixEstFrais"
-        class="absolute top-3 left-3 rounded-full bg-background/90 px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm backdrop-blur"
-      >
-        Tarif en vérification
-      </span>
     </div>
 
     <div class="flex flex-1 flex-col gap-3 p-4">
@@ -84,8 +78,6 @@ const imageEnErreur = ref(false)
           </span>
           <span class="text-xs whitespace-nowrap text-muted-foreground">HT / carton</span>
         </p>
-        <p v-else class="text-sm text-amber-700">Tarif en vérification</p>
-
         <QuantiteStepper
           v-if="!produit.rupture && produit.prixHT != null && produit.prixEstFrais"
           class="shrink-0"
