@@ -339,7 +339,8 @@ app.post('/api/commandes', requireAuth, async (c) => {
 
 /**
  * Historique des commandes du client depuis le cache alimenté par la synchro.
- * Une consultation client ne doit pas appeler Easybeer : le rate-limit est trop sensible.
+ * Si le cache n'existe pas encore, on tente un remplissage ciblé et unique pour
+ * éviter un bouton client tout en conservant un fallback local si Easybeer bloque.
  */
 app.get('/api/commandes', requireAuth, async (c) => {
   const user = c.get('user')
@@ -361,26 +362,45 @@ app.get('/api/commandes', requireAuth, async (c) => {
       .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
     return c.json({ commandes, direct: true })
   }
-  if (c.req.query('refresh') === '1') {
-    const commandes = await syncCommandesClient(db, user.easybeerIdClient)
-    return c.json({ commandes, syncedAt: Date.now(), indisponible: false })
-  }
   try {
     const { commandes, syncedAt } = await lireCommandesClientCache(db, user.easybeerIdClient)
     return c.json({ commandes, syncedAt, indisponible: false })
   } catch (e) {
     if (e instanceof CacheIndisponibleError) {
-      const commandes = await lireCommandesLocales(db, user.easybeerIdClient)
-      return c.json({
-        commandes,
-        syncedAt: null,
-        indisponible: true,
-        source: commandes.length ? 'local' : 'aucune',
-        code: e.code,
-      })
+      try {
+        const commandes = await syncCommandesClient(db, user.easybeerIdClient)
+        return c.json({ commandes, syncedAt: Date.now(), indisponible: false, source: 'easybeer' })
+      } catch {
+        const commandes = await lireCommandesLocales(db, user.easybeerIdClient)
+        return c.json({
+          commandes,
+          syncedAt: null,
+          indisponible: true,
+          source: commandes.length ? 'local' : 'aucune',
+          code: e.code,
+        })
+      }
     }
     throw e
   }
+})
+
+/**
+ * Refresh explicite de l'historique client, utilisé après action admin/debug.
+ * La page client standard n'en a pas besoin : elle tente déjà un remplissage
+ * ciblé si le cache est absent.
+ */
+app.post('/api/commandes/sync', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ commandes: [] })
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  const commandes = await syncCommandesClient(db, user.easybeerIdClient)
+  return c.json({
+    commandes,
+    syncedAt: Date.now(),
+    indisponible: false,
+  })
 })
 
 /** Charge une commande pour modification (contrôle propriété + garde-fou statut). */
