@@ -27,10 +27,12 @@ import {
   CacheIndisponibleError,
   lireCacheClient,
   lireCatalogue,
+  lireCommandesClient as lireCommandesClientCache,
   lireCommandesRecentes,
   lireListeClients,
   lancerSync,
   prixEstFrais,
+  type CommandeClientCache,
 } from './sync.js'
 import {
   BulkParamsSchema,
@@ -147,6 +149,20 @@ function etatAffichage(etat: unknown): { code: string; libelle: string; couleur:
   if (typeof etat === 'string') return { code: etat, libelle: etat, couleur: null }
   const e = (etat ?? {}) as { code?: string; libelle?: string; couleur?: string }
   return { code: e.code ?? '', libelle: e.libelle ?? e.code ?? '', couleur: e.couleur ?? null }
+}
+
+async function upsertCommandeClientCache(
+  db: NonNullable<ReturnType<typeof getDb>>,
+  idClient: number,
+  commande: CommandeClientCache,
+): Promise<void> {
+  const ref = db.doc(`cacheCommandesClients/${idClient}`)
+  const snap = await ref.get()
+  const data = snap.data() as { commandes?: CommandeClientCache[]; syncedAt?: number } | undefined
+  const commandes = [commande, ...(data?.commandes ?? []).filter((c) => c.idCommande !== commande.idCommande)]
+    .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
+    .slice(0, 200)
+  await ref.set({ commandes, syncedAt: data?.syncedAt ?? Date.now(), localUpdatedAt: Date.now() }, { merge: true })
 }
 
 /**
@@ -273,31 +289,49 @@ app.post('/api/commandes', requireAuth, async (c) => {
     createdAt: Date.now(),
   })
 
+  await upsertCommandeClientCache(db, user.easybeerIdClient, {
+    idCommande: resultat.id!,
+    numero: resultat.numero ?? null,
+    etat: {
+      code: config.commandeEstDevis ? 'DEVIS' : 'TRANSMISE',
+      libelle: config.commandeEstDevis ? 'Devis' : 'Transmise à GOA',
+      couleur: null,
+    },
+    totalHT,
+    totalTTC: null,
+    dateCreation: Date.now(),
+    modifiable: true,
+  })
+
   return c.json({ ok: true, orderId, totalHT, easybeer: { id: resultat.id, numero: resultat.numero } })
 })
 
 /**
- * Historique des commandes du client, lu en direct d'Easybeer (brief §6.1 —
- * consultation ponctuelle, pas de statut affiché au client).
+ * Historique des commandes du client depuis le cache alimenté par la synchro.
+ * Une consultation client ne doit pas appeler Easybeer : le rate-limit est trop sensible.
  */
 app.get('/api/commandes', requireAuth, async (c) => {
   const user = c.get('user')
   if (user.easybeerIdClient == null) return c.json({ commandes: [] })
-  const resumes = await listeCommandesClient(user.easybeerIdClient)
-  // dateCreation Easybeer = epoch millis ou chaîne selon les endpoints → on normalise.
-  const ts = (v: unknown) => (v == null ? 0 : new Date(v as string | number).getTime() || 0)
-  const commandes = resumes
-    .map((r) => ({
-      idCommande: r.idCommande,
-      numero: r.numero,
-      totalTTC: r.totalTTC ?? null,
-      totalHT: r.totalHT ?? null,
-      dateCreation: ts(r.dateCreation) || null,
-      etat: etatAffichage(r.etat),
-      modifiable: r.estModifiable ?? !ETATS_NON_MODIFIABLES.has(codeEtat(r.etat)),
-    }))
-    .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
-  return c.json({ commandes })
+  const db = getDb()
+  if (!db) {
+    const resumes = await listeCommandesClient(user.easybeerIdClient)
+    const ts = (v: unknown) => (v == null ? 0 : new Date(v as string | number).getTime() || 0)
+    const commandes = resumes
+      .map((r) => ({
+        idCommande: r.idCommande,
+        numero: r.numero,
+        totalTTC: r.totalTTC ?? null,
+        totalHT: r.totalHT ?? null,
+        dateCreation: ts(r.dateCreation) || null,
+        etat: etatAffichage(r.etat),
+        modifiable: r.estModifiable ?? !ETATS_NON_MODIFIABLES.has(codeEtat(r.etat)),
+      }))
+      .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
+    return c.json({ commandes, direct: true })
+  }
+  const { commandes, syncedAt } = await lireCommandesClientCache(db, user.easybeerIdClient)
+  return c.json({ commandes, syncedAt })
 })
 
 /** Charge une commande pour modification (contrôle propriété + garde-fou statut). */
@@ -454,6 +488,16 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
     })),
     commentaire: body.commentaire ?? '',
     createdAt: Date.now(),
+  })
+
+  await upsertCommandeClientCache(db, user.easybeerIdClient, {
+    idCommande,
+    numero: resultat.numero ?? ((commande.numero as number | undefined) ?? null),
+    etat: etatAffichage(commande.etat),
+    totalHT,
+    totalTTC: (commande.totalTTC as number | undefined) ?? null,
+    dateCreation: (commande.dateCreation == null ? Date.now() : new Date(commande.dateCreation as string | number).getTime()) || Date.now(),
+    modifiable: true,
   })
 
   return c.json({ ok: true, totalHT, easybeer: { id: resultat.id, numero: resultat.numero } })

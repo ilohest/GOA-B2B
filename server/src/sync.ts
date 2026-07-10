@@ -22,6 +22,7 @@ import {
   getClient,
   getPrix,
   listeClients,
+  listeCommandesClient,
   listeCommandesRecentes,
   listeProduitsAutocomplete,
   listeTypesClient,
@@ -246,6 +247,16 @@ export interface CommandeResumeCache {
   dateCreation: number | null
 }
 
+export interface CommandeClientCache {
+  idCommande: number
+  numero: number | null
+  etat: { code: string; libelle: string; couleur: string | null }
+  totalTTC: number | null
+  totalHT: number | null
+  dateCreation: number | null
+  modifiable: boolean
+}
+
 function resumerCommande(r: CommandeResume): CommandeResumeCache {
   const etat =
     typeof r.etat === 'string'
@@ -264,6 +275,30 @@ function resumerCommande(r: CommandeResume): CommandeResumeCache {
   }
 }
 
+const ETATS_NON_MODIFIABLES_CACHE = new Set(['LIVREE', 'ANNULEE'])
+
+function codeEtatCommande(etat: CommandeResume['etat']): string {
+  return typeof etat === 'string' ? etat : (etat?.code ?? '')
+}
+
+function resumerCommandeClient(r: CommandeResume): CommandeClientCache | null {
+  if (r.idCommande == null) return null
+  const etat =
+    typeof r.etat === 'string'
+      ? { code: r.etat, libelle: r.etat, couleur: null }
+      : { code: r.etat?.code ?? '', libelle: r.etat?.libelle ?? r.etat?.code ?? '', couleur: r.etat?.couleur ?? null }
+  const dateCreation = r.dateCreation == null ? null : new Date(r.dateCreation).getTime() || null
+  return {
+    idCommande: r.idCommande,
+    numero: r.numero ?? null,
+    etat,
+    totalTTC: r.totalTTC ?? null,
+    totalHT: r.totalHT ?? null,
+    dateCreation,
+    modifiable: r.estModifiable ?? !ETATS_NON_MODIFIABLES_CACHE.has(codeEtatCommande(r.etat)),
+  }
+}
+
 /** Les ~200 commandes les plus récentes, en un doc de cache. */
 export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResumeCache[]> {
   const { commandes } = await listeCommandesRecentes(200)
@@ -272,7 +307,17 @@ export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResu
   return resumees
 }
 
-// --- Lectures du cache (avec remplissage au premier accès) ---
+export async function syncCommandesClient(db: Firestore, idClient: number): Promise<CommandeClientCache[]> {
+  const brutes = await listeCommandesClient(idClient)
+  const commandes = brutes
+    .map(resumerCommandeClient)
+    .filter((cmd): cmd is CommandeClientCache => cmd != null)
+    .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
+  await db.doc(`cacheCommandesClients/${idClient}`).set({ commandes, syncedAt: Date.now() })
+  return commandes
+}
+
+// --- Lectures des caches admin/client ---
 
 /**
  * ⚠️ Une lecture NORMALE (sans `forcerRefresh`) ne touche JAMAIS Easybeer :
@@ -331,6 +376,18 @@ export async function lireCommandesRecentes(
     forcerRefresh,
   )
   return { commandes: res.items as CommandeResumeCache[], syncedAt: res.syncedAt, indisponible: res.indisponible }
+}
+
+export async function lireCommandesClient(
+  db: Firestore,
+  idClient: number,
+): Promise<{ commandes: CommandeClientCache[]; syncedAt: number | null }> {
+  const snap = await db.doc(`cacheCommandesClients/${idClient}`).get()
+  if (!snap.exists) {
+    throw new CacheIndisponibleError('commandes_client_cache_manquant', `Historique client ${idClient} non synchronisé`)
+  }
+  const data = snap.data() as { commandes?: CommandeClientCache[]; syncedAt?: number }
+  return { commandes: data.commandes ?? [], syncedAt: data.syncedAt ?? null }
 }
 
 // --- Lectures du cache (catalogue / référentiels / clients) ---
@@ -426,6 +483,11 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
   for (const idClient of await idsClientsAvecCompte(db)) {
     try {
       const doc = await syncClient(db, idClient, types, produits)
+      try {
+        await syncCommandesClient(db, idClient)
+      } catch (e) {
+        erreurs.push(`commandes client ${idClient} : ${(e as Error).message}`)
+      }
       clients.push({ idClient, nom: doc.client.nom, prix: Object.keys(doc.prix).length })
     } catch (e) {
       clients.push({ idClient, nom: null, prix: 0, erreur: (e as Error).message })
