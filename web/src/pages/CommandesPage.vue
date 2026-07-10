@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useQuery } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
-import type { CommandeDetail, CommandeEdition, CommandeResume } from '@/lib/types'
+import type { CommandeDetail, CommandeEdition, CommandeResume, CommandesClientResponse } from '@/lib/types'
 import { dateFr, prixFr } from '@/lib/format'
 import EtatBadge from '@/components/EtatBadge.vue'
 import { usePanier } from '@/composables/usePanier'
@@ -17,7 +17,7 @@ const { chargerCommande } = usePanier()
 
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['commandes'],
-  queryFn: () => api.get<{ commandes: CommandeResume[] }>('/commandes'),
+  queryFn: () => api.get<CommandesClientResponse>('/commandes'),
 })
 
 const chargement = ref<number | null>(null)
@@ -108,6 +108,10 @@ async function modifier(commande: CommandeResume) {
       </div>
 
       <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
+
+      <p v-else-if="data?.indisponible" class="text-sm text-muted-foreground">
+        Votre historique sera disponible après la prochaine synchronisation.
+      </p>
 
       <p v-else-if="!data?.commandes.length" class="text-sm text-muted-foreground">
         Aucune commande pour l'instant.

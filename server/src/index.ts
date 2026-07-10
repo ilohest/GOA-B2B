@@ -330,8 +330,15 @@ app.get('/api/commandes', requireAuth, async (c) => {
       .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
     return c.json({ commandes, direct: true })
   }
-  const { commandes, syncedAt } = await lireCommandesClientCache(db, user.easybeerIdClient)
-  return c.json({ commandes, syncedAt })
+  try {
+    const { commandes, syncedAt } = await lireCommandesClientCache(db, user.easybeerIdClient)
+    return c.json({ commandes, syncedAt, indisponible: false })
+  } catch (e) {
+    if (e instanceof CacheIndisponibleError) {
+      return c.json({ commandes: [], syncedAt: null, indisponible: true, code: e.code })
+    }
+    throw e
+  }
 })
 
 /** Charge une commande pour modification (contrôle propriété + garde-fou statut). */

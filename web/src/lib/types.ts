@@ -131,6 +131,13 @@ export interface CommandeResume {
   modifiable: boolean
 }
 
+export interface CommandesClientResponse {
+  commandes: CommandeResume[]
+  syncedAt?: number | null
+  indisponible?: boolean
+  code?: string
+}
+
 export interface AdminCommandeResume {
   idCommande: number
   numero: number | null
