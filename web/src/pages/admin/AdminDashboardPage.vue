@@ -11,10 +11,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 
 const queryClient = useQueryClient()
+const SYNC_ATTENTION_MS = 30 * 60 * 60 * 1000
 
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'dashboard'],
   queryFn: () => api.get<AdminDashboardResponse>('/admin/dashboard'),
+})
+
+const syncAncienne = computed(() => {
+  const dernierSync = data.value?.dernierSync
+  return !dernierSync || Date.now() - dernierSync > SYNC_ATTENTION_MS
 })
 
 const synchro = useMutation({
@@ -85,19 +91,31 @@ const stats = computed(() => {
 
     <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
-    <div v-else class="grid gap-4 sm:grid-cols-3">
-      <Card v-for="s in stats" :key="s.titre">
+    <template v-else>
+      <Card v-if="syncAncienne" class="border-amber-300 bg-amber-50/60">
         <CardHeader class="pb-2">
-          <CardDescription>{{ s.titre }}</CardDescription>
-          <CardTitle class="text-3xl tracking-tight">{{ s.valeur }}</CardTitle>
+          <CardTitle class="text-base text-amber-900">Synchronisation à vérifier</CardTitle>
+          <CardDescription class="text-amber-800">
+            La synchronisation Easybeer prévue pendant la nuit ne semble pas récente.
+            Lancez une synchronisation avant l'ouverture des commandes.
+          </CardDescription>
         </CardHeader>
-        <CardContent class="grid gap-3">
-          <p class="text-sm text-muted-foreground">{{ s.detail }}</p>
-          <Button variant="outline" size="sm" class="justify-self-start" as-child>
-            <RouterLink :to="s.lien">{{ s.action }}</RouterLink>
-          </Button>
-        </CardContent>
       </Card>
-    </div>
+
+      <div class="grid gap-4 sm:grid-cols-3">
+        <Card v-for="s in stats" :key="s.titre">
+          <CardHeader class="pb-2">
+            <CardDescription>{{ s.titre }}</CardDescription>
+            <CardTitle class="text-3xl tracking-tight">{{ s.valeur }}</CardTitle>
+          </CardHeader>
+          <CardContent class="grid gap-3">
+            <p class="text-sm text-muted-foreground">{{ s.detail }}</p>
+            <Button variant="outline" size="sm" class="justify-self-start" as-child>
+              <RouterLink :to="s.lien">{{ s.action }}</RouterLink>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </template>
   </div>
 </template>

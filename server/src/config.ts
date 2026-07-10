@@ -29,15 +29,17 @@ export const config = {
 
   // Synchro périodique Easybeer → cache (0 = désactivée ; en prod, Cloud Scheduler).
   syncIntervalMinutes: Number(process.env.SYNC_INTERVAL_MINUTES ?? 0),
+  schedulerSecret: process.env.SCHEDULER_SECRET || undefined,
 
   // true (défaut, dev) => les commandes partent en DEVIS Easybeer (réversible).
   // Passer à false en prod pour créer de vraies commandes.
   commandeEstDevis: process.env.COMMANDE_EST_DEVIS !== 'false',
 
   cache: {
-    // Au-delà, on affiche encore le catalogue mais on bloque l'envoi d'une
-    // commande : Easybeer reste la source de vérité des prix.
-    prixMaxAgeMinutes: Number(process.env.PRIX_CACHE_MAX_AGE_MINUTES ?? 60),
+    // Pensé pour une synchro nocturne (ex. 04:00) : on laisse une marge d'une
+    // journée complète, puis on bloque l'envoi plutôt que d'utiliser un prix
+    // potentiellement obsolète.
+    prixMaxAgeMinutes: Number(process.env.PRIX_CACHE_MAX_AGE_MINUTES ?? 2160),
   },
 
   // En dev, tant que Firebase n'est pas configuré, on court-circuite l'auth.

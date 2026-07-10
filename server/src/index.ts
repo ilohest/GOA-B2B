@@ -212,7 +212,7 @@ async function resoudreLignes(
       const ageMinutes = agePrixMs(cacheClient, l.idStockBouteille)
       const ageTexte = ageMinutes == null ? 'inconnu' : `${Math.ceil(ageMinutes / 60_000)} min`
       return ko(
-        `Tarif à resynchroniser pour « ${override.displayName || produit.libelle} » (âge : ${ageTexte}). Contactez GOA avant de commander.`,
+        `Tarif en cours de vérification pour « ${override.displayName || produit.libelle} » (âge : ${ageTexte}). Contactez GOA avant de commander.`,
       )
     }
     lignes.push({ produit, quantite: l.quantite, prixUnitaireHT })
@@ -971,33 +971,51 @@ app.get('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
   return c.json({ dernierSync: snap.data()?.dernierSync ?? null })
 })
 
-/** Déclenche une synchro complète Easybeer → cache (verrou single-flight). */
-app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
+async function executerSyncCache() {
   const db = getDb()
-  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  if (!db) return { status: 501, body: { error: 'Firebase non configuré' } }
 
   // Ban connu → on n'attaque pas l'API (sinon on le prolonge) ; compte à rebours côté UI.
   const avant = etatBanEasybeer()
   if (avant.banni) {
-    return c.json(
-      { error: `API Easybeer saturée — réessayez dans ${avant.secondesRestantes} s`, retryAfterSeconds: avant.secondesRestantes },
-      503,
-    )
+    return {
+      status: 503,
+      body: { error: `API Easybeer saturée — réessayez dans ${avant.secondesRestantes} s`, retryAfterSeconds: avant.secondesRestantes },
+    }
   }
 
   const res = await lancerSync(db)
-  if ('enCours' in res) return c.json({ error: 'Une synchronisation est déjà en cours.' }, 409)
+  if ('enCours' in res) return { status: 409, body: { error: 'Une synchronisation est déjà en cours.' } }
 
   // Un ban a pu survenir PENDANT la synchro (syncTout le consigne sans planter) :
   // on le remonte pour que l'UI affiche le compte à rebours plutôt qu'un faux succès.
   const apres = etatBanEasybeer()
   if (apres.banni) {
-    return c.json(
-      { error: `API Easybeer saturée pendant la synchro — réessayez dans ${apres.secondesRestantes} s`, retryAfterSeconds: apres.secondesRestantes },
-      503,
-    )
+    return {
+      status: 503,
+      body: { error: `API Easybeer saturée pendant la synchro — réessayez dans ${apres.secondesRestantes} s`, retryAfterSeconds: apres.secondesRestantes },
+    }
   }
-  return c.json({ ok: true, report: res.report })
+  return { status: 200, body: { ok: true, report: res.report } }
+}
+
+/** Déclenche une synchro complète Easybeer → cache (verrou single-flight). */
+app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
+  const res = await executerSyncCache()
+  return c.json(res.body, res.status as 200 | 409 | 501 | 503)
+})
+
+/**
+ * Endpoint pour Cloud Scheduler / cron externe. Protégé par un secret serveur,
+ * sans dépendre d'une session Firebase admin interactive.
+ */
+app.post('/api/scheduled/sync', async (c) => {
+  if (!config.schedulerSecret) return c.json({ error: 'Scheduler non configuré' }, 501)
+  const header = c.req.header('Authorization') ?? ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : ''
+  if (token !== config.schedulerSecret) return c.json({ error: 'Non autorisé' }, 401)
+  const res = await executerSyncCache()
+  return c.json(res.body, res.status as 200 | 409 | 501 | 503)
 })
 
 // Synchro périodique optionnelle (SYNC_INTERVAL_MINUTES > 0). En prod, préférer

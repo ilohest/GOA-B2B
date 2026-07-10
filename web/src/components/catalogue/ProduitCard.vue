@@ -64,7 +64,7 @@ const imageEnErreur = ref(false)
         v-else-if="produit.prixHT != null && !produit.prixEstFrais"
         class="absolute top-3 left-3 rounded-full bg-background/90 px-2.5 py-1 text-xs font-semibold text-amber-700 shadow-sm backdrop-blur"
       >
-        Tarif à resynchroniser
+        Tarif en vérification
       </span>
     </div>
 
@@ -96,7 +96,7 @@ const imageEnErreur = ref(false)
         />
       </div>
       <p v-if="produit.prixHT != null && !produit.prixEstFrais" class="text-xs text-amber-700">
-        GOA doit resynchroniser ce tarif avant commande.
+        Commande temporairement indisponible pour ce produit.
       </p>
     </div>
   </article>

@@ -45,3 +45,19 @@ Le compte client est lié au client Easybeer de test 588074 (CL000083).
 1. **Lire `EASYBEER.md` avant tout appel à l'API Easybeer** et le mettre à jour à chaque découverte.
 2. Jamais d'appel Easybeer en direct depuis une requête client (rate-limiting) — cache Firestore.
 3. Les identifiants Easybeer ne quittent jamais le serveur.
+
+## Exploitation du cache Easybeer
+
+- Planifier une synchronisation complète quotidienne hors heures d'usage, par
+  exemple vers **04:00 Europe/Paris** : `POST /api/scheduled/sync` avec
+  `Authorization: Bearer <SCHEDULER_SECRET>` via Cloud Scheduler ou équivalent.
+- Garder `PRIX_CACHE_MAX_AGE_MINUTES` supérieur à 24 h. La valeur par défaut
+  est **2160 minutes** (36 h) : si le job nocturne réussit, les clients ne voient
+  pas de blocage ; si le job échoue plus d'une journée, l'envoi de commande est
+  bloqué plutôt que d'utiliser un prix trop ancien.
+- Après une modification de prix dans Easybeer en journée, lancer
+  **Synchroniser Easybeer** depuis l'admin si le nouveau prix doit être visible
+  immédiatement. Sinon, il sera pris en compte à la prochaine synchronisation
+  nocturne.
+- Le tableau de bord admin signale une synchronisation trop ancienne afin de
+  vérifier le cache avant l'ouverture des commandes.

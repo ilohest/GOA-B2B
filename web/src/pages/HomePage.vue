@@ -204,7 +204,7 @@ function annulerModification() {
         <CardContent>
           <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum">
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
-              Un tarif du panier doit être resynchronisé par GOA avant commande.
+              Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
             </p>
             <Button
               class="mt-2 w-full"
@@ -237,7 +237,7 @@ function annulerModification() {
           </p>
           <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum">
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
-              Un tarif du panier doit être resynchronisé par GOA avant commande.
+              Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
             </p>
             <button
               v-if="modification"
@@ -297,7 +297,7 @@ function annulerModification() {
           </div>
           <DialogFooter>
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
-              Un tarif du panier doit être resynchronisé par GOA avant commande.
+              Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
             </p>
             <Button
               class="w-full"
