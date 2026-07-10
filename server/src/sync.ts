@@ -133,7 +133,12 @@ export async function syncClient(
   const idClientType = fiche.type?.idClientType
   const idGrilleTarifaire = resoudreGrilleRacine(idClientType, types) ?? null
 
-  const prix: Record<string, number> = {}
+  // On PART des prix déjà en cache (MERGE) : un ban en cours de synchro ne doit
+  // pas effacer des prix déjà connus — au contraire, chaque passage complète les
+  // manquants. Cf. rate-limiting : une synchro peut être partielle.
+  const existant = (await db.doc(`cacheClients/${idClient}`).get()).data() as CacheClientDoc | undefined
+  const prix: Record<string, number> = { ...(existant?.prix ?? {}) }
+
   if (idClientType != null) {
     for (const p of produits) {
       try {
@@ -143,8 +148,11 @@ export async function syncClient(
           (r) => r != null,
         )
         if (res?.prixHT != null) prix[String(p.idStockBouteille)] = res.prixHT
-      } catch {
-        // Prix manquant pour cette référence : non bloquant, on continue.
+      } catch (e) {
+        // Ban en cours → inutile de marteler les produits suivants : on garde
+        // ce qu'on a (prix déjà en cache préservés) et on abandonne cette passe.
+        if (e instanceof EasybeerBanError) break
+        // Autre erreur ponctuelle : on garde l'éventuel prix déjà en cache.
       }
     }
   }
