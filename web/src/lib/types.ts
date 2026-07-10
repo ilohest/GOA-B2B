@@ -155,6 +155,7 @@ export interface CommandesClientResponse {
   commandes: CommandeResume[]
   syncedAt?: number | null
   indisponible?: boolean
+  source?: 'local' | 'aucune'
   code?: string
 }
 

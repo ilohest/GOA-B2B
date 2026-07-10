@@ -98,8 +98,7 @@ async function modifier(commande: CommandeResume) {
     <CardHeader>
       <CardTitle class="text-lg">Mes commandes</CardTitle>
       <CardDescription>
-        Historique lu depuis Easybeer. Une commande reste modifiable tant qu'elle n'est pas
-        livrée — la nouvelle version annule et remplace la précédente.
+        Vos commandes passées via la plateforme restent visibles même si Easybeer est temporairement indisponible.
       </CardDescription>
     </CardHeader>
     <CardContent>
@@ -109,22 +108,31 @@ async function modifier(commande: CommandeResume) {
 
       <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
-      <p v-else-if="data?.indisponible" class="text-sm text-muted-foreground">
-        Votre historique sera disponible après la prochaine synchronisation.
-      </p>
+      <template v-else>
+        <p v-if="data?.indisponible && data.source === 'local'" class="mb-3 text-xs text-muted-foreground">
+          Historique Easybeer temporairement indisponible. Affichage des commandes envoyées depuis cette plateforme.
+        </p>
 
-      <p v-else-if="!data?.commandes.length" class="text-sm text-muted-foreground">
-        Aucune commande pour l'instant.
-      </p>
+        <p v-if="data?.indisponible && !data.commandes.length" class="text-sm text-muted-foreground">
+          Votre historique sera disponible après la prochaine synchronisation.
+        </p>
 
-      <ul v-else class="divide-y">
-        <li v-for="cmd in data.commandes" :key="cmd.idCommande" class="py-3">
+        <p v-else-if="!data?.commandes.length" class="text-sm text-muted-foreground">
+          Aucune commande pour l'instant.
+        </p>
+
+        <ul v-else class="divide-y">
+          <li v-for="cmd in data.commandes" :key="cmd.idCommande" class="py-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <button class="text-left" @click="basculerDetail(cmd.idCommande)">
+            <button
+              class="text-left"
+              :class="data?.source === 'local' ? 'cursor-default' : ''"
+              @click="data?.source === 'local' ? undefined : basculerDetail(cmd.idCommande)"
+            >
               <p class="flex items-center gap-2 text-sm font-medium">
                 Commande n° {{ cmd.numero ?? cmd.idCommande }}
                 <EtatBadge :etat="cmd.etat" />
-                <span class="text-xs text-muted-foreground">
+                <span v-if="data?.source !== 'local'" class="text-xs text-muted-foreground">
                   {{ detailOuvert === cmd.idCommande ? '▲' : '▼' }}
                 </span>
               </p>
@@ -143,11 +151,13 @@ async function modifier(commande: CommandeResume) {
               >
                 {{ chargement === cmd.idCommande ? 'Chargement…' : 'Modifier' }}
               </Button>
-              <p v-else class="text-xs text-muted-foreground">Non modifiable</p>
+              <p v-else class="text-xs text-muted-foreground">
+                {{ data?.source === 'local' ? 'Détail indisponible' : 'Non modifiable' }}
+              </p>
             </div>
           </div>
 
-          <div v-if="detailOuvert === cmd.idCommande" class="mt-3 rounded-lg bg-muted/50 p-3">
+          <div v-if="data?.source !== 'local' && detailOuvert === cmd.idCommande" class="mt-3 rounded-lg bg-muted/50 p-3">
             <Skeleton v-if="details[cmd.idCommande] === 'chargement'" class="h-16 w-full" />
             <p v-else-if="details[cmd.idCommande] === 'erreur'" class="text-sm text-destructive">
               Impossible de charger le détail.
@@ -203,8 +213,9 @@ async function modifier(commande: CommandeResume) {
               </p>
             </template>
           </div>
-        </li>
-      </ul>
+          </li>
+        </ul>
+      </template>
     </CardContent>
   </Card>
 </template>

@@ -165,6 +165,36 @@ async function upsertCommandeClientCache(
   await ref.set({ commandes, syncedAt: data?.syncedAt ?? Date.now(), localUpdatedAt: Date.now() }, { merge: true })
 }
 
+async function lireCommandesLocales(
+  db: NonNullable<ReturnType<typeof getDb>>,
+  idClient: number,
+): Promise<CommandeClientCache[]> {
+  const snap = await db.collection('orders').where('easybeerIdClient', '==', idClient).get()
+  const parCommande = new Map<number, CommandeClientCache>()
+  for (const doc of snap.docs) {
+    const d = doc.data()
+    const idCommande = d.easybeerIdCommande as number | undefined
+    if (idCommande == null) continue
+    const createdAt = (d.createdAt as number | undefined) ?? 0
+    const existante = parCommande.get(idCommande)
+    if (existante && (existante.dateCreation ?? 0) >= createdAt) continue
+    parCommande.set(idCommande, {
+      idCommande,
+      numero: (d.easybeerNumero as number | undefined) ?? null,
+      etat: {
+        code: d.estDevis === false ? 'TRANSMISE' : 'DEVIS',
+        libelle: d.estDevis === false ? 'Transmise à GOA' : 'Devis',
+        couleur: null,
+      },
+      totalHT: (d.totalHT as number | undefined) ?? null,
+      totalTTC: null,
+      dateCreation: createdAt || null,
+      modifiable: false,
+    })
+  }
+  return [...parCommande.values()].sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
+}
+
 /**
  * Résout et valide les lignes d'une commande depuis le CACHE (produits
  * complets, prix du client, visibilité/rupture, minimum). Les prix ne sont
@@ -335,7 +365,14 @@ app.get('/api/commandes', requireAuth, async (c) => {
     return c.json({ commandes, syncedAt, indisponible: false })
   } catch (e) {
     if (e instanceof CacheIndisponibleError) {
-      return c.json({ commandes: [], syncedAt: null, indisponible: true, code: e.code })
+      const commandes = await lireCommandesLocales(db, user.easybeerIdClient)
+      return c.json({
+        commandes,
+        syncedAt: null,
+        indisponible: true,
+        source: commandes.length ? 'local' : 'aucune',
+        code: e.code,
+      })
     }
     throw e
   }
