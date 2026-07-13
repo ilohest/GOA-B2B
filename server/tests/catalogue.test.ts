@@ -72,13 +72,13 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
   }
 
   it('masque par défaut les produits sans override visible', () => {
-    const res = catalogueClient(produits, overrides, null)
+    const res = catalogueClient(produits, overrides)
     expect(res.map((p) => p.idStockBouteille)).not.toContain(3)
     expect(res).toHaveLength(2)
   })
 
   it("applique displayName, photo, rupture, prix du client, et trie par libellé d'affichage", () => {
-    const res = catalogueClient(produits, overrides, { '1': 27.3 })
+    const res = catalogueClient(produits, overrides, { prixClient: { '1': 27.3 } })
     expect(res[0]).toMatchObject({
       idStockBouteille: 2,
       libelle: 'Mon Alpha',
@@ -91,23 +91,20 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
   })
 
   it('expose le pas La Poste selon le tag client', () => {
-    const res = catalogueClient(produits, overrides, null, 'laposte')
+    const res = catalogueClient(produits, overrides, { tagsClient: 'laposte' })
     expect(res.find((p) => p.idStockBouteille === 1)?.pas).toBe(2)
     expect(res.find((p) => p.idStockBouteille === 2)?.pas).toBe(3)
-    const sansTag = catalogueClient(produits, overrides, null, null)
+    const sansTag = catalogueClient(produits, overrides)
     expect(sansTag.every((p) => p.pas === 1)).toBe(true)
   })
 
   it('marque les prix frais et expirés par produit', () => {
     const maintenant = Date.now()
-    const res = catalogueClient(
-      produits,
-      overrides,
-      { '1': 27.3, '2': 19.9 },
-      null,
-      { '1': maintenant - 30_000, '2': maintenant - 120_000 },
-      60_000,
-    )
+    const res = catalogueClient(produits, overrides, {
+      prixClient: { '1': 27.3, '2': 19.9 },
+      prixUpdatedAt: { '1': maintenant - 30_000, '2': maintenant - 120_000 },
+      maxAgeMs: 60_000,
+    })
     expect(res.find((p) => p.idStockBouteille === 1)).toMatchObject({
       prixHT: 27.3,
       prixEstFrais: true,
@@ -121,16 +118,13 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
   it('retombe sur le prix de grille quand le client n\'a pas de prix perso (fraîcheur = synchro grille)', () => {
     const maintenant = Date.now()
     // Produit 1 : pas de prix client → grille ; produit 2 : prix client (prime).
-    const res = catalogueClient(
-      produits,
-      overrides,
-      { '2': 18 }, // prix perso du produit 2 seulement
-      null,
-      { '2': maintenant - 10_000 },
-      60_000,
-      { '1': 27.3, '2': 99 }, // grille (99 ignoré pour le 2 car le perso prime)
-      maintenant - 5_000, // synchro grille récente
-    )
+    const res = catalogueClient(produits, overrides, {
+      prixClient: { '2': 18 }, // prix perso du produit 2 seulement
+      prixUpdatedAt: { '2': maintenant - 10_000 },
+      maxAgeMs: 60_000,
+      grillePrix: { '1': 27.3, '2': 99 }, // grille (99 ignoré pour le 2 car le perso prime)
+      grilleSyncedAt: maintenant - 5_000, // synchro grille récente
+    })
     expect(res.find((p) => p.idStockBouteille === 1)).toMatchObject({ prixHT: 27.3, prixEstFrais: true })
     expect(res.find((p) => p.idStockBouteille === 2)).toMatchObject({ prixHT: 18, prixEstFrais: true })
   })
@@ -138,34 +132,41 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
 
 describe('resoudrePrixUnite (perso → grille)', () => {
   it('le prix personnalisé du client prime', () => {
-    expect(resoudrePrixUnite(1, { '1': 20 }, { '1': 111 }, { '1': 27.3 }, 999)).toEqual({
-      prixHT: 20,
-      updatedAt: 111,
-    })
+    expect(
+      resoudrePrixUnite(1, { prixClient: { '1': 20 }, prixUpdatedAt: { '1': 111 }, grillePrix: { '1': 27.3 }, grilleSyncedAt: 999 }),
+    ).toEqual({ prixHT: 20, updatedAt: 111 })
   })
   it('retombe sur la grille (fraîcheur = synchro grille)', () => {
-    expect(resoudrePrixUnite(1, {}, {}, { '1': 27.3 }, 999)).toEqual({ prixHT: 27.3, updatedAt: 999 })
+    expect(resoudrePrixUnite(1, { grillePrix: { '1': 27.3 }, grilleSyncedAt: 999 })).toEqual({
+      prixHT: 27.3,
+      updatedAt: 999,
+    })
   })
   it('aucune source → null', () => {
-    expect(resoudrePrixUnite(1, null, null, null, null)).toEqual({ prixHT: null, updatedAt: null })
+    expect(resoudrePrixUnite(1, {})).toEqual({ prixHT: null, updatedAt: null })
   })
   it('un prix perso PÉRIMÉ ne bloque pas : bascule sur la grille fraîche', () => {
     const now = Date.now()
-    const maxAge = 36 * 3600 * 1000
-    const r = resoudrePrixUnite(
-      1,
-      { '1': 35.1 }, // prix perso...
-      { '1': now - 3 * 24 * 3600 * 1000 }, // ...vieux de 3 jours (périmé)
-      { '1': 35.1 }, // grille...
-      now - 5 * 60 * 1000, // ...synchro il y a 5 min (fraîche)
-      maxAge,
+    const r = resoudrePrixUnite(1, {
+      prixClient: { '1': 35.1 }, // prix perso...
+      prixUpdatedAt: { '1': now - 3 * 24 * 3600 * 1000 }, // ...vieux de 3 jours (périmé)
+      grillePrix: { '1': 35.1 }, // grille...
+      grilleSyncedAt: now - 5 * 60 * 1000, // ...synchro il y a 5 min (fraîche)
+      maxAgeMs: 36 * 3600 * 1000,
       now,
-    )
+    })
     expect(r).toEqual({ prixHT: 35.1, updatedAt: now - 5 * 60 * 1000 })
   })
   it('prix perso frais prime sur la grille', () => {
     const now = Date.now()
-    const r = resoudrePrixUnite(1, { '1': 20 }, { '1': now - 1000 }, { '1': 35.1 }, now - 1000, 36 * 3600 * 1000, now)
+    const r = resoudrePrixUnite(1, {
+      prixClient: { '1': 20 },
+      prixUpdatedAt: { '1': now - 1000 },
+      grillePrix: { '1': 35.1 },
+      grilleSyncedAt: now - 1000,
+      maxAgeMs: 36 * 3600 * 1000,
+      now,
+    })
     expect(r.prixHT).toBe(20)
   })
 })

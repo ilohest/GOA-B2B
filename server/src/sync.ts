@@ -284,6 +284,19 @@ export async function syncClient(
     }
   }
 
+  // Purge des unités sorties du périmètre visible : leur prix perso ne serait
+  // plus jamais rafraîchi (boucle ci-dessus = visibles uniquement) et finirait
+  // périmé pour toujours. Les unités visibles gardent leur prix même si la
+  // passe a échoué (ban) — il sera rafraîchi au passage suivant.
+  if (idsAPricer) {
+    for (const id of Object.keys(prix)) {
+      if (!idsAPricer.has(Number(id))) {
+        delete prix[id]
+        delete prixUpdatedAt[id]
+      }
+    }
+  }
+
   const doc: CacheClientDoc = { client: allegerClient(fiche), idGrilleTarifaire, prix, prixUpdatedAt, syncedAt: Date.now() }
   await db.doc(`cacheClients/${idClient}`).set(doc)
   return doc
@@ -353,14 +366,22 @@ export interface CommandeClientCache {
   modifiable: boolean
 }
 
+/**
+ * Normalise l'état Easybeer (string brute ou objet {code, libelle, couleur})
+ * en forme d'affichage stable — helper UNIQUE, utilisé par la synchro et les
+ * endpoints (index.ts).
+ */
+export function normaliserEtatCommande(etat: unknown): { code: string; libelle: string; couleur: string | null } {
+  if (typeof etat === 'string') return { code: etat, libelle: etat, couleur: null }
+  const e = (etat ?? {}) as { code?: string; libelle?: string; couleur?: string }
+  return { code: e.code ?? '', libelle: e.libelle ?? e.code ?? '', couleur: e.couleur ?? null }
+}
+
 function resumerCommande(
   r: CommandeResume,
   facturesParCommande: Map<number, DocumentCommandeResume> = new Map(),
 ): CommandeResumeCache {
-  const etat =
-    typeof r.etat === 'string'
-      ? { code: r.etat, libelle: r.etat, couleur: null }
-      : { code: r.etat?.code ?? '', libelle: r.etat?.libelle ?? r.etat?.code ?? '', couleur: r.etat?.couleur ?? null }
+  const etat = normaliserEtatCommande(r.etat)
   const documents = Array.isArray(r.documents) ? (r.documents as Record<string, unknown>[]) : null
   const documentFacture = documents?.find((d) => {
     const type = d.type as { code?: string; libelle?: string } | undefined
@@ -407,10 +428,7 @@ function codeEtatCommande(etat: CommandeResume['etat']): string {
 
 function resumerCommandeClient(r: CommandeResume): CommandeClientCache | null {
   if (r.idCommande == null) return null
-  const etat =
-    typeof r.etat === 'string'
-      ? { code: r.etat, libelle: r.etat, couleur: null }
-      : { code: r.etat?.code ?? '', libelle: r.etat?.libelle ?? r.etat?.code ?? '', couleur: r.etat?.couleur ?? null }
+  const etat = normaliserEtatCommande(r.etat)
   const dateCreation = r.dateCreation == null ? null : new Date(r.dateCreation).getTime() || null
   return {
     idCommande: r.idCommande,
@@ -579,6 +597,40 @@ export async function lireCacheClient(db: Firestore, idClient: number): Promise<
       data.prixUpdatedAt ??
       Object.fromEntries(Object.keys(data.prix ?? {}).map((id) => [id, data.syncedAt ?? 0])),
   }
+}
+
+// --- Remplissage ciblé du cache d'UN client (activation / auto-guérison) ---
+
+// Anti-rafale : au plus une tentative par client par fenêtre. Sans ce garde,
+// un client sans cache qui recharge sa page pendant un ban déclencherait un
+// appel Easybeer par visite (et prolongerait le ban).
+const REMPLISSAGE_MIN_INTERVAL_MS = 10 * 60 * 1000
+const dernieresTentativesRemplissage = new Map<number, number>()
+
+/**
+ * Crée le cache d'UN client (fiche + prix des unités visibles) sans attendre la
+ * synchro complète. Appelé à l'activation du compte, et en auto-guérison quand
+ * une lecture tombe sur un cache manquant. Lit catalogue/référentiels/overrides
+ * depuis le CACHE (1 appel fiche + N appels prix vers Easybeer, sérialisés).
+ * Renvoie null si une tentative récente a déjà eu lieu (anti-rafale) ou si le
+ * cache existe déjà.
+ */
+export async function remplirCacheClientCible(db: Firestore, idClient: number): Promise<CacheClientDoc | null> {
+  const existant = await db.doc(`cacheClients/${idClient}`).get()
+  if (existant.exists) return existant.data() as CacheClientDoc
+
+  const derniere = dernieresTentativesRemplissage.get(idClient) ?? 0
+  if (Date.now() - derniere < REMPLISSAGE_MIN_INTERVAL_MS) return null
+  dernieresTentativesRemplissage.set(idClient, Date.now())
+
+  const [produits, types, visibles] = await Promise.all([
+    lireCatalogue(db).then((c) => c.produits).catch(() => [] as ProduitAutocomplete[]),
+    lireReferentiels(db).catch(() => [] as ModeleClientType[]),
+    idsVisibles(db),
+  ])
+  const doc = await syncClient(db, idClient, types, produits, visibles)
+  console.log(`[sync] cache client ${idClient} créé à la volée (${Object.keys(doc.prix).length} prix).`)
+  return doc
 }
 
 /** Ids des clients Easybeer liés à au moins un compte plateforme. */

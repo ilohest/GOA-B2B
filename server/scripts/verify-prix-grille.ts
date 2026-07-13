@@ -23,11 +23,12 @@ async function main(){
   const res = catalogueClient(
     [{ idStockBouteille: SB, libelle: 'Cola - Chaï - Carton de 12 - 0.35L' }],
     overrides,
-    null,          // pas de prix perso client
-    null, null,
-    36 * 60 * 60 * 1000,
-    pro.prix,      // grille PRO
-    grille.syncedAt,
+    {
+      // pas de prix perso client → le prix doit venir de la grille
+      maxAgeMs: 36 * 60 * 60 * 1000,
+      grillePrix: pro.prix,
+      grilleSyncedAt: grille.syncedAt,
+    },
   )
   const prod = res.find(p => p.idStockBouteille === SB)
   check('unité visible sans prix perso → prix affiché depuis la grille', prod?.prixHT === 23.4)

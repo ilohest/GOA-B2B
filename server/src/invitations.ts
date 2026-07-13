@@ -142,7 +142,10 @@ export async function consommerInvitation(
   adminAuth: Auth,
   token: string,
   password: string,
-): Promise<{ ok: true; email: string } | { ok: false; etat: InvitationEtat; erreur: string }> {
+): Promise<
+  | { ok: true; email: string; easybeerIdClient: number | null }
+  | { ok: false; etat: InvitationEtat; erreur: string }
+> {
   const ref = db.collection(COLL).doc(token)
   const snap = await ref.get()
   if (!snap.exists) return { ok: false, etat: 'introuvable', erreur: 'Lien invalide' }
@@ -154,5 +157,5 @@ export async function consommerInvitation(
   await adminAuth.updateUser(d.uid as string, { password })
   await ref.update({ usedAt: Date.now() })
   await db.collection('users').doc(d.uid as string).set({ status: 'active', activatedAt: Date.now() }, { merge: true })
-  return { ok: true, email: d.email as string }
+  return { ok: true, email: d.email as string, easybeerIdClient: (d.easybeerIdClient as number | undefined) ?? null }
 }

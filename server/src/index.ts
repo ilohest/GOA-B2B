@@ -33,7 +33,10 @@ import {
   lireListeClients,
   lireReferentiels,
   lancerSync,
+  normaliserEtatCommande,
+  remplirCacheClientCible,
   syncCommandesClient,
+  type CacheClientDoc,
   type CommandeClientCache,
 } from './sync.js'
 import {
@@ -102,14 +105,25 @@ app.get('/api/me', requireAuth, async (c) => {
     return c.json({ user, client, idGrilleTarifaire })
   }
 
-  // Lecture CACHE (rempli à la volée au premier login) — jamais Easybeer en direct.
-  const cache = await lireCacheClient(db, user.easybeerIdClient)
-  return c.json({
-    user,
-    client: cache.client,
-    idGrilleTarifaire: cache.idGrilleTarifaire,
-    syncedAt: cache.syncedAt,
-  })
+  // Lecture CACHE — jamais Easybeer en direct depuis une requête client.
+  // Cache absent (compte activé entre deux synchros) : réponse DÉGRADÉE
+  // (client null) + remplissage ciblé lancé en tâche de fond (anti-rafale
+  // intégré) — le prochain chargement trouvera le cache.
+  try {
+    const cache = await lireCacheClient(db, user.easybeerIdClient)
+    return c.json({
+      user,
+      client: cache.client,
+      idGrilleTarifaire: cache.idGrilleTarifaire,
+      syncedAt: cache.syncedAt,
+    })
+  } catch (e) {
+    if (!(e instanceof CacheIndisponibleError)) throw e
+    remplirCacheClientCible(db, user.easybeerIdClient).catch((err) =>
+      console.warn(`[sync] remplissage ciblé client ${user.easybeerIdClient} : ${(err as Error).message}`),
+    )
+    return c.json({ user, client: null, idGrilleTarifaire: null, cacheEnPreparation: true })
+  }
 })
 
 /**
@@ -127,21 +141,29 @@ app.get('/api/catalogue', requireAuth, async (c) => {
     lireGrilleTarifaire(db),
     lireReferentiels(db).catch(() => []),
   ])
-  const cacheClient = user.easybeerIdClient != null ? await lireCacheClient(db, user.easybeerIdClient) : null
+  // Cache client absent → catalogue quand même servi (produits sans prix =
+  // « temporairement indisponible » côté client), remplissage en tâche de fond.
+  let cacheClient: CacheClientDoc | null = null
+  if (user.easybeerIdClient != null) {
+    try {
+      cacheClient = await lireCacheClient(db, user.easybeerIdClient)
+    } catch (e) {
+      if (!(e instanceof CacheIndisponibleError)) throw e
+      remplirCacheClientCible(db, user.easybeerIdClient).catch(() => {})
+    }
+  }
   const prixMaxAgeMs = config.cache.prixMaxAgeMinutes * 60_000
   // Prix de base = grille du type du client ; le prix personnalisé (cache client)
   // prime quand il existe. → un produit rendu visible a son prix immédiatement.
   const { prix: grillePrix } = grillePrixPourClient(grille.lignes, cacheClient?.client.type?.idClientType, types)
-  const produitsClient = catalogueClient(
-    produits,
-    overrides,
-    cacheClient?.prix ?? null,
-    cacheClient?.client.tags,
-    cacheClient?.prixUpdatedAt,
-    prixMaxAgeMs,
+  const produitsClient = catalogueClient(produits, overrides, {
+    prixClient: cacheClient?.prix ?? null,
+    prixUpdatedAt: cacheClient?.prixUpdatedAt ?? null,
     grillePrix,
-    grille.syncedAt,
-  )
+    grilleSyncedAt: grille.syncedAt,
+    maxAgeMs: prixMaxAgeMs,
+    tagsClient: cacheClient?.client.tags,
+  })
   const ages = produitsClient
     .map((p) => (p.prixUpdatedAt == null ? null : Date.now() - p.prixUpdatedAt))
     .filter((age): age is number => age != null)
@@ -158,15 +180,10 @@ app.get('/api/catalogue', requireAuth, async (c) => {
 /** États Easybeer au-delà desquels le client ne peut plus modifier (décision §6.3). */
 const ETATS_NON_MODIFIABLES = new Set(['LIVREE', 'ANNULEE'])
 
-const codeEtat = (etat: unknown): string =>
-  typeof etat === 'string' ? etat : ((etat as { code?: string } | null)?.code ?? '')
+const codeEtat = (etat: unknown): string => normaliserEtatCommande(etat).code
 
-/** Normalise l'état Easybeer en { code, libelle, couleur } pour l'affichage. */
-function etatAffichage(etat: unknown): { code: string; libelle: string; couleur: string | null } {
-  if (typeof etat === 'string') return { code: etat, libelle: etat, couleur: null }
-  const e = (etat ?? {}) as { code?: string; libelle?: string; couleur?: string }
-  return { code: e.code ?? '', libelle: e.libelle ?? e.code ?? '', couleur: e.couleur ?? null }
-}
+/** Alias local du helper partagé (sync.ts) — même normalisation partout. */
+const etatAffichage = normaliserEtatCommande
 
 async function upsertCommandeClientCache(
   db: NonNullable<ReturnType<typeof getDb>>,
@@ -237,19 +254,32 @@ async function resoudreLignes(
   )
   if (!valides.length) return ko('Aucune ligne de commande valide')
 
-  const [{ produits }, overrides, cacheClient, grille, types] = await Promise.all([
+  const [{ produits }, overrides, grille, types] = await Promise.all([
     lireCatalogue(db),
     lireOverrides(db),
-    lireCacheClient(db, easybeerIdClient),
     lireGrilleTarifaire(db),
     lireReferentiels(db).catch(() => []),
   ])
+  // Cache client absent (compte tout juste activé) : message actionnable
+  // plutôt qu'un 503 — et remplissage lancé pour que le retry aboutisse.
+  let cacheClient: CacheClientDoc
+  try {
+    cacheClient = await lireCacheClient(db, easybeerIdClient)
+  } catch (e) {
+    if (!(e instanceof CacheIndisponibleError)) throw e
+    remplirCacheClientCible(db, easybeerIdClient).catch(() => {})
+    return ko('Votre compte est en cours de préparation — réessayez dans une minute.')
+  }
   if (cacheClient.idGrilleTarifaire == null) return ko('Grille tarifaire introuvable pour ce client')
 
   // Prix de base = grille du type du client ; le prix personnalisé prime (même
   // résolution que l'affichage → jamais de blocage sur un produit fraîchement
   // rendu visible mais pas encore resynchronisé par client).
-  const { prix: grillePrix } = grillePrixPourClient(grille.lignes, cacheClient.client.type?.idClientType, types)
+  const { prix: grillePrix, idTypeGrille } = grillePrixPourClient(
+    grille.lignes,
+    cacheClient.client.type?.idClientType,
+    types,
+  )
   const maxAgeMs = config.cache.prixMaxAgeMinutes * 60_000
   const now = Date.now()
 
@@ -260,15 +290,14 @@ async function resoudreLignes(
     const override = overrides[String(l.idStockBouteille)]
     if (!produit || !override?.visible) return ko(`Produit ${l.idStockBouteille} indisponible au catalogue`)
     if (override.rupture) return ko(`« ${override.displayName || produit.libelle} » est en rupture`)
-    const { prixHT, updatedAt } = resoudrePrixUnite(
-      l.idStockBouteille,
-      cacheClient.prix,
-      cacheClient.prixUpdatedAt,
+    const { prixHT, updatedAt } = resoudrePrixUnite(l.idStockBouteille, {
+      prixClient: cacheClient.prix,
+      prixUpdatedAt: cacheClient.prixUpdatedAt,
       grillePrix,
-      grille.syncedAt,
+      grilleSyncedAt: grille.syncedAt,
       maxAgeMs,
       now,
-    )
+    })
     if (prixHT == null) {
       return ko(`Pas de tarif défini pour « ${override.displayName || produit.libelle} » — contactez GOA`)
     }
@@ -304,7 +333,11 @@ async function resoudreLignes(
     ok: true,
     lignes,
     totalHT,
-    idGrilleTarifaire: cacheClient.idGrilleTarifaire,
+    // Grille du prix réellement appliqué (ex. Distributeur pour un distributeur),
+    // pas la racine — cohérence prix ↔ grille sur la commande Easybeer (vérifié
+    // 2026-07-14 : les types enfants à grille propre sont acceptés, et Easybeer
+    // garde le prix envoyé). Repli sur la racine si aucune grille résolue.
+    idGrilleTarifaire: idTypeGrille ?? cacheClient.idGrilleTarifaire,
     tags: cacheClient.client.tags,
   }
 }
@@ -760,6 +793,16 @@ app.post('/api/invitations/:token/consume', async (c) => {
 
   const res = await consommerInvitation(db, adminAuth, c.req.param('token'), parse.data.password)
   if (!res.ok) return c.json({ error: res.erreur, etat: res.etat }, 400)
+
+  // Prépare le cache du client en tâche de fond (fiche + prix des unités
+  // visibles) pour que son premier chargement de boutique ait déjà ses prix,
+  // sans attendre la prochaine synchro complète.
+  if (res.easybeerIdClient != null) {
+    const idClient = res.easybeerIdClient
+    remplirCacheClientCible(db, idClient).catch((e) =>
+      console.warn(`[sync] remplissage à l'activation (client ${idClient}) : ${(e as Error).message}`),
+    )
+  }
   return c.json(res)
 })
 

@@ -148,15 +148,33 @@ export interface ProduitCatalogueClient {
  * → rendre une unité visible affiche/commande son prix immédiatement (grille),
  *   sans attendre une resynchro par client.
  */
+/** Sources et réglages de la résolution du prix client (tout optionnel). */
+export interface SourcesPrixClient {
+  /** Prix personnalisés du client (cacheClients.prix) — priment quand frais. */
+  prixClient?: Record<string, number> | null
+  /** Horodatage par prix personnalisé. */
+  prixUpdatedAt?: Record<string, number> | null
+  /** Prix de la grille tarifaire du type du client (base). */
+  grillePrix?: Record<string, number> | null
+  /** Date de synchro de la grille (fraîcheur des prix de grille). */
+  grilleSyncedAt?: number | null
+  /** Âge max d'un prix avant d'être considéré périmé (garde-fou 36 h). */
+  maxAgeMs?: number
+  now?: number
+}
+
 export function resoudrePrixUnite(
   idStockBouteille: number,
-  prixClient: Record<string, number> | null,
-  prixUpdatedAt: Record<string, number> | null,
-  grillePrix: Record<string, number> | null,
-  grilleSyncedAt: number | null,
-  maxAgeMs = Infinity,
-  now = Date.now(),
+  sources: SourcesPrixClient,
 ): { prixHT: number | null; updatedAt: number | null } {
+  const {
+    prixClient = null,
+    prixUpdatedAt = null,
+    grillePrix = null,
+    grilleSyncedAt = null,
+    maxAgeMs = Infinity,
+    now = Date.now(),
+  } = sources
   const k = String(idStockBouteille)
   const custom = prixClient?.[k] ?? null
   const customAt = prixUpdatedAt?.[k] ?? null
@@ -222,28 +240,17 @@ export function grillePrixPourClient(
 export function catalogueClient(
   produits: ProduitAutocomplete[],
   overrides: Record<string, CatalogueOverride>,
-  prixClient: Record<string, number> | null,
-  tagsClient: unknown = null,
-  prixUpdatedAt: Record<string, number> | null = null,
-  prixMaxAgeMs = Infinity,
-  grillePrix: Record<string, number> | null = null,
-  grilleSyncedAt: number | null = null,
+  options: SourcesPrixClient & { tagsClient?: unknown } = {},
 ): ProduitCatalogueClient[] {
-  const tags = normaliserTags(tagsClient)
-  const now = Date.now()
+  const tags = normaliserTags(options.tagsClient ?? null)
+  const now = options.now ?? Date.now()
+  const prixMaxAgeMs = options.maxAgeMs ?? Infinity
+  const sources: SourcesPrixClient = { ...options, now, maxAgeMs: prixMaxAgeMs }
   return produits
     .filter((p) => overrides[String(p.idStockBouteille)]?.visible)
     .map((p) => {
       const o = overrides[String(p.idStockBouteille)]
-      const { prixHT, updatedAt } = resoudrePrixUnite(
-        p.idStockBouteille,
-        prixClient,
-        prixUpdatedAt,
-        grillePrix,
-        grilleSyncedAt,
-        prixMaxAgeMs,
-        now,
-      )
+      const { prixHT, updatedAt } = resoudrePrixUnite(p.idStockBouteille, sources)
       return {
         idStockBouteille: p.idStockBouteille,
         libelle: o.displayName || p.libelle,
