@@ -154,11 +154,22 @@ export function resoudrePrixUnite(
   prixUpdatedAt: Record<string, number> | null,
   grillePrix: Record<string, number> | null,
   grilleSyncedAt: number | null,
+  maxAgeMs = Infinity,
+  now = Date.now(),
 ): { prixHT: number | null; updatedAt: number | null } {
   const k = String(idStockBouteille)
-  const custom = prixClient?.[k]
-  if (custom != null) return { prixHT: custom, updatedAt: prixUpdatedAt?.[k] ?? null }
-  const grille = grillePrix?.[k]
+  const custom = prixClient?.[k] ?? null
+  const customAt = prixUpdatedAt?.[k] ?? null
+  const grille = grillePrix?.[k] ?? null
+  const frais = (t: number | null) => t != null && now - t <= maxAgeMs
+
+  // 1. Prix perso FRAIS → la valeur la plus précise (tarifs négociés).
+  if (custom != null && frais(customAt)) return { prixHT: custom, updatedAt: customAt }
+  // 2. Sinon grille FRAÎCHE → base fiable. Évite qu'un prix perso périmé (ex. non
+  //    resynchronisé depuis >36 h) bloque un produit alors que la grille est à jour.
+  if (grille != null && frais(grilleSyncedAt)) return { prixHT: grille, updatedAt: grilleSyncedAt }
+  // 3. Aucune source fraîche : on renvoie ce qu'on a (perso prioritaire), marqué non-frais.
+  if (custom != null) return { prixHT: custom, updatedAt: customAt }
   if (grille != null) return { prixHT: grille, updatedAt: grilleSyncedAt }
   return { prixHT: null, updatedAt: null }
 }
@@ -230,6 +241,8 @@ export function catalogueClient(
         prixUpdatedAt,
         grillePrix,
         grilleSyncedAt,
+        prixMaxAgeMs,
+        now,
       )
       return {
         idStockBouteille: p.idStockBouteille,

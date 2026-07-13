@@ -25,7 +25,7 @@ const { data, isPending, isError, error } = useQuery({
 })
 
 const recherche = ref('')
-type BrouillonCatalogue = Partial<Pick<CatalogueOverride, 'displayName' | 'visible' | 'rupture'>>
+type BrouillonCatalogue = Partial<Pick<CatalogueOverride, 'displayName' | 'visible' | 'rupture' | 'photoUrl'>>
 const brouillons = ref<Record<number, BrouillonCatalogue>>({})
 
 function overrideAffiche(u: CatalogueAdminUnite): CatalogueOverride {
@@ -133,19 +133,18 @@ onBeforeUnmount(clearSaveBar)
 // --- Photos (upload Storage via le serveur) ---
 
 async function envoyerPhoto(idStockBouteille: number, fichier: File) {
-  const res = await api.envoyerFichier<{ ok: boolean; override: CatalogueOverride }>(
+  const res = await api.envoyerFichier<{ ok: boolean; photoUrl: string }>(
     `/admin/catalogue/${idStockBouteille}/photo`,
     'photo',
     fichier,
   )
-  appliquerOverride(idStockBouteille, res.override)
+  const unite = data.value?.unites.find((u) => u.idStockBouteille === idStockBouteille)
+  if (unite) definirBrouillon(unite, 'photoUrl', res.photoUrl)
 }
 
 async function retirerPhoto(idStockBouteille: number) {
-  const res = await api.delete<{ ok: boolean; override: CatalogueOverride }>(
-    `/admin/catalogue/${idStockBouteille}/photo`,
-  )
-  appliquerOverride(idStockBouteille, res.override)
+  const unite = data.value?.unites.find((u) => u.idStockBouteille === idStockBouteille)
+  if (unite) definirBrouillon(unite, 'photoUrl', '')
 }
 </script>
 
@@ -191,7 +190,7 @@ async function retirerPhoto(idStockBouteille: number) {
             class="grid gap-3 py-4 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center"
           >
             <PhotoUpload
-              :photo-url="u.override.photoUrl"
+              :photo-url="overrideAffiche(u).photoUrl"
               :libelle="u.override.displayName || u.produit"
               :envoyer="(f) => envoyerPhoto(u.idStockBouteille, f)"
               :retirer="() => retirerPhoto(u.idStockBouteille)"

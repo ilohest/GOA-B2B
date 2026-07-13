@@ -78,7 +78,7 @@ async function onLogout() {
         <div class="flex items-center gap-2">
           <div
             v-if="saveBar"
-            class="hidden items-center gap-2 rounded-xl border border-white/10 bg-zinc-950 px-2.5 py-1.5 text-white shadow-sm md:flex"
+            class="hidden items-center gap-2 rounded-xl border border-zinc-600 bg-zinc-800 px-2.5 py-1.5 text-white shadow-sm md:flex"
             :class="{ 'header-save-bar-shake': saveBarShaking }"
           >
             <p class="text-xs font-medium whitespace-nowrap">{{ saveBar.label }}</p>

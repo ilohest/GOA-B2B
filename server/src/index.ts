@@ -266,6 +266,8 @@ async function resoudreLignes(
       cacheClient.prixUpdatedAt,
       grillePrix,
       grille.syncedAt,
+      maxAgeMs,
+      now,
     )
     if (prixHT == null) {
       return ko(`Pas de tarif défini pour « ${override.displayName || produit.libelle} » — contactez GOA`)
@@ -923,14 +925,12 @@ const TYPES_IMAGE = new Map([
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024 // 5 Mo
 
 /**
- * Upload de la photo d'un produit (multipart, champ `photo`). Stockée dans
- * Storage sous produits/{idStockBouteille} ; l'override pointe vers notre
- * endpoint de service avec un cache-buster.
+ * Upload de la photo d'un produit (multipart, champ `photo`). Stockée comme
+ * brouillon ; l'override n'est mis à jour qu'au clic sur « Enregistrer ».
  */
 app.post('/api/admin/catalogue/:idStockBouteille/photo', requireAuth, requireAdmin, async (c) => {
-  const db = getDb()
   const bucket = getBucket()
-  if (!db || !bucket) return c.json({ error: 'Firebase non configuré' }, 501)
+  if (!bucket) return c.json({ error: 'Firebase non configuré' }, 501)
   const id = Number(c.req.param('idStockBouteille'))
   if (!Number.isFinite(id)) return c.json({ error: 'idStockBouteille invalide' }, 400)
 
@@ -944,14 +944,16 @@ app.post('/api/admin/catalogue/:idStockBouteille/photo', requireAuth, requireAdm
     return c.json({ error: 'Image trop lourde (5 Mo maximum)' }, 400)
   }
 
-  await bucket.file(`produits/${id}`).save(Buffer.from(await photo.arrayBuffer()), {
+  const extension = TYPES_IMAGE.get(photo.type)
+  const nomBrouillon = `${id}-${Date.now()}.${extension}`
+
+  await bucket.file(`produits-drafts/${nomBrouillon}`).save(Buffer.from(await photo.arrayBuffer()), {
     contentType: photo.type,
     resumable: false,
     metadata: { cacheControl: 'public, max-age=31536000, immutable' },
   })
 
-  const override = await majOverride(db, id, { photoUrl: `/api/photos/produits/${id}?v=${Date.now()}` })
-  return c.json({ ok: true, override })
+  return c.json({ ok: true, photoUrl: `/api/photos/catalogue-drafts/${nomBrouillon}` })
 })
 
 /** Retire la photo d'un produit (fichier + override). */
@@ -979,6 +981,26 @@ app.get('/api/photos/produits/:idStockBouteille', async (c) => {
   if (!Number.isFinite(id)) return c.json({ error: 'id invalide' }, 400)
 
   const fichier = bucket.file(`produits/${id}`)
+  const [existe] = await fichier.exists()
+  if (!existe) return c.json({ error: 'Photo introuvable' }, 404)
+
+  const [meta] = await fichier.getMetadata()
+  const [contenu] = await fichier.download()
+  return new Response(new Uint8Array(contenu), {
+    headers: {
+      'Content-Type': (meta.contentType as string) ?? 'image/jpeg',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  })
+})
+
+app.get('/api/photos/catalogue-drafts/:nomBrouillon', async (c) => {
+  const bucket = getBucket()
+  if (!bucket) return c.json({ error: 'Stockage non configuré' }, 501)
+  const nomBrouillon = c.req.param('nomBrouillon')
+  if (!/^[a-zA-Z0-9.-]+$/.test(nomBrouillon)) return c.json({ error: 'Photo invalide' }, 400)
+
+  const fichier = bucket.file(`produits-drafts/${nomBrouillon}`)
   const [existe] = await fichier.exists()
   if (!existe) return c.json({ error: 'Photo introuvable' }, 404)
 

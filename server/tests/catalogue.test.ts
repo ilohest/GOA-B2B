@@ -149,6 +149,25 @@ describe('resoudrePrixUnite (perso → grille)', () => {
   it('aucune source → null', () => {
     expect(resoudrePrixUnite(1, null, null, null, null)).toEqual({ prixHT: null, updatedAt: null })
   })
+  it('un prix perso PÉRIMÉ ne bloque pas : bascule sur la grille fraîche', () => {
+    const now = Date.now()
+    const maxAge = 36 * 3600 * 1000
+    const r = resoudrePrixUnite(
+      1,
+      { '1': 35.1 }, // prix perso...
+      { '1': now - 3 * 24 * 3600 * 1000 }, // ...vieux de 3 jours (périmé)
+      { '1': 35.1 }, // grille...
+      now - 5 * 60 * 1000, // ...synchro il y a 5 min (fraîche)
+      maxAge,
+      now,
+    )
+    expect(r).toEqual({ prixHT: 35.1, updatedAt: now - 5 * 60 * 1000 })
+  })
+  it('prix perso frais prime sur la grille', () => {
+    const now = Date.now()
+    const r = resoudrePrixUnite(1, { '1': 20 }, { '1': now - 1000 }, { '1': 35.1 }, now - 1000, 36 * 3600 * 1000, now)
+    expect(r.prixHT).toBe(20)
+  })
 })
 
 describe('grillePrixPourClient (résolution du type vers la grille)', () => {

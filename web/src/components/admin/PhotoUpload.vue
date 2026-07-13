@@ -34,7 +34,7 @@ async function traiter(fichier: File | undefined | null) {
   enCours.value = true
   try {
     await props.envoyer(fichier)
-    toast.success('Photo enregistrée.')
+    toast.success('Photo ajoutée aux modifications.')
   } catch (e) {
     toast.error((e as Error).message)
   } finally {
@@ -52,7 +52,7 @@ async function onRetirer() {
   enCours.value = true
   try {
     await props.retirer()
-    toast.success('Photo retirée.')
+    toast.success('Photo retirée des modifications.')
   } catch (e) {
     toast.error((e as Error).message)
   } finally {
