@@ -335,15 +335,58 @@ export function resoudreGrilleRacine(
 
 // --- Catalogue ---
 
-/** GET /stock/produits/autocomplete — SANS idClient (sinon 500). */
-export async function listeProduitsAutocomplete(accesPro = true): Promise<ProduitAutocomplete[]> {
-  const params = new URLSearchParams({ accesPro: String(accesPro), afficherTarif: 'true' })
+/**
+ * GET /stock/produits/autocomplete — SANS idClient (sinon 500).
+ * ⚠️ `accesPro=true` MASQUE la plupart des conditionnements (ne renvoie que
+ * Carton 6×1L et Carton 18×0,35L). Par défaut on NE filtre PAS → tous les lots
+ * (Unité, Carton 6/9/12/18, Fût) avec leur idStockBouteille (cf. EASYBEER.md).
+ */
+export async function listeProduitsAutocomplete(accesPro = false): Promise<ProduitAutocomplete[]> {
+  const params = new URLSearchParams({ afficherTarif: 'true' })
+  if (accesPro) params.set('accesPro', 'true')
   const { status, json } = await eb<ProduitAutocomplete[]>(
     'GET',
     `/stock/produits/autocomplete?${params.toString()}`,
   )
   if (status !== 200) throw new Error(`Easybeer ${status} sur /stock/produits/autocomplete`)
   return json
+}
+
+// --- Grille tarifaire (matrice par type de client) ---
+
+export interface MatriceConditionnement {
+  contenant?: { idContenant?: number; libelle?: string; libelleAvecContenance?: string; contenance?: number }
+  lot?: { idLot?: number; libelle?: string; quantite?: number }
+}
+export interface MatriceTarif {
+  id?: number
+  modeleContenant?: { idContenant?: number }
+  modeleLot?: { idLot?: number }
+  modeleClientType?: { idClientType?: number }
+  prixHT?: number
+  horsDroits?: boolean
+}
+export interface MatriceProduit {
+  modeleProduit?: { idProduit?: number; libelle?: string; nom?: string }
+  tarifs?: MatriceTarif[]
+}
+export interface ModeleMatriceTarif {
+  conditionnements?: MatriceConditionnement[]
+  produits?: MatriceProduit[]
+}
+
+/**
+ * GET /parametres/grille-tarifaire/matrice?idClientType=… — grille d'UN type de
+ * client. Renvoie {} pour un type sans grille propre (héritée). `POST …/liste`
+ * est inutilisable (500 systématique) → toujours passer par la matrice.
+ */
+export async function matriceGrille(idClientType: number): Promise<ModeleMatriceTarif> {
+  const { status, json } = await eb<ModeleMatriceTarif>(
+    'GET',
+    `/parametres/grille-tarifaire/matrice?idClientType=${idClientType}`,
+  )
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /parametres/grille-tarifaire/matrice`)
+  return json ?? {}
 }
 
 // --- Tarifs ---
@@ -508,6 +551,11 @@ export interface CommandeResume {
   client?: { idClient?: number; nom?: string; numero?: string }
   etat?: { code?: string; libelle?: string; couleur?: string } | string
   paiementEtat?: { code?: string; libelle?: string } | string
+  reference?: string
+  dateFacturation?: string | number
+  facture?: unknown
+  numeroFacture?: string
+  documents?: unknown[]
   totalTTC?: number
   totalHT?: number
   dateCreation?: string | number
@@ -517,6 +565,22 @@ export interface CommandeResume {
 
 export interface ListeCommandesPage {
   liste: CommandeResume[]
+  totalElements: number
+  totalPages: number
+}
+
+export interface DocumentCommandeResume {
+  idCommande?: number
+  idCommandeDocument?: number
+  code?: string
+  numeroCommande?: number
+  estFacture?: boolean
+  annule?: boolean
+  type?: { code?: string; libelle?: string }
+}
+
+export interface ListeDocumentsPage {
+  liste: DocumentCommandeResume[]
   totalElements: number
   totalPages: number
 }
@@ -533,6 +597,31 @@ async function pageCommandes(numeroPage: number, nombreParPage: number): Promise
   })
   if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/liste (admin)`)
   return { liste: json?.liste ?? [], totalElements: json?.totalElements ?? 0, totalPages: json?.totalPages ?? 1 }
+}
+
+async function pageDocumentsFactures(numeroPage: number, nombreParPage: number): Promise<ListeDocumentsPage> {
+  const params = new URLSearchParams({
+    colonneTri: 'dateCreation',
+    numeroPage: String(numeroPage),
+    nombreParPage: String(nombreParPage),
+  })
+  const { status, json } = await eb<ListeDocumentsPage>('POST', `/document/liste?${params.toString()}`, {
+    filtre: { types: ['FACTURE'], etatEnvoi: 'TOUS' },
+  })
+  if (status !== 200) throw new Error(`Easybeer ${status} sur /document/liste (factures)`)
+  return { liste: json?.liste ?? [], totalElements: json?.totalElements ?? 0, totalPages: json?.totalPages ?? 1 }
+}
+
+export async function listeDocumentsFacturesRecentes(limite = 500): Promise<DocumentCommandeResume[]> {
+  const parPage = 100
+  const pagesMax = Math.ceil(limite / parPage)
+  let documents: DocumentCommandeResume[] = []
+  for (let page = 1; page <= pagesMax; page++) {
+    const p = await pageDocumentsFactures(page, parPage)
+    documents = [...documents, ...p.liste]
+    if (p.liste.length < parPage) break
+  }
+  return documents.filter((d) => !d.annule && d.idCommande != null)
 }
 
 /**

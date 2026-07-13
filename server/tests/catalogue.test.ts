@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   catalogueClient,
   detecterFormat,
+  grillePrixPourClient,
   normaliserTags,
   pasDeCommande,
+  resoudrePrixUnite,
   type CatalogueOverride,
 } from '../src/catalogue.js'
-import type { ProduitAutocomplete } from '../src/easybeer.js'
+import type { ModeleClientType, ProduitAutocomplete } from '../src/easybeer.js'
+import type { GrilleLigne } from '../src/sync.js'
 
 describe('detecterFormat', () => {
   it('reconnaît le 1L', () => {
@@ -113,5 +116,77 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
       prixHT: 19.9,
       prixEstFrais: false,
     })
+  })
+
+  it('retombe sur le prix de grille quand le client n\'a pas de prix perso (fraîcheur = synchro grille)', () => {
+    const maintenant = Date.now()
+    // Produit 1 : pas de prix client → grille ; produit 2 : prix client (prime).
+    const res = catalogueClient(
+      produits,
+      overrides,
+      { '2': 18 }, // prix perso du produit 2 seulement
+      null,
+      { '2': maintenant - 10_000 },
+      60_000,
+      { '1': 27.3, '2': 99 }, // grille (99 ignoré pour le 2 car le perso prime)
+      maintenant - 5_000, // synchro grille récente
+    )
+    expect(res.find((p) => p.idStockBouteille === 1)).toMatchObject({ prixHT: 27.3, prixEstFrais: true })
+    expect(res.find((p) => p.idStockBouteille === 2)).toMatchObject({ prixHT: 18, prixEstFrais: true })
+  })
+})
+
+describe('resoudrePrixUnite (perso → grille)', () => {
+  it('le prix personnalisé du client prime', () => {
+    expect(resoudrePrixUnite(1, { '1': 20 }, { '1': 111 }, { '1': 27.3 }, 999)).toEqual({
+      prixHT: 20,
+      updatedAt: 111,
+    })
+  })
+  it('retombe sur la grille (fraîcheur = synchro grille)', () => {
+    expect(resoudrePrixUnite(1, {}, {}, { '1': 27.3 }, 999)).toEqual({ prixHT: 27.3, updatedAt: 999 })
+  })
+  it('aucune source → null', () => {
+    expect(resoudrePrixUnite(1, null, null, null, null)).toEqual({ prixHT: null, updatedAt: null })
+  })
+})
+
+describe('grillePrixPourClient (résolution du type vers la grille)', () => {
+  const types: ModeleClientType[] = [
+    { idClientType: 17849, libelle: 'client PRO' },
+    { idClientType: 20680, libelle: 'GMS', idParent: 17849 },
+    { idClientType: 20735, libelle: 'Distributeur', idParent: 17849 },
+  ]
+  const l = (idStockBouteille: number, idClientType: number, prixHT: number): GrilleLigne => ({
+    idStockBouteille,
+    idProduit: 40720,
+    produit: 'Cola',
+    idContenant: 2654,
+    contenant: 'Bouteille - 1L',
+    idLot: 3,
+    packaging: 'Carton de 6',
+    quantite: 6,
+    idClientType,
+    typeClient: String(idClientType),
+    prixHT,
+    horsDroits: true,
+  })
+  const lignes = [l(1, 17849, 27.3), l(1, 20735, 21.84)]
+
+  it('un GMS (sans grille propre) hérite de client PRO', () => {
+    const { prix, idTypeGrille } = grillePrixPourClient(lignes, 20680, types)
+    expect(idTypeGrille).toBe(17849)
+    expect(prix).toEqual({ '1': 27.3 })
+  })
+  it('un Distributeur utilise sa propre grille', () => {
+    const { prix, idTypeGrille } = grillePrixPourClient(lignes, 20735, types)
+    expect(idTypeGrille).toBe(20735)
+    expect(prix).toEqual({ '1': 21.84 })
+  })
+  it('un client PRO direct utilise la grille PRO', () => {
+    expect(grillePrixPourClient(lignes, 17849, types).prix).toEqual({ '1': 27.3 })
+  })
+  it('type inconnu → aucune grille', () => {
+    expect(grillePrixPourClient(lignes, 99999, types)).toEqual({ prix: {}, idTypeGrille: null })
   })
 })

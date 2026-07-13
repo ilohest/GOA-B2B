@@ -16,6 +16,8 @@ export default defineConfig(() => {
     },
     server: {
       port: Number(process.env.PORT) || 5173,
+      // Autorise l'import brut de GUIDE-ADMIN.md (à la racine du repo) par la page Aide.
+      fs: { allow: ['..'] },
       proxy: {
         '/api': {
           target: backend,

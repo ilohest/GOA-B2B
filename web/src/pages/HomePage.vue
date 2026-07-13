@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
+import { PackageCheck, Store } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
@@ -64,6 +65,22 @@ const sousMinimum = computed(() => minimum.value != null && totalHT.value < mini
 const lignesPrixExpires = computed(() => lignesDetail.value.filter((l) => !l.produit.prixEstFrais))
 const commandeBloqueeParPrix = computed(() => lignesPrixExpires.value.length > 0)
 const panierVisible = computed(() => nbCartons.value > 0 || modification.value != null)
+const tagsClient = computed(() => {
+  const tags = data.value?.client?.tags
+  if (!tags) return []
+  return (Array.isArray(tags) ? tags : String(tags).split(','))
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean)
+})
+const livraisonPostale = computed(() => tagsClient.value.includes('laposte'))
+const pasLivraisonPostale = computed(() =>
+  [...new Set((catalogue.data.value?.produits ?? []).map((p) => p.pas).filter((pas) => pas > 1))]
+    .sort((a, b) => a - b),
+)
+const resumeLivraisonPostale = computed(() => {
+  if (!pasLivraisonPostale.value.length) return 'La Poste impose des colis homogènes : commande par cartons complets.'
+  return `La Poste impose des colis homogènes : commande par ${pasLivraisonPostale.value.join(' ou ')} cartons selon le format.`
+})
 const agePrixCatalogue = computed(() => {
   const ageMs = catalogue.data.value?.prixPlusAncienAgeMs
   if (ageMs == null) return null
@@ -148,16 +165,29 @@ function annulerModification() {
         <Button variant="outline" size="sm" @click="annulerModification">Annuler</Button>
       </div>
 
+      <div
+        v-if="livraisonPostale"
+        class="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
+      >
+        <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-primary shadow-xs">
+          <PackageCheck class="size-4" />
+        </span>
+        <div class="grid gap-0.5">
+          <p class="font-medium text-foreground">
+            Livraison La Poste : commande par cartons complets
+          </p>
+          <p class="text-muted-foreground">
+            {{ resumeLivraisonPostale }} Les boutons +/− suivent ce pas automatiquement.
+          </p>
+        </div>
+      </div>
+
       <section>
         <div class="mb-5">
-          <h1 class="text-2xl font-semibold tracking-tight">Nos kombuchas</h1>
-          <p class="mt-1 text-sm text-muted-foreground">
-            <template v-if="data?.client">
-              {{ data.client.nom ?? data.client.raisonSociale }} — prix HT selon vos conditions
-              tarifaires<template v-if="minimum != null">, minimum de commande {{ prixFr(minimum) }} HT</template>.
-            </template>
-            <template v-else>Prix HT selon vos conditions tarifaires.</template>
-          </p>
+          <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+            <Store class="size-5 text-muted-foreground" />
+            Nos kombuchas
+          </h1>
           <p v-if="agePrixCatalogue" class="mt-1 text-xs text-muted-foreground">
             Tarifs synchronisés il y a {{ agePrixCatalogue }}.
           </p>

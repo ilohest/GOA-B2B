@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ClipboardList } from '@lucide/vue'
 import { useQuery } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
@@ -11,6 +12,7 @@ import { usePanier } from '@/composables/usePanier'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const router = useRouter()
 const { chargerCommande } = usePanier()
@@ -96,7 +98,10 @@ async function modifier(commande: CommandeResume) {
 <template>
   <Card>
     <CardHeader>
-      <CardTitle class="text-lg">Mes commandes</CardTitle>
+      <CardTitle class="flex items-center gap-2 text-lg">
+        <ClipboardList class="size-5 text-muted-foreground" />
+        Mes commandes
+      </CardTitle>
       <CardDescription>
         Vos commandes passées via la plateforme restent visibles même si Easybeer est temporairement indisponible.
       </CardDescription>
@@ -123,39 +128,39 @@ async function modifier(commande: CommandeResume) {
 
         <ul v-else class="divide-y">
           <li v-for="cmd in data.commandes" :key="cmd.idCommande" class="py-3">
-          <div class="flex flex-wrap items-center justify-between gap-3">
             <button
-              class="text-left"
-              :class="data?.source === 'local' ? 'cursor-default' : ''"
+              class="flex w-full flex-wrap items-center justify-between gap-3 rounded-lg p-2 text-left transition-colors"
+              :class="data?.source === 'local' ? 'cursor-default' : 'hover:bg-muted/60'"
               @click="data?.source === 'local' ? undefined : basculerDetail(cmd.idCommande)"
             >
-              <p class="flex items-center gap-2 text-sm font-medium">
-                Commande n° {{ cmd.numero ?? cmd.idCommande }}
-                <EtatBadge :etat="cmd.etat" />
-                <span v-if="data?.source !== 'local'" class="text-xs text-muted-foreground">
-                  {{ detailOuvert === cmd.idCommande ? '▲' : '▼' }}
+              <span class="grid gap-1">
+                <span class="flex items-center gap-2 text-sm font-medium">
+                  Commande n° {{ cmd.numero ?? cmd.idCommande }}
+                  <EtatBadge :etat="cmd.etat" />
+                  <span v-if="data?.source !== 'local'" class="text-xs text-muted-foreground">
+                    {{ detailOuvert === cmd.idCommande ? '▲' : '▼' }}
+                  </span>
                 </span>
-              </p>
-              <p class="text-xs text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</p>
+                <span class="text-xs text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</span>
+              </span>
+              <span class="flex items-center gap-3">
+                <span class="text-sm font-semibold tabular-nums">
+                  {{ cmd.totalTTC != null ? `${prixFr(cmd.totalTTC)} TTC` : '—' }}
+                </span>
+                <Button
+                  v-if="cmd.modifiable"
+                  variant="outline"
+                  size="sm"
+                  :disabled="chargement === cmd.idCommande"
+                  @click.stop="modifier(cmd)"
+                >
+                  {{ chargement === cmd.idCommande ? 'Chargement…' : 'Modifier' }}
+                </Button>
+                <span v-else-if="data?.source === 'local'" class="text-xs text-muted-foreground">
+                  Détail indisponible
+                </span>
+              </span>
             </button>
-            <div class="flex items-center gap-3">
-              <p class="text-sm font-semibold tabular-nums">
-                {{ cmd.totalTTC != null ? `${prixFr(cmd.totalTTC)} TTC` : '—' }}
-              </p>
-              <Button
-                v-if="cmd.modifiable"
-                variant="outline"
-                size="sm"
-                :disabled="chargement === cmd.idCommande"
-                @click="modifier(cmd)"
-              >
-                {{ chargement === cmd.idCommande ? 'Chargement…' : 'Modifier' }}
-              </Button>
-              <p v-else-if="data?.source === 'local'" class="text-xs text-muted-foreground">
-                Détail indisponible
-              </p>
-            </div>
-          </div>
 
           <div v-if="data?.source !== 'local' && detailOuvert === cmd.idCommande" class="mt-3 rounded-lg bg-muted/50 p-3">
             <Skeleton v-if="details[cmd.idCommande] === 'chargement'" class="h-16 w-full" />
@@ -163,18 +168,30 @@ async function modifier(commande: CommandeResume) {
               Impossible de charger le détail.
             </p>
             <template v-else-if="typeof details[cmd.idCommande] === 'object'">
-              <ul class="grid gap-1 text-sm">
-                <li
-                  v-for="(l, i) in (details[cmd.idCommande] as CommandeDetail).lignes"
-                  :key="i"
-                  class="flex items-baseline justify-between gap-3"
-                >
-                  <span>{{ l.designation }} × {{ l.quantite }}</span>
-                  <span v-if="l.prixUnitaireHT != null" class="tabular-nums text-muted-foreground">
-                    {{ prixFr(l.prixUnitaireHT * l.quantite) }} HT
-                  </span>
-                </li>
-              </ul>
+              <div class="overflow-hidden rounded-lg border bg-background">
+                <Table>
+                  <TableHeader class="[&_tr]:bg-muted">
+                    <TableRow>
+                      <TableHead>Produit</TableHead>
+                      <TableHead class="text-right">Qté</TableHead>
+                      <TableHead class="text-right">Total HT</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow
+                      v-for="(l, i) in (details[cmd.idCommande] as CommandeDetail).lignes"
+                      :key="i"
+                      class="odd:bg-background even:bg-muted/45"
+                    >
+                      <TableCell class="font-medium">{{ l.designation }}</TableCell>
+                      <TableCell class="text-right tabular-nums">{{ l.quantite }}</TableCell>
+                      <TableCell class="text-right tabular-nums text-muted-foreground">
+                        {{ l.prixUnitaireHT != null ? prixFr(l.prixUnitaireHT * l.quantite) : '—' }}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
               <!-- Totaux : HT / remise / TVA / TTC -->
               <dl
                 v-if="(details[cmd.idCommande] as CommandeDetail).totalTTC != null"
@@ -195,7 +212,7 @@ async function modifier(commande: CommandeResume) {
               </p>
               <div
                 v-if="(details[cmd.idCommande] as CommandeDetail).documents.length"
-                class="mt-3 flex flex-wrap gap-2 border-t pt-3"
+                class="mt-3 flex flex-wrap justify-end gap-2 border-t pt-3"
               >
                 <Button
                   v-for="doc in (details[cmd.idCommande] as CommandeDetail).documents"

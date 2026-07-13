@@ -11,10 +11,12 @@ import type { CommandeDetail } from '@/lib/types'
 import { decomposerTotaux, prixFr } from '@/lib/format'
 import { easybeerLien } from '@/lib/easybeer'
 import { useEasybeerBan } from '@/composables/useEasybeerBan'
+import EasybeerLink from '@/components/admin/EasybeerLink.vue'
 import EtatBadge from '@/components/EtatBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const props = defineProps<{ idCommande: number | null; easybeerAppUrl?: string }>()
 const emit = defineEmits<{ 'update:idCommande': [value: number | null] }>()
@@ -65,8 +67,14 @@ watch(
 
 <template>
   <Dialog v-model:open="ouvert">
-    <DialogContent class="sm:max-w-lg">
-      <DialogHeader>
+    <DialogContent class="sm:max-w-2xl">
+      <DialogHeader class="relative pr-20">
+        <EasybeerLink
+          v-if="idCommande != null"
+          :href="easybeerLien.commandeDetail(easybeerAppUrl, idCommande)"
+          label="Ouvrir la commande dans Easybeer"
+          class="absolute top-0 right-10 text-muted-foreground"
+        />
         <DialogTitle class="flex items-center gap-2">
           Commande n° {{ data?.numero ?? idCommande }}
           <EtatBadge v-if="data?.etat" :etat="data.etat" />
@@ -96,18 +104,26 @@ watch(
       </div>
 
       <div v-else-if="data" class="grid gap-4">
-        <ul class="grid gap-1.5 text-sm">
-          <li
-            v-for="(l, i) in data.lignes"
-            :key="i"
-            class="flex items-baseline justify-between gap-3"
-          >
-            <span>{{ l.designation }} <span class="text-muted-foreground">× {{ l.quantite }}</span></span>
-            <span v-if="l.prixUnitaireHT != null" class="tabular-nums text-muted-foreground">
-              {{ prixFr(l.prixUnitaireHT * l.quantite) }} HT
-            </span>
-          </li>
-        </ul>
+        <div class="overflow-hidden rounded-lg border">
+          <Table>
+            <TableHeader class="[&_tr]:bg-muted">
+              <TableRow>
+                <TableHead>Produit</TableHead>
+                <TableHead class="text-right">Qté</TableHead>
+                <TableHead class="text-right">Total HT</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="(l, i) in data.lignes" :key="i" class="odd:bg-background even:bg-muted/45">
+                <TableCell class="font-medium">{{ l.designation }}</TableCell>
+                <TableCell class="text-right tabular-nums">{{ l.quantite }}</TableCell>
+                <TableCell class="text-right tabular-nums text-muted-foreground">
+                  {{ l.prixUnitaireHT != null ? prixFr(l.prixUnitaireHT * l.quantite) : '—' }}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
 
         <dl class="grid gap-1 border-t pt-3 text-sm">
           <div
@@ -125,7 +141,7 @@ watch(
           « {{ data.commentaire }} »
         </p>
 
-        <div v-if="data.documents.length" class="flex flex-wrap gap-2 border-t pt-3">
+        <div v-if="data.documents.length" class="flex flex-wrap justify-end gap-2 border-t pt-3">
           <Button
             v-for="doc in data.documents"
             :key="doc.idCommandeDocument"
@@ -137,12 +153,6 @@ watch(
             ⤓ {{ doc.libelle }} {{ doc.code }}
           </Button>
         </div>
-
-        <Button v-if="idCommande != null" variant="ghost" size="sm" class="justify-self-start" as-child>
-          <a :href="easybeerLien.commandeDetail(easybeerAppUrl, idCommande)" target="_blank" rel="noopener">
-            Ouvrir dans Easybeer ↗
-          </a>
-        </Button>
       </div>
     </DialogContent>
   </Dialog>

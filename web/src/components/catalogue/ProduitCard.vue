@@ -24,7 +24,7 @@ const imageEnErreur = ref(false)
 
 <template>
   <article
-    class="group flex flex-col overflow-hidden rounded-2xl border bg-card transition-all duration-200"
+    class="group flex h-full flex-col rounded-2xl border bg-card shadow-sm transition-all duration-200"
     :class="
       produit.rupture
         ? 'opacity-80'
@@ -32,7 +32,7 @@ const imageEnErreur = ref(false)
     "
   >
     <!-- Emplacement image (photo admin ou placeholder de marque) -->
-    <div class="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+    <div class="relative aspect-[4/3] w-full overflow-hidden rounded-t-2xl bg-muted">
       <img
         v-if="produit.photoUrl && !imageEnErreur"
         :src="produit.photoUrl"
@@ -62,25 +62,33 @@ const imageEnErreur = ref(false)
       </span>
     </div>
 
-    <div class="flex flex-1 flex-col gap-3 p-4">
-      <h3 class="leading-snug font-medium" :class="produit.rupture ? 'text-muted-foreground' : ''">
+    <div class="flex flex-1 flex-col gap-5 p-5">
+      <h3 class="min-h-12 text-base leading-snug font-semibold" :class="produit.rupture ? 'text-muted-foreground' : ''">
         {{ produit.libelle }}
       </h3>
 
       <!-- Prix + ajout au panier, en bas de carte -->
-      <div class="mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <p v-if="produit.prixHT != null && produit.prixEstFrais" class="flex items-baseline gap-1">
-          <span
-            class="text-lg font-semibold tracking-tight"
-            :class="produit.rupture ? 'text-muted-foreground' : ''"
-          >
-            {{ prixFr(produit.prixHT) }}
+      <div class="mt-auto grid gap-4">
+        <div
+          v-if="produit.prixHT != null && produit.prixEstFrais"
+          class="flex min-h-12 items-end justify-between gap-4 rounded-xl bg-muted/35 px-3 py-2.5"
+        >
+          <span class="grid gap-0.5">
+            <span class="text-[0.68rem] font-medium tracking-wide text-muted-foreground uppercase">
+              Prix carton
+            </span>
+            <span
+              class="text-2xl leading-none font-semibold tabular-nums tracking-tight"
+              :class="produit.rupture ? 'text-muted-foreground' : ''"
+            >
+              {{ prixFr(produit.prixHT) }}
+            </span>
           </span>
-          <span class="text-xs whitespace-nowrap text-muted-foreground">HT / carton</span>
-        </p>
+          <span class="pb-0.5 text-sm whitespace-nowrap text-muted-foreground">HT</span>
+        </div>
         <QuantiteStepper
           v-if="!produit.rupture && produit.prixHT != null && produit.prixEstFrais"
-          class="shrink-0"
+          class="w-full"
           :quantite="quantite"
           :pas="produit.pas"
           :libelle="produit.libelle"

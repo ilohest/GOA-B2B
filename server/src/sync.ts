@@ -25,10 +25,14 @@ import {
   listeClients,
   listeCommandesClient,
   listeCommandesRecentes,
+  listeDocumentsFacturesRecentes,
   listeProduitsAutocomplete,
   listeTypesClient,
+  matriceGrille,
   resoudreGrilleRacine,
   type CommandeResume,
+  type DocumentCommandeResume,
+  type MatriceConditionnement,
   type ModeleClient,
   type ModeleClientType,
   type ProduitAutocomplete,
@@ -128,7 +132,7 @@ export function agePrixMs(cache: Pick<CacheClientDoc, 'prixUpdatedAt'>, idStockB
 export async function syncCatalogue(db: Firestore): Promise<ProduitAutocomplete[]> {
   const produits = await avecRetry(
     'catalogue',
-    () => listeProduitsAutocomplete(true),
+    () => listeProduitsAutocomplete(),
     (p) => Array.isArray(p) && p.length > 0,
   )
   await db.doc('cache/catalogue').set({ produits, syncedAt: Date.now() })
@@ -146,12 +150,96 @@ export async function syncReferentiels(db: Firestore): Promise<ModeleClientType[
   return typesClient
 }
 
+/** Une ligne de grille tarifaire = un prix pour (produit × type × conditionnement). */
+export interface GrilleLigne {
+  /** Unité commandable résolue depuis le catalogue (null si non stockée). */
+  idStockBouteille: number | null
+  idProduit: number
+  produit: string
+  idContenant: number
+  contenant: string
+  idLot: number
+  packaging: string
+  quantite: number | null
+  idClientType: number
+  typeClient: string
+  prixHT: number
+  horsDroits: boolean
+}
+
+/**
+ * Grille tarifaire complète : matrice par type de client (seuls les types AVEC
+ * grille propre renvoient des tarifs — les autres héritent, cf. EASYBEER.md),
+ * aplatie en lignes et enrichie de l'idStockBouteille (via le catalogue).
+ */
+export async function syncGrilleTarifaire(
+  db: Firestore,
+  types: ModeleClientType[],
+  produits: ProduitAutocomplete[],
+): Promise<GrilleLigne[]> {
+  const cle = (p: number, c: number, l: number) => `${p}-${c}-${l}`
+  const parTuple = new Map<string, number>()
+  for (const u of produits) {
+    if (u.idProduit != null && u.idContenant != null && u.idLot != null) {
+      parTuple.set(cle(u.idProduit, u.idContenant, u.idLot), u.idStockBouteille)
+    }
+  }
+  const libelleType = new Map<number, string>()
+  for (const t of types) {
+    if (t.idClientType != null) libelleType.set(t.idClientType, t.libelle ?? String(t.idClientType))
+  }
+
+  const lignes: GrilleLigne[] = []
+  const vus = new Set<number>()
+  for (const t of types) {
+    const idType = t.idClientType
+    if (idType == null || vus.has(idType)) continue
+    vus.add(idType)
+
+    const matrice = await avecRetry(`matrice type ${idType}`, () => matriceGrille(idType), (m) => m != null)
+    const condParCle = new Map<string, MatriceConditionnement>()
+    for (const c of matrice.conditionnements ?? []) {
+      const ic = c.contenant?.idContenant
+      const il = c.lot?.idLot
+      if (ic != null && il != null) condParCle.set(`${ic}-${il}`, c)
+    }
+    for (const p of matrice.produits ?? []) {
+      const idProduit = p.modeleProduit?.idProduit
+      if (idProduit == null) continue
+      for (const tarif of p.tarifs ?? []) {
+        const ic = tarif.modeleContenant?.idContenant
+        const il = tarif.modeleLot?.idLot
+        if (tarif.prixHT == null || ic == null || il == null) continue
+        const cond = condParCle.get(`${ic}-${il}`)
+        lignes.push({
+          idStockBouteille: parTuple.get(cle(idProduit, ic, il)) ?? null,
+          idProduit,
+          produit: p.modeleProduit?.libelle ?? p.modeleProduit?.nom ?? `Produit ${idProduit}`,
+          idContenant: ic,
+          contenant: cond?.contenant?.libelleAvecContenance ?? cond?.contenant?.libelle ?? `Contenant ${ic}`,
+          idLot: il,
+          packaging: cond?.lot?.libelle ?? `Lot ${il}`,
+          quantite: cond?.lot?.quantite ?? null,
+          idClientType: idType,
+          typeClient: libelleType.get(idType) ?? String(idType),
+          prixHT: tarif.prixHT,
+          horsDroits: Boolean(tarif.horsDroits),
+        })
+      }
+    }
+  }
+
+  await db.doc('cache/grilleTarifaire').set({ lignes, syncedAt: Date.now() })
+  return lignes
+}
+
 /** Fiche + prix d'UN client → cacheClients/{idClient}. */
 export async function syncClient(
   db: Firestore,
   idClient: number,
   types: ModeleClientType[],
   produits: ProduitAutocomplete[],
+  idsAPricer?: Set<number>,
 ): Promise<CacheClientDoc> {
   const fiche = await avecRetry(`client ${idClient}`, () => getClient(idClient), (f) => f != null)
   if (!fiche) throw new Error(`client ${idClient} introuvable`)
@@ -169,8 +257,13 @@ export async function syncClient(
       Object.fromEntries(Object.keys(existant?.prix ?? {}).map((id) => [id, existant?.syncedAt ?? 0]))),
   }
 
+  // On ne tarife que les unités VISIBLES (le catalogue expose ~41 conditionnements ;
+  // sans ce filtre, on ferait 41 × N appels prix → ban assuré). Les unités masquées
+  // ne sont ni affichées ni commandables côté client, donc pas besoin de leur prix.
+  const aPricer = idsAPricer ? produits.filter((p) => idsAPricer.has(p.idStockBouteille)) : produits
+
   if (idClientType != null) {
-    for (const p of produits) {
+    for (const p of aPricer) {
       try {
         const res = await avecRetry(
           `prix ${p.idStockBouteille} client ${idClient}`,
@@ -244,6 +337,8 @@ export interface CommandeResumeCache {
   client: { idClient: number | null; nom: string | null; numero: string | null } | null
   etat: { code: string; libelle: string; couleur: string | null }
   paiement: string | null
+  facture: { existe: boolean; numero: string | null } | null
+  totalHT: number | null
   totalTTC: number | null
   dateCreation: number | null
 }
@@ -258,11 +353,32 @@ export interface CommandeClientCache {
   modifiable: boolean
 }
 
-function resumerCommande(r: CommandeResume): CommandeResumeCache {
+function resumerCommande(
+  r: CommandeResume,
+  facturesParCommande: Map<number, DocumentCommandeResume> = new Map(),
+): CommandeResumeCache {
   const etat =
     typeof r.etat === 'string'
       ? { code: r.etat, libelle: r.etat, couleur: null }
       : { code: r.etat?.code ?? '', libelle: r.etat?.libelle ?? r.etat?.code ?? '', couleur: r.etat?.couleur ?? null }
+  const documents = Array.isArray(r.documents) ? (r.documents as Record<string, unknown>[]) : null
+  const documentFacture = documents?.find((d) => {
+    const type = d.type as { code?: string; libelle?: string } | undefined
+    return d.estFacture === true || type?.code === 'FACTURE' || type?.libelle?.toLowerCase().includes('facture')
+  })
+  const factureListe = r.idCommande == null ? undefined : facturesParCommande.get(r.idCommande)
+  const numeroFacture =
+    r.numeroFacture ??
+    (typeof r.reference === 'string' && r.reference.startsWith('FA') ? r.reference : null) ??
+    factureListe?.code ??
+    ((documentFacture?.code as string | undefined) ?? null)
+  const aInfoFacture =
+    factureListe != null ||
+    'numeroFacture' in r ||
+    'reference' in r ||
+    'dateFacturation' in r ||
+    'facture' in r ||
+    documents != null
   return {
     idCommande: r.idCommande ?? null,
     numero: r.numero ?? null,
@@ -271,6 +387,13 @@ function resumerCommande(r: CommandeResume): CommandeResumeCache {
       : null,
     etat,
     paiement: typeof r.paiementEtat === 'string' ? r.paiementEtat : (r.paiementEtat?.libelle ?? null),
+    facture: aInfoFacture
+      ? {
+          existe: Boolean(numeroFacture || factureListe || r.dateFacturation || r.facture || documentFacture),
+          numero: numeroFacture,
+        }
+      : null,
+    totalHT: r.totalHT ?? null,
     totalTTC: r.totalTTC ?? null,
     dateCreation: r.dateCreation == null ? null : new Date(r.dateCreation).getTime() || null,
   }
@@ -304,7 +427,19 @@ function resumerCommandeClient(r: CommandeResume): CommandeClientCache | null {
 export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResumeCache[]> {
   const depuisMs = Date.now() - config.cache.adminCommandesJours * 24 * 60 * 60 * 1000
   const { commandes } = await listeCommandesRecentes(200, depuisMs)
-  const resumees = commandes.map(resumerCommande)
+  let facturesParCommande = new Map<number, DocumentCommandeResume>()
+  try {
+    const factures = await listeDocumentsFacturesRecentes(500)
+    facturesParCommande = new Map(
+      factures
+        .filter((f) => f.idCommande != null)
+        .map((f) => [f.idCommande!, f]),
+    )
+  } catch {
+    // La colonne FA est informative : si la liste documents est indisponible,
+    // on conserve le cache commandes sans bloquer la synchro principale.
+  }
+  const resumees = commandes.map((cmd) => resumerCommande(cmd, facturesParCommande))
   await db.doc('cache/commandesRecentes').set({
     commandes: resumees,
     syncedAt: Date.now(),
@@ -410,6 +545,27 @@ export async function lireReferentiels(db: Firestore): Promise<ModeleClientType[
   throw new CacheIndisponibleError('referentiels_manquants', 'Référentiels Easybeer non synchronisés')
 }
 
+/** Grille tarifaire complète (cache). Vide si jamais synchronisée. */
+export async function lireGrilleTarifaire(db: Firestore): Promise<{ lignes: GrilleLigne[]; syncedAt: number | null }> {
+  const snap = await db.doc('cache/grilleTarifaire').get()
+  if (!snap.exists) return { lignes: [], syncedAt: null }
+  const data = snap.data() as { lignes?: GrilleLigne[]; syncedAt?: number }
+  return { lignes: data.lignes ?? [], syncedAt: data.syncedAt ?? null }
+}
+
+/** idStockBouteille rendus visibles par l'admin (overrides) — pour cibler la tarification. */
+async function idsVisibles(db: Firestore): Promise<Set<number>> {
+  const snap = await db.collection('catalogueOverrides').get()
+  const set = new Set<number>()
+  for (const d of snap.docs) {
+    if (d.data().visible) {
+      const id = Number(d.id)
+      if (Number.isFinite(id)) set.add(id)
+    }
+  }
+  return set
+}
+
 /** Cache client strict : une lecture applicative normale ne déclenche jamais Easybeer. */
 export async function lireCacheClient(db: Firestore, idClient: number): Promise<CacheClientDoc> {
   const snap = await db.doc(`cacheClients/${idClient}`).get()
@@ -472,6 +628,12 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
     }
   }
 
+  try {
+    await syncGrilleTarifaire(db, types, produits)
+  } catch (e) {
+    erreurs.push(`grille tarifaire : ${(e as Error).message}`)
+  }
+
   let listeClientsNb = 0
   try {
     listeClientsNb = (await syncListeClients(db)).length
@@ -485,10 +647,11 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
     erreurs.push(`commandes récentes : ${(e as Error).message}`)
   }
 
+  const visibles = await idsVisibles(db)
   const clients: SyncReport['clients'] = []
   for (const idClient of await idsClientsAvecCompte(db)) {
     try {
-      const doc = await syncClient(db, idClient, types, produits)
+      const doc = await syncClient(db, idClient, types, produits, visibles)
       try {
         await syncCommandesClient(db, idClient)
       } catch (e) {

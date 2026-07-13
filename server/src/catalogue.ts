@@ -7,8 +7,8 @@
  * l'admin l'a explicitement rendu visible (brief §6.2).
  */
 import type { Firestore } from 'firebase-admin/firestore'
-import type { ProduitAutocomplete } from './easybeer.js'
-import { lireCatalogue } from './sync.js'
+import type { ModeleClientType, ProduitAutocomplete } from './easybeer.js'
+import { lireCatalogue, lireGrilleTarifaire, type GrilleLigne } from './sync.js'
 
 export interface CatalogueOverride {
   visible: boolean
@@ -58,16 +58,72 @@ export async function lireOverrides(db: Firestore): Promise<Record<string, Catal
   return overrides
 }
 
-/** Vue ADMIN : tous les produits Easybeer + leur override (défaut : masqué). */
-export async function catalogueAdmin(db: Firestore) {
-  const [{ produits, syncedAt }, overrides] = await Promise.all([lireCatalogue(db), lireOverrides(db)])
-  return {
-    syncedAt,
-    produits: produits.map((p) => ({
-      produit: p,
-      override: overrides[String(p.idStockBouteille)] ?? OVERRIDE_DEFAUT,
-    })),
+export interface CatalogueAdminTarif {
+  idClientType: number
+  typeClient: string
+  prixHT: number
+}
+
+/** Une unité commandable (idStockBouteille) + ses tarifs par type de client. */
+export interface CatalogueAdminUnite {
+  idStockBouteille: number
+  produit: string
+  contenant: string
+  packaging: string
+  quantite: number | null
+  libelleEasybeer: string | null
+  override: CatalogueOverride
+  tarifs: CatalogueAdminTarif[]
+}
+
+/**
+ * Vue ADMIN : la grille tarifaire complète, une unité par idStockBouteille avec
+ * TOUS ses tarifs (un par type de client), pour un tableau reproduisant Easybeer
+ * (Produit / Type / Contenant / Packaging / Tarif HT) + la visibilité. Défaut :
+ * masqué. Les prix viennent de la grille (pas des caches clients), donc pas de
+ * dépendance aux comptes plateforme.
+ */
+export async function catalogueAdmin(
+  db: Firestore,
+): Promise<{ syncedAt: number | null; unites: CatalogueAdminUnite[] }> {
+  const [{ produits }, overrides, grille] = await Promise.all([
+    lireCatalogue(db).catch(() => ({ produits: [] as ProduitAutocomplete[] })),
+    lireOverrides(db),
+    lireGrilleTarifaire(db),
+  ])
+  const libelleParSB = new Map(produits.map((p) => [p.idStockBouteille, p.libelle]))
+
+  const unites = new Map<number, CatalogueAdminUnite>()
+  for (const l of grille.lignes) {
+    if (l.idStockBouteille == null) continue // prix sans unité stockée → non commandable
+    let u = unites.get(l.idStockBouteille)
+    if (!u) {
+      u = {
+        idStockBouteille: l.idStockBouteille,
+        produit: l.produit,
+        contenant: l.contenant,
+        packaging: l.packaging,
+        quantite: l.quantite,
+        libelleEasybeer: libelleParSB.get(l.idStockBouteille) ?? null,
+        override: overrides[String(l.idStockBouteille)] ?? OVERRIDE_DEFAUT,
+        tarifs: [],
+      }
+      unites.set(l.idStockBouteille, u)
+    }
+    if (!u.tarifs.some((t) => t.idClientType === l.idClientType)) {
+      u.tarifs.push({ idClientType: l.idClientType, typeClient: l.typeClient, prixHT: l.prixHT })
+    }
   }
+
+  const liste = [...unites.values()].sort(
+    (a, b) =>
+      a.produit.localeCompare(b.produit, 'fr') ||
+      a.contenant.localeCompare(b.contenant, 'fr') ||
+      (a.quantite ?? 0) - (b.quantite ?? 0),
+  )
+  for (const u of liste) u.tarifs.sort((a, b) => a.typeClient.localeCompare(b.typeClient, 'fr'))
+
+  return { syncedAt: grille.syncedAt, unites: liste }
 }
 
 export interface ProduitCatalogueClient {
@@ -84,9 +140,73 @@ export interface ProduitCatalogueClient {
 }
 
 /**
+ * Prix d'une unité pour un client, résolu 100 % depuis le cache :
+ *  1. prix PERSONNALISÉ du client (cacheClients.prix) s'il existe — c'est la
+ *     valeur exacte d'Easybeer pour ce client (tarifs négociés inclus) ;
+ *  2. sinon, prix de la GRILLE de son type (cache/grilleTarifaire).
+ * La fraîcheur suit la source : date du prix client, ou date de synchro grille.
+ * → rendre une unité visible affiche/commande son prix immédiatement (grille),
+ *   sans attendre une resynchro par client.
+ */
+export function resoudrePrixUnite(
+  idStockBouteille: number,
+  prixClient: Record<string, number> | null,
+  prixUpdatedAt: Record<string, number> | null,
+  grillePrix: Record<string, number> | null,
+  grilleSyncedAt: number | null,
+): { prixHT: number | null; updatedAt: number | null } {
+  const k = String(idStockBouteille)
+  const custom = prixClient?.[k]
+  if (custom != null) return { prixHT: custom, updatedAt: prixUpdatedAt?.[k] ?? null }
+  const grille = grillePrix?.[k]
+  if (grille != null) return { prixHT: grille, updatedAt: grilleSyncedAt }
+  return { prixHT: null, updatedAt: null }
+}
+
+/**
+ * Prix de grille applicables à un client : résout son type vers la grille la
+ * plus proche qui EXISTE (lui-même ou un ancêtre) — un Distributeur tape la
+ * grille Distributeur, un GMS/CHR remonte jusqu'à `client PRO`. Renvoie la map
+ * idStockBouteille → prixHT pour ce type.
+ */
+export function grillePrixPourClient(
+  grilleLignes: GrilleLigne[],
+  idClientType: number | null | undefined,
+  types: ModeleClientType[],
+): { prix: Record<string, number>; idTypeGrille: number | null } {
+  const grilleTypes = new Set<number>()
+  for (const l of grilleLignes) grilleTypes.add(l.idClientType)
+
+  const parId = new Map<number, ModeleClientType>()
+  for (const t of types) if (t.idClientType != null) parId.set(t.idClientType, t)
+
+  let idTypeGrille: number | null = null
+  let courant: number | null = idClientType ?? null
+  const vus = new Set<number>()
+  while (courant != null && !vus.has(courant)) {
+    if (grilleTypes.has(courant)) {
+      idTypeGrille = courant
+      break
+    }
+    vus.add(courant)
+    courant = parId.get(courant)?.idParent ?? null
+  }
+
+  const prix: Record<string, number> = {}
+  if (idTypeGrille != null) {
+    for (const l of grilleLignes) {
+      if (l.idClientType === idTypeGrille && l.idStockBouteille != null) {
+        prix[String(l.idStockBouteille)] = l.prixHT
+      }
+    }
+  }
+  return { prix, idTypeGrille }
+}
+
+/**
  * Vue CLIENT : uniquement les produits rendus visibles, libellé d'affichage,
- * prix du client connecté (cache), flag rupture. Pas de quantités de stock
- * (brief §6.2 : la dispo = le flag rupture géré dans l'app).
+ * prix du client connecté (personnalisé sinon grille), flag rupture. Pas de
+ * quantités de stock (brief §6.2 : la dispo = le flag rupture géré dans l'app).
  */
 export function catalogueClient(
   produits: ProduitAutocomplete[],
@@ -95,6 +215,8 @@ export function catalogueClient(
   tagsClient: unknown = null,
   prixUpdatedAt: Record<string, number> | null = null,
   prixMaxAgeMs = Infinity,
+  grillePrix: Record<string, number> | null = null,
+  grilleSyncedAt: number | null = null,
 ): ProduitCatalogueClient[] {
   const tags = normaliserTags(tagsClient)
   const now = Date.now()
@@ -102,9 +224,13 @@ export function catalogueClient(
     .filter((p) => overrides[String(p.idStockBouteille)]?.visible)
     .map((p) => {
       const o = overrides[String(p.idStockBouteille)]
-      const id = String(p.idStockBouteille)
-      const updatedAt = prixUpdatedAt?.[id] ?? null
-      const prixHT = prixClient?.[id] ?? null
+      const { prixHT, updatedAt } = resoudrePrixUnite(
+        p.idStockBouteille,
+        prixClient,
+        prixUpdatedAt,
+        grillePrix,
+        grilleSyncedAt,
+      )
       return {
         idStockBouteille: p.idStockBouteille,
         libelle: o.displayName || p.libelle,

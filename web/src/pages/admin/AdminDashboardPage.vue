@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { LayoutDashboard } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { AdminDashboardResponse, SyncReport, SyncStatusResponse } from '@/lib/types'
 import { dateHeureFr, prixFr } from '@/lib/format'
+import { easybeerLien } from '@/lib/easybeer'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
+import EasybeerLink from '@/components/admin/EasybeerLink.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -64,13 +67,15 @@ const stats = computed(() => {
       valeur: String(d.clients.total),
       detail: `${d.clients.avecCompte} avec compte, dont ${d.clients.actifs} actif(s)`,
       lien: '/admin/clients',
+      easybeer: easybeerLien.clients(),
       action: 'Gérer les clients',
     },
     {
       titre: 'Commandes (30 j)',
       valeur: String(d.commandes30j.nombre),
-      detail: `${prixFr(d.commandes30j.caTTC)} TTC`,
+      detail: `${prixFr(d.commandes30j.caHT)} HT · ${prixFr(d.commandes30j.caTTC)} TTC`,
       lien: '/admin/commandes',
+      easybeer: easybeerLien.commandes(),
       action: 'Voir les commandes',
     },
     {
@@ -81,6 +86,7 @@ const stats = computed(() => {
           ? `produits visibles — ${d.catalogue.ruptures} en rupture`
           : 'produits visibles',
       lien: '/admin/catalogue',
+      easybeer: easybeerLien.grilleTarifaire(),
       action: 'Gérer le catalogue',
     },
   ]
@@ -91,7 +97,10 @@ const stats = computed(() => {
   <div class="grid gap-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 class="text-xl font-semibold tracking-tight">Tableau de bord</h1>
+        <h1 class="flex items-center gap-2 text-xl font-semibold tracking-tight">
+          <LayoutDashboard class="size-5 text-muted-foreground" />
+          Tableau de bord
+        </h1>
         <p class="text-sm text-muted-foreground">
           <template v-if="data?.dernierSync">
             Données synchronisées le {{ dateHeureFr(data.dernierSync) }}.
@@ -100,9 +109,8 @@ const stats = computed(() => {
         </p>
       </div>
       <BoutonActualiser
-        variant="secondary"
-        label="Synchroniser Easybeer"
-        label-pending="Synchronisation…"
+        label="Actualiser depuis Easybeer"
+        label-pending="Actualisation…"
         :pending="synchro.isPending.value"
         @click="synchro.mutate()"
       />
@@ -129,7 +137,12 @@ const stats = computed(() => {
       </Card>
 
       <div class="grid gap-4 sm:grid-cols-3">
-        <Card v-for="s in stats" :key="s.titre">
+        <Card v-for="s in stats" :key="s.titre" class="relative">
+          <EasybeerLink
+            :href="s.easybeer"
+            :label="`${s.titre} dans Easybeer`"
+            class="absolute top-3 right-3 text-muted-foreground"
+          />
           <CardHeader class="pb-2">
             <CardDescription>{{ s.titre }}</CardDescription>
             <CardTitle class="text-3xl tracking-tight">{{ s.valeur }}</CardTitle>

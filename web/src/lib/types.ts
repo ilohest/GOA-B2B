@@ -55,7 +55,7 @@ export interface AdminClientsResponse {
 
 export interface AdminDashboardResponse {
   clients: { total: number; avecCompte: number; actifs: number }
-  commandes30j: { nombre: number; caTTC: number }
+  commandes30j: { nombre: number; caHT: number; caTTC: number }
   catalogue: { produits: number; visibles: number; ruptures: number }
   dernierSync: number | null
 }
@@ -67,9 +67,27 @@ export interface CatalogueOverride {
   rupture: boolean
 }
 
+export interface CatalogueAdminTarif {
+  idClientType: number
+  typeClient: string
+  prixHT: number
+}
+
+/** Une unité commandable (idStockBouteille) + ses tarifs par type de client. */
+export interface CatalogueAdminUnite {
+  idStockBouteille: number
+  produit: string
+  contenant: string
+  packaging: string
+  quantite: number | null
+  libelleEasybeer: string | null
+  override: CatalogueOverride
+  tarifs: CatalogueAdminTarif[]
+}
+
 export interface CatalogueAdminResponse {
-  syncedAt: number
-  produits: { produit: ProduitAutocomplete; override: CatalogueOverride }[]
+  syncedAt: number | null
+  unites: CatalogueAdminUnite[]
 }
 
 export interface ProduitCatalogueClient {
@@ -124,8 +142,17 @@ export interface InvitationResponse {
   ok: boolean
   email: string
   lien: string
-  dejaActif: boolean
+  /** true si l'email a bien été envoyé via SMTP (sinon : lien à copier). */
+  envoye: boolean
+  erreurEmail?: string
+  expiresAt: number
   client: { idClient?: number; nom?: string; numero?: string }
+}
+
+export interface InvitationValidation {
+  etat: 'valide' | 'introuvable' | 'expire' | 'utilise' | 'revoque'
+  email?: string
+  nom?: string
 }
 
 export interface MeResponse {
@@ -165,6 +192,8 @@ export interface AdminCommandeResume {
   client: { idClient: number | null; nom: string | null; numero: string | null } | null
   etat: EtatCommande
   paiement: string | null
+  facture: { existe: boolean; numero: string | null } | null
+  totalHT: number | null
   totalTTC: number | null
   dateCreation: number | null
 }
@@ -220,7 +249,8 @@ export interface InvitationBulkResultat {
   ok: boolean
   email?: string
   lien?: string
-  dejaActif?: boolean
+  envoye?: boolean
+  erreurEmail?: string
   client?: { idClient?: number; nom?: string; numero?: string }
   erreur?: string
 }

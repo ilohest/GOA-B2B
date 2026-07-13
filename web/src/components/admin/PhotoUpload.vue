@@ -4,6 +4,7 @@
  * clic ou glisser-déposer, remplacement, suppression, état d'envoi.
  */
 import { ref } from 'vue'
+import { Trash2 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
@@ -61,11 +62,11 @@ async function onRetirer() {
 </script>
 
 <template>
-  <div class="flex items-center gap-2">
+  <div class="relative size-20 shrink-0">
     <!-- Zone vignette / drop -->
     <button
       type="button"
-      class="group relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg border transition-colors"
+      class="group relative grid size-full place-items-center overflow-hidden rounded-lg border transition-colors"
       :class="[
         photoUrl ? 'border-border' : 'border-dashed hover:border-primary/50 hover:bg-primary/5',
         survole ? 'border-primary bg-primary/10' : '',
@@ -100,10 +101,11 @@ async function onRetirer() {
     <button
       v-if="photoUrl && !enCours"
       type="button"
-      class="text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+      class="absolute right-1 bottom-1 grid size-6 place-items-center rounded-md border border-white/70 bg-background/90 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:bg-destructive hover:text-destructive-foreground"
+      :aria-label="`Retirer la photo de ${libelle}`"
       @click="onRetirer"
     >
-      Retirer
+      <Trash2 class="size-3.5" />
     </button>
 
     <input
@@ -113,5 +115,5 @@ async function onRetirer() {
       class="hidden"
       @change="traiter(($event.target as HTMLInputElement).files?.[0])"
     />
-  </div>
+</div>
 </template>

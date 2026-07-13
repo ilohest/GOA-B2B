@@ -26,6 +26,10 @@ export const InvitationsBulkSchema = z.object({
   invitations: z.array(InvitationBodySchema).min(1).max(100),
 })
 
+export const ActivationBodySchema = z.object({
+  password: z.string().min(6, 'Mot de passe : 6 caractères minimum').max(200),
+})
+
 export const BulkParamsSchema = z
   .object({
     idsClients: z.array(z.number().int().positive()).min(1).max(250),

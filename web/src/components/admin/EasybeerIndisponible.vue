@@ -30,7 +30,7 @@ const compte = computed(() => {
     <p class="text-sm text-muted-foreground">
       <template v-if="banni">
         L'API Easybeer est momentanément saturée (rate-limit).<br />
-        Patientez {{ compte }} avant de synchroniser — chaque tentative pendant ce délai
+        Patientez {{ compte }} avant d'actualiser — chaque tentative pendant ce délai
         le prolonge.
       </template>
       <template v-else>
@@ -38,7 +38,7 @@ const compte = computed(() => {
       </template>
     </p>
     <Button variant="outline" size="sm" :disabled="pending || banni" @click="emit('reessayer')">
-      {{ pending ? 'Synchronisation…' : banni ? `Réessayez dans ${compte}` : 'Synchroniser maintenant' }}
+      {{ pending ? 'Actualisation…' : banni ? `Réessayez dans ${compte}` : 'Actualiser depuis Easybeer' }}
     </Button>
   </div>
 </template>

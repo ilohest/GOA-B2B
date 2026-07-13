@@ -20,22 +20,24 @@ import {
   modifierCommande,
   detailCommande,
   telechargerDocument,
+  listeDocumentsFacturesRecentes,
   type ProduitAutocomplete,
 } from './easybeer.js'
 import {
-  agePrixMs,
   CacheIndisponibleError,
   lireCacheClient,
   lireCatalogue,
   lireCommandesClient as lireCommandesClientCache,
   lireCommandesRecentes,
+  lireGrilleTarifaire,
   lireListeClients,
+  lireReferentiels,
   lancerSync,
-  prixEstFrais,
   syncCommandesClient,
   type CommandeClientCache,
 } from './sync.js'
 import {
+  ActivationBodySchema,
   BulkParamsSchema,
   CommandeBodySchema,
   InvitationBodySchema,
@@ -46,11 +48,15 @@ import {
 import {
   catalogueAdmin,
   catalogueClient,
+  grillePrixPourClient,
   lireOverrides,
   majOverride,
   normaliserTags,
   pasDeCommande,
+  resoudrePrixUnite,
 } from './catalogue.js'
+import { creerInvitation, lireInvitation, consommerInvitation } from './invitations.js'
+import { emailActif, envoyerInvitationEmail } from './email.js'
 
 import { EasybeerBanError, etatBanEasybeer, surBan, restaurerBan } from './easybeer.js'
 
@@ -113,11 +119,19 @@ app.get('/api/me', requireAuth, async (c) => {
 app.get('/api/catalogue', requireAuth, async (c) => {
   const user = c.get('user')
   const db = getDb()
-  if (!db) return c.json({ produits: await listeProduitsAutocomplete(true) })
+  if (!db) return c.json({ produits: await listeProduitsAutocomplete() })
 
-  const [{ produits, syncedAt }, overrides] = await Promise.all([lireCatalogue(db), lireOverrides(db)])
+  const [{ produits, syncedAt }, overrides, grille, types] = await Promise.all([
+    lireCatalogue(db),
+    lireOverrides(db),
+    lireGrilleTarifaire(db),
+    lireReferentiels(db).catch(() => []),
+  ])
   const cacheClient = user.easybeerIdClient != null ? await lireCacheClient(db, user.easybeerIdClient) : null
   const prixMaxAgeMs = config.cache.prixMaxAgeMinutes * 60_000
+  // Prix de base = grille du type du client ; le prix personnalisé (cache client)
+  // prime quand il existe. → un produit rendu visible a son prix immédiatement.
+  const { prix: grillePrix } = grillePrixPourClient(grille.lignes, cacheClient?.client.type?.idClientType, types)
   const produitsClient = catalogueClient(
     produits,
     overrides,
@@ -125,6 +139,8 @@ app.get('/api/catalogue', requireAuth, async (c) => {
     cacheClient?.client.tags,
     cacheClient?.prixUpdatedAt,
     prixMaxAgeMs,
+    grillePrix,
+    grille.syncedAt,
   )
   const ages = produitsClient
     .map((p) => (p.prixUpdatedAt == null ? null : Date.now() - p.prixUpdatedAt))
@@ -221,12 +237,21 @@ async function resoudreLignes(
   )
   if (!valides.length) return ko('Aucune ligne de commande valide')
 
-  const [{ produits }, overrides, cacheClient] = await Promise.all([
+  const [{ produits }, overrides, cacheClient, grille, types] = await Promise.all([
     lireCatalogue(db),
     lireOverrides(db),
     lireCacheClient(db, easybeerIdClient),
+    lireGrilleTarifaire(db),
+    lireReferentiels(db).catch(() => []),
   ])
   if (cacheClient.idGrilleTarifaire == null) return ko('Grille tarifaire introuvable pour ce client')
+
+  // Prix de base = grille du type du client ; le prix personnalisé prime (même
+  // résolution que l'affichage → jamais de blocage sur un produit fraîchement
+  // rendu visible mais pas encore resynchronisé par client).
+  const { prix: grillePrix } = grillePrixPourClient(grille.lignes, cacheClient.client.type?.idClientType, types)
+  const maxAgeMs = config.cache.prixMaxAgeMinutes * 60_000
+  const now = Date.now()
 
   const parId = new Map<number, ProduitAutocomplete>(produits.map((p) => [p.idStockBouteille, p]))
   const lignes: { produit: ProduitAutocomplete; quantite: number; prixUnitaireHT: number }[] = []
@@ -235,18 +260,23 @@ async function resoudreLignes(
     const override = overrides[String(l.idStockBouteille)]
     if (!produit || !override?.visible) return ko(`Produit ${l.idStockBouteille} indisponible au catalogue`)
     if (override.rupture) return ko(`« ${override.displayName || produit.libelle} » est en rupture`)
-    const prixUnitaireHT = cacheClient.prix[String(l.idStockBouteille)]
-    if (prixUnitaireHT == null) {
+    const { prixHT, updatedAt } = resoudrePrixUnite(
+      l.idStockBouteille,
+      cacheClient.prix,
+      cacheClient.prixUpdatedAt,
+      grillePrix,
+      grille.syncedAt,
+    )
+    if (prixHT == null) {
       return ko(`Pas de tarif défini pour « ${override.displayName || produit.libelle} » — contactez GOA`)
     }
-    if (!prixEstFrais(cacheClient, l.idStockBouteille, config.cache.prixMaxAgeMinutes * 60_000)) {
-      const ageMinutes = agePrixMs(cacheClient, l.idStockBouteille)
-      const ageTexte = ageMinutes == null ? 'inconnu' : `${Math.ceil(ageMinutes / 60_000)} min`
+    if (updatedAt == null || now - updatedAt > maxAgeMs) {
+      const ageTexte = updatedAt == null ? 'inconnu' : `${Math.ceil((now - updatedAt) / 60_000)} min`
       return ko(
         `Tarif en cours de vérification pour « ${override.displayName || produit.libelle} » (âge : ${ageTexte}). Contactez GOA avant de commander.`,
       )
     }
-    lignes.push({ produit, quantite: l.quantite, prixUnitaireHT })
+    lignes.push({ produit, quantite: l.quantite, prixUnitaireHT: prixHT })
   }
 
   // Règle transporteur La Poste (brief §6.3) : gros cartons homogènes →
@@ -256,7 +286,7 @@ async function resoudreLignes(
     const pas = pasDeCommande(l.produit.libelle, tags)
     if (l.quantite % pas !== 0) {
       return ko(
-        `« ${l.produit.libelle} » se commande par multiple de ${pas} (livraison La Poste) — quantité reçue : ${l.quantite}`,
+        `Livraison La Poste : « ${l.produit.libelle} » se commande par cartons complets, par multiple de ${pas} — quantité reçue : ${l.quantite}`,
       )
     }
   }
@@ -611,61 +641,60 @@ app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
 })
 
 /**
- * Cœur de l'invitation (réutilisé en unitaire et en masse) : crée le compte
- * Firebase (sans mot de passe), écrit users/{uid}, génère un lien « créez
- * votre mot de passe » (page /activer). Idempotent (ré-invitation = lien frais).
- * ⚠️ N'ENVOIE RIEN : l'email partira via SMTP quand il sera configuré (prod).
+ * Cœur de l'invitation (unitaire et en masse) : génère un token d'invitation
+ * frais (usage unique, 14 j, cf. invitations.ts) et ENVOIE l'email si le SMTP
+ * est configuré. Le lien est toujours renvoyé à l'admin (copie de secours si
+ * l'envoi échoue ou est désactivé).
  */
-async function inviterClient(
+async function inviterEtEnvoyer(
   db: NonNullable<ReturnType<typeof getDb>>,
   adminAuth: NonNullable<ReturnType<typeof getAdminAuth>>,
   adminUid: string,
   easybeerIdClient: number,
   emailOverride?: string,
 ): Promise<
-  | { ok: true; email: string; lien: string; dejaActif: boolean; client: { idClient?: number; nom?: string; numero?: string } }
-  | { ok: false; erreur: string }
+  | {
+      ok: true
+      email: string
+      lien: string
+      envoye: boolean
+      erreurEmail?: string
+      expiresAt: number
+      client: { idClient?: number; nom?: string; numero?: string }
+    }
+  | { ok: false; erreur: string; dejaActif?: boolean }
 > {
-  const client = await getClient(easybeerIdClient)
-  if (!client) return { ok: false, erreur: `Client Easybeer ${easybeerIdClient} introuvable` }
+  const res = await creerInvitation(db, adminAuth, adminUid, easybeerIdClient, emailOverride)
+  if (!res.ok) return res
+  const { invitation } = res
 
-  const email = (emailOverride ?? client.emailPrincipal ?? '').trim().toLowerCase()
-  if (!email) return { ok: false, erreur: `${client.nom ?? easybeerIdClient} : pas d'email dans Easybeer` }
-
-  // Compte Firebase : réutilisé s'il existe déjà (ré-invitation), sinon créé
-  // sans mot de passe (connexion impossible tant que le lien n'est pas utilisé).
-  const existing = await adminAuth.getUserByEmail(email).catch(() => null)
-  const uid = existing?.uid ?? (await adminAuth.createUser({ email })).uid
-
-  const prev = (await db.collection('users').doc(uid).get()).data() ?? {}
-  await db.collection('users').doc(uid).set(
-    {
-      email,
-      easybeerIdClient,
-      role: prev.role ?? 'client',
-      status: prev.status === 'active' ? 'active' : 'invited',
-      invitedAt: Date.now(),
-      invitedBy: adminUid,
-    },
-    { merge: true },
-  )
-
-  // Lien Firebase natif → on extrait l'oobCode pour pointer vers NOTRE page
-  // /activer (même mécanique en prod, aucune page Firebase hébergée).
-  const resetLink = await adminAuth.generatePasswordResetLink(email)
-  const oobCode = new URL(resetLink).searchParams.get('oobCode')
-  const lien = `${config.invite.baseUrl}?oobCode=${encodeURIComponent(oobCode ?? '')}&email=${encodeURIComponent(email)}`
+  let envoye = false
+  let erreurEmail: string | undefined
+  if (emailActif()) {
+    try {
+      await envoyerInvitationEmail({
+        nom: invitation.client.nom || invitation.email,
+        email: invitation.email,
+        lien: invitation.lien,
+      })
+      envoye = true
+    } catch (e) {
+      erreurEmail = (e as Error).message
+    }
+  }
 
   return {
     ok: true,
-    email,
-    lien,
-    dejaActif: prev.status === 'active',
-    client: { idClient: client.idClient, nom: client.nom, numero: client.numero },
+    email: invitation.email,
+    lien: invitation.lien,
+    envoye,
+    erreurEmail,
+    expiresAt: invitation.expiresAt,
+    client: invitation.client,
   }
 }
 
-/** Invitation d'UN client. */
+/** Invitation d'UN client (génère le token + envoie l'email). */
 app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   const adminAuth = getAdminAuth()
@@ -674,15 +703,15 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
   const parse = parserBody(InvitationBodySchema, await c.req.json().catch(() => null))
   if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
 
-  const res = await inviterClient(db, adminAuth, c.get('user').uid, parse.data.easybeerIdClient, parse.data.email)
-  if (!res.ok) return c.json({ error: res.erreur }, 400)
+  const res = await inviterEtEnvoyer(db, adminAuth, c.get('user').uid, parse.data.easybeerIdClient, parse.data.email)
+  // Compte déjà actif → 409 (pas de nouveau lien, cf. décision produit).
+  if (!res.ok) return c.json({ error: res.erreur, dejaActif: res.dejaActif ?? false }, res.dejaActif ? 409 : 400)
   return c.json(res)
 })
 
 /**
- * Invitations en MASSE : un lien par client sélectionné. L'email d'invitation
- * sera envoyé automatiquement quand SMTP sera branché ; d'ici là, les liens
- * sont renvoyés à l'admin (copie manuelle).
+ * Invitations en MASSE : un token par client sélectionné, email envoyé si SMTP
+ * configuré. Les liens sont renvoyés à l'admin (copie de secours).
  */
 app.post('/api/admin/invitations/bulk', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
@@ -696,13 +725,40 @@ app.post('/api/admin/invitations/bulk', requireAuth, requireAdmin, async (c) => 
   const resultats = []
   for (const inv of parse.data.invitations) {
     try {
-      const res = await inviterClient(db, adminAuth, adminUid, inv.easybeerIdClient, inv.email)
+      const res = await inviterEtEnvoyer(db, adminAuth, adminUid, inv.easybeerIdClient, inv.email)
       resultats.push({ easybeerIdClient: inv.easybeerIdClient, ...res })
     } catch (e) {
       resultats.push({ easybeerIdClient: inv.easybeerIdClient, ok: false as const, erreur: (e as Error).message })
     }
   }
-  return c.json({ resultats, reussies: resultats.filter((r) => r.ok).length })
+  return c.json({
+    resultats,
+    reussies: resultats.filter((r) => r.ok).length,
+    envoyees: resultats.filter((r) => r.ok && r.envoye).length,
+  })
+})
+
+// ---- Invitation : parcours PUBLIC du client invité (page /activer) ----
+
+/** État d'un token d'invitation (au chargement de /activer). PUBLIC (pas de session). */
+app.get('/api/invitations/:token', async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  return c.json(await lireInvitation(db, c.req.param('token')))
+})
+
+/** Consomme le token : pose le mot de passe et active le compte. PUBLIC. */
+app.post('/api/invitations/:token/consume', async (c) => {
+  const db = getDb()
+  const adminAuth = getAdminAuth()
+  if (!db || !adminAuth) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const parse = parserBody(ActivationBodySchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+
+  const res = await consommerInvitation(db, adminAuth, c.req.param('token'), parse.data.password)
+  if (!res.ok) return c.json({ error: res.erreur, etat: res.etat }, 400)
+  return c.json(res)
 })
 
 /**
@@ -941,6 +997,29 @@ app.get('/api/admin/statut-easybeer', requireAuth, requireAdmin, (c) => c.json(e
 
 // ---- Admin : commandes (tous clients) ----
 
+const CACHE_FACTURES_COMMANDES_MS = 10 * 60 * 1000
+
+async function facturesCommandesRecentes(db: NonNullable<ReturnType<typeof getDb>>) {
+  const ref = db.doc('cache/commandesFactures')
+  const snap = await ref.get()
+  const cached = snap.data() as
+    | { factures?: Record<string, { existe: boolean; numero: string | null }>; syncedAt?: number }
+    | undefined
+
+  if (cached?.factures && cached.syncedAt && Date.now() - cached.syncedAt < CACHE_FACTURES_COMMANDES_MS) {
+    return cached.factures
+  }
+
+  const factures = await listeDocumentsFacturesRecentes(500)
+  const parCommande: Record<string, { existe: boolean; numero: string | null }> = {}
+  for (const f of factures) {
+    if (f.idCommande == null) continue
+    parCommande[String(f.idCommande)] = { existe: true, numero: f.code ?? null }
+  }
+  await ref.set({ factures: parCommande, syncedAt: Date.now() })
+  return parCommande
+}
+
 /**
  * Les commandes récentes (30 jours par défaut), depuis le CACHE (resynchro via
  * `?refresh=1` ou le job de synchro) — plus d'appel Easybeer par visite.
@@ -949,8 +1028,19 @@ app.get('/api/admin/commandes', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
   const { commandes, syncedAt, indisponible } = await lireCommandesRecentes(db, c.req.query('refresh') === '1')
+  let factures: Record<string, { existe: boolean; numero: string | null }> = {}
+  try {
+    factures = await facturesCommandesRecentes(db)
+  } catch {
+    // La colonne FA est informative : si Easybeer refuse temporairement la liste
+    // documents, on affiche le cache commandes sans bloquer la page.
+  }
   return c.json({
-    commandes,
+    commandes: commandes.map((cmd) => ({
+      ...cmd,
+      facture: (cmd.idCommande != null ? factures[String(cmd.idCommande)] : undefined) ?? cmd.facture ?? null,
+      totalHT: cmd.totalHT ?? (cmd.totalTTC != null ? cmd.totalTTC / 1.055 : null),
+    })),
     syncedAt,
     indisponible: indisponible ?? false,
     retryAfterSeconds: indisponible ? etatBanEasybeer().secondesRestantes : 0,
@@ -1003,6 +1093,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
 
   const clients = (clientsSnap.data()?.clients ?? []) as { actif: boolean }[]
   const commandes = (commandesSnap.data()?.commandes ?? []) as {
+    totalHT: number | null
     totalTTC: number | null
     dateCreation: number | null
     etat: { code: string }
@@ -1011,6 +1102,10 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
 
   const depuis30j = Date.now() - 30 * 24 * 3600 * 1000
   const commandes30j = commandes.filter((cmd) => (cmd.dateCreation ?? 0) >= depuis30j && cmd.etat.code !== 'ANNULEE')
+  const caHT30j = commandes30j.reduce(
+    (somme, cmd) => somme + (cmd.totalHT ?? (cmd.totalTTC != null ? cmd.totalTTC / 1.055 : 0)),
+    0,
+  )
   const caTTC30j = commandes30j.reduce((somme, cmd) => somme + (cmd.totalTTC ?? 0), 0)
 
   const statutsComptes = Object.values(comptes)
@@ -1024,7 +1119,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
 
   return c.json({
     clients: { total: clients.length, avecCompte: statutsComptes.length, actifs: statutsComptes.filter((s) => s.statut === 'active').length },
-    commandes30j: { nombre: commandes30j.length, caTTC: caTTC30j },
+    commandes30j: { nombre: commandes30j.length, caHT: caHT30j, caTTC: caTTC30j },
     catalogue: { produits: produits.length, visibles, ruptures },
     dernierSync: metaSnap.data()?.dernierSync?.syncedAt ?? null,
   })

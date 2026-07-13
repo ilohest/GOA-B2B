@@ -49,8 +49,24 @@ export const config = {
   authDisabled: process.env.AUTH_DISABLED === 'true',
   devEasybeerIdClient: Number(process.env.DEV_EASYBEER_ID_CLIENT ?? 588074),
 
+  // Serveur SMTP (OVH en prod). Sans SMTP_HOST, l'envoi est désactivé et on
+  // retombe sur le lien d'invitation copiable manuellement.
+  smtp: {
+    host: process.env.SMTP_HOST || undefined,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    // 587 = STARTTLS (secure:false) ; 465 = TLS implicite (secure:true).
+    secure: process.env.SMTP_SECURE === 'true' || Number(process.env.SMTP_PORT ?? 587) === 465,
+    user: process.env.SMTP_USER || undefined,
+    pass: process.env.SMTP_PASS || undefined,
+    from: process.env.SMTP_FROM || 'GOA Kombucha <contact@goa-kombucha.fr>',
+    replyTo: process.env.SMTP_REPLY_TO || undefined,
+  },
+
   invite: {
     baseUrl: process.env.INVITE_BASE_URL ?? 'http://localhost:5173/activer',
-    smtpUrl: process.env.SMTP_URL || undefined,
+    // Durée de validité du lien d'invitation (jours), usage unique.
+    expiresInDays: Number(process.env.INVITE_EXPIRES_DAYS ?? 14),
+    // URL absolue du logo GOA (PNG) pour l'email ; vide → wordmark texte.
+    logoUrl: process.env.INVITE_LOGO_URL || undefined,
   },
 }

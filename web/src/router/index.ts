@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
+import { useHeaderSaveBar } from '@/composables/useHeaderSaveBar'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -66,6 +67,11 @@ const router = createRouter({
           name: 'admin-catalogue',
           component: () => import('@/pages/admin/AdminCataloguePage.vue'),
         },
+        {
+          path: 'aide',
+          name: 'admin-aide',
+          component: () => import('@/pages/admin/AidePage.vue'),
+        },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
@@ -74,7 +80,13 @@ const router = createRouter({
 
 // Toute route est privée sauf meta.public. On attend la restauration de la
 // session Firebase avant de rediriger (sinon faux négatif au rechargement).
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
+  const { saveBar, triggerSaveBarShake } = useHeaderSaveBar()
+  if (saveBar.value && to.fullPath !== from.fullPath) {
+    triggerSaveBarShake()
+    return false
+  }
+
   if (to.meta.public) return true
   const { waitForAuth, isAuthenticated } = useAuth()
   await waitForAuth()

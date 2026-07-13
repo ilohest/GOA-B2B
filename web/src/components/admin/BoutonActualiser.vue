@@ -32,6 +32,7 @@ const texte = computed(() => {
   <Button
     :variant="variant"
     size="sm"
+    class="border border-border bg-background font-medium shadow-sm hover:bg-muted"
     :disabled="pending || banni"
     :title="banni ? 'API Easybeer momentanément saturée' : undefined"
     @click="emit('click')"

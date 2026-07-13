@@ -1,13 +1,24 @@
 <script setup lang="ts">
 /** Pastille d'état de commande (libellé + couleur fournis par Easybeer). */
+import { computed } from 'vue'
 import type { EtatCommande } from '@/lib/types'
 
-defineProps<{ etat: EtatCommande }>()
+const props = defineProps<{ etat: EtatCommande }>()
+
+const styleBadge = computed(() =>
+  props.etat.couleur
+    ? {
+        borderColor: `${props.etat.couleur}55`,
+        backgroundColor: `${props.etat.couleur}14`,
+      }
+    : undefined,
+)
 </script>
 
 <template>
   <span
-    class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
+    class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium text-foreground/80"
+    :style="styleBadge"
   >
     <span
       class="size-1.5 rounded-full"

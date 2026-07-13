@@ -3,8 +3,8 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { z } from 'zod'
 import { toast } from 'vue-sonner'
-import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth'
-import { firebaseAuth } from '@/firebase'
+import { api } from '@/lib/api'
+import type { InvitationValidation } from '@/lib/types'
 import { useAuth } from '@/composables/useAuth'
 import BrandLogo from '@/components/BrandLogo.vue'
 import { Button } from '@/components/ui/button'
@@ -27,21 +27,37 @@ const route = useRoute()
 const router = useRouter()
 const { login } = useAuth()
 
-const oobCode = typeof route.query.oobCode === 'string' ? route.query.oobCode : ''
+const token = typeof route.query.token === 'string' ? route.query.token : ''
 const state = ref<'checking' | 'ready' | 'invalid'>('checking')
+const invalidMessage = ref('Ce lien d’invitation est invalide.')
 const email = ref('')
 const form = reactive({ password: '', confirm: '' })
 const fieldErrors = reactive<{ password?: string; confirm?: string }>({})
 const submitting = ref(false)
 
+const MESSAGES: Record<InvitationValidation['etat'], string> = {
+  valide: '',
+  introuvable: 'Ce lien d’invitation est invalide. Demandez-nous un nouveau lien.',
+  expire: 'Ce lien d’invitation a expiré. Demandez-nous un nouveau lien.',
+  utilise:
+    'Ce lien a déjà été utilisé — votre compte est actif. Connectez-vous, ou utilisez « Mot de passe oublié ».',
+  revoque: 'Ce lien a été remplacé par un plus récent. Utilisez le dernier email reçu de GOA.',
+}
+
 onMounted(async () => {
-  if (!firebaseAuth || !oobCode) {
+  if (!token) {
     state.value = 'invalid'
     return
   }
   try {
-    email.value = await verifyPasswordResetCode(firebaseAuth, oobCode)
-    state.value = 'ready'
+    const res = await api.get<InvitationValidation>(`/invitations/${token}`)
+    if (res.etat === 'valide') {
+      email.value = res.email ?? ''
+      state.value = 'ready'
+    } else {
+      invalidMessage.value = MESSAGES[res.etat]
+      state.value = 'invalid'
+    }
   } catch {
     state.value = 'invalid'
   }
@@ -60,13 +76,15 @@ async function onSubmit() {
   }
   submitting.value = true
   try {
-    await confirmPasswordReset(firebaseAuth!, oobCode, parsed.data.password)
+    const res = await api.post<{ ok: boolean; email: string }>(`/invitations/${token}/consume`, {
+      password: parsed.data.password,
+    })
     // Connexion directe dans la foulée : zéro étape superflue pour le client.
-    await login(email.value, parsed.data.password)
+    await login(res.email || email.value, parsed.data.password)
     toast.success('Votre compte est prêt !')
     router.push('/')
-  } catch {
-    toast.error("Impossible d'enregistrer le mot de passe. Réessayez ou demandez un nouveau lien.")
+  } catch (e) {
+    toast.error((e as Error).message || 'Impossible d’activer le compte. Demandez un nouveau lien.')
   } finally {
     submitting.value = false
   }
@@ -90,10 +108,7 @@ async function onSubmit() {
         </div>
 
         <div v-else-if="state === 'invalid'" class="grid gap-4 text-center">
-          <p class="text-sm text-muted-foreground">
-            Ce lien d'invitation est invalide ou a expiré. Demandez un nouveau lien à GOA, ou
-            utilisez « Mot de passe oublié » si vous avez déjà activé votre compte.
-          </p>
+          <p class="text-sm text-muted-foreground">{{ invalidMessage }}</p>
           <Button variant="outline" as-child>
             <RouterLink to="/login">Aller à la connexion</RouterLink>
           </Button>
