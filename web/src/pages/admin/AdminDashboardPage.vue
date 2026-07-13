@@ -101,19 +101,21 @@ const stats = computed(() => {
           <LayoutDashboard class="size-5 text-muted-foreground" />
           Tableau de bord
         </h1>
-        <p class="text-sm text-muted-foreground">
-          <template v-if="data?.dernierSync">
-            Données synchronisées le {{ dateHeureFr(data.dernierSync) }}.
-          </template>
-          <template v-else>Aucune synchronisation complète pour l'instant.</template>
-        </p>
       </div>
-      <BoutonActualiser
-        label="Actualiser depuis Easybeer"
-        label-pending="Actualisation…"
-        :pending="synchro.isPending.value"
-        @click="synchro.mutate()"
-      />
+      <div class="flex items-center gap-2">
+        <p v-if="data?.dernierSync" class="text-xs whitespace-nowrap text-muted-foreground">
+          À jour : {{ dateHeureFr(data.dernierSync) }}
+        </p>
+        <p v-else class="text-xs whitespace-nowrap text-muted-foreground">
+          Aucune synchronisation
+        </p>
+        <BoutonActualiser
+          label="Actualiser depuis Easybeer"
+          label-pending="Actualisation…"
+          :pending="synchro.isPending.value"
+          @click="synchro.mutate()"
+        />
+      </div>
     </div>
 
     <div v-if="isPending" class="grid gap-4 sm:grid-cols-3">

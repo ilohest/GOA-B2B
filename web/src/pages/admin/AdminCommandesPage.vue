@@ -16,6 +16,13 @@ import IconTooltip from '@/components/admin/IconTooltip.vue'
 import PaiementBadge from '@/components/admin/PaiementBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
@@ -41,8 +48,9 @@ const actualisation = useMutation({
   onError: (e) => toast.error((e as Error).message),
 })
 
-const toutAfficher = ref(false)
-const PAR_PAGE = 25
+const optionsLignesParPage = [10, 25, 50, 100]
+const lignesParPage = ref(25)
+const pageCourante = ref(1)
 type CleTri = 'numero' | 'client' | 'dateCreation' | 'etat' | 'facture' | 'paiement' | 'totalHT' | 'totalTTC'
 const tri = ref<{ cle: CleTri; direction: 'asc' | 'desc' }>({ cle: 'dateCreation', direction: 'desc' })
 
@@ -72,6 +80,7 @@ function basculerTri(cle: CleTri) {
     tri.value.cle === cle
       ? { cle, direction: tri.value.direction === 'asc' ? 'desc' : 'asc' }
       : { cle, direction: 'asc' }
+  pageCourante.value = 1
 }
 
 const commandesTriees = computed(() =>
@@ -86,9 +95,32 @@ const commandesTriees = computed(() =>
   }),
 )
 
-const commandesAffichees = computed(() =>
-  toutAfficher.value ? commandesTriees.value : commandesTriees.value.slice(0, PAR_PAGE),
+const totalCommandes = computed(() => commandesTriees.value.length)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCommandes.value / lignesParPage.value)))
+const debutPagination = computed(() =>
+  totalCommandes.value === 0 ? 0 : (pageCourante.value - 1) * lignesParPage.value + 1,
 )
+const finPagination = computed(() => Math.min(totalCommandes.value, pageCourante.value * lignesParPage.value))
+
+const commandesAffichees = computed(() => {
+  const debut = (pageCourante.value - 1) * lignesParPage.value
+  return commandesTriees.value.slice(debut, debut + lignesParPage.value)
+})
+
+watch(totalPages, (pages) => {
+  if (pageCourante.value > pages) pageCourante.value = pages
+})
+
+function changerLignesParPage(valeur: unknown) {
+  const prochaineValeur = Number(valeur)
+  if (!Number.isFinite(prochaineValeur)) return
+  lignesParPage.value = prochaineValeur
+  pageCourante.value = 1
+}
+
+function allerPage(delta: number) {
+  pageCourante.value = Math.min(totalPages.value, Math.max(1, pageCourante.value + delta))
+}
 
 const colonnesTri: { cle: CleTri; label: string; classe?: string }[] = [
   { cle: 'numero', label: '#' },
@@ -141,8 +173,19 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
       />
 
       <template v-else>
-        <div class="overflow-x-auto rounded-lg border">
-          <Table>
+        <div class="rounded-lg border [&_[data-slot=table-container]]:overflow-visible">
+          <Table class="table-fixed">
+            <colgroup>
+              <col style="width: 6%" />
+              <col style="width: 11%" />
+              <col style="width: 12%" />
+              <col style="width: 24%" />
+              <col style="width: 6%" />
+              <col style="width: 13%" />
+              <col style="width: 11%" />
+              <col style="width: 11%" />
+              <col style="width: 6%" />
+            </colgroup>
             <TableHeader class="[&_tr]:bg-muted">
               <TableRow>
                 <TableHead
@@ -174,19 +217,19 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
                 <TableCell class="font-medium">{{ cmd.numero ?? cmd.idCommande }}</TableCell>
                 <TableCell class="text-sm text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</TableCell>
                 <TableCell><EtatBadge :etat="cmd.etat" /></TableCell>
-                <TableCell>
+                <TableCell class="min-w-0">
                   <RouterLink
                     v-if="cmd.client?.idClient"
                     :to="`/admin/clients/${cmd.client.idClient}`"
-                    class="hover:underline"
+                    class="flex min-w-0 items-baseline gap-1 hover:underline"
                     @click.stop
                   >
-                    {{ cmd.client.nom }}
-                    <span class="text-xs text-muted-foreground">{{ cmd.client.numero }}</span>
+                    <span class="truncate">{{ cmd.client.nom }}</span>
+                    <span class="shrink-0 text-xs text-muted-foreground">{{ cmd.client.numero }}</span>
                   </RouterLink>
                   <span v-else class="text-muted-foreground">—</span>
                 </TableCell>
-                <TableCell>
+                <TableCell class="text-center">
                   <IconTooltip v-if="cmd.facture?.existe" :text="cmd.facture.numero ?? 'Facture disponible'">
                     <FileText class="size-4 text-cyan-600" />
                   </IconTooltip>
@@ -218,17 +261,48 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
 
         <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
           <span>
-            {{ commandesAffichees.length }} / {{ data?.commandes.length ?? 0 }} commande(s)
-            (les plus récentes — l'historique complet reste dans Easybeer)
+            {{ debutPagination }}-{{ finPagination }} / {{ totalCommandes }} commande(s)
           </span>
-          <Button
-            v-if="(data?.commandes.length ?? 0) > PAR_PAGE"
-            variant="ghost"
-            size="sm"
-            @click="toutAfficher = !toutAfficher"
-          >
-            {{ toutAfficher ? 'Réduire' : 'Tout afficher' }}
-          </Button>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="whitespace-nowrap">Lignes par page</span>
+            <Select :model-value="String(lignesParPage)" @update:model-value="changerLignesParPage">
+              <SelectTrigger class="h-8 w-20 bg-background">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="option in optionsLignesParPage"
+                  :key="option"
+                  :value="String(option)"
+                >
+                  {{ option }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div class="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="pageCourante <= 1"
+                @click="allerPage(-1)"
+              >
+                Précédent
+              </Button>
+              <span class="min-w-24 text-center tabular-nums">
+                Page {{ pageCourante }} / {{ totalPages }}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                :disabled="pageCourante >= totalPages"
+                @click="allerPage(1)"
+              >
+                Suivant
+              </Button>
+            </div>
+          </div>
         </div>
       </template>
     </CardContent>

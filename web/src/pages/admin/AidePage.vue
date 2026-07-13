@@ -27,9 +27,15 @@ const guideNettoye = computed(() =>
 )
 
 const sectionsGuide = computed(() => {
-  const [avantFaq, apresTitreFaq = ''] = guideNettoye.value.split('## 9. Questions fréquentes')
-  const [faqMarkdown, apresFaq = ''] = apresTitreFaq.split(/\n---\n/)
-  return { avantFaq, faqMarkdown, apresFaq }
+  const match = guideNettoye.value.match(/^##\s+\d+\.\s+Questions fréquentes\s*$/m)
+  if (!match?.index) return { avantFaq: guideNettoye.value, faqTitre: 'Questions fréquentes', faqMarkdown: '', apresFaq: '' }
+
+  const avantFaq = guideNettoye.value.slice(0, match.index)
+  const apresTitreFaq = guideNettoye.value.slice(match.index + match[0].length)
+  const prochaineSection = apresTitreFaq.match(/\n##\s+\d+\.\s+/)
+  const faqMarkdown = prochaineSection?.index != null ? apresTitreFaq.slice(0, prochaineSection.index) : apresTitreFaq
+  const apresFaq = prochaineSection?.index != null ? apresTitreFaq.slice(prochaineSection.index).trim() : ''
+  return { avantFaq, faqTitre: match[0].replace(/^##\s+/, ''), faqMarkdown, apresFaq }
 })
 
 const htmlPrincipal = computed(() =>
@@ -68,7 +74,7 @@ const questionsFrequentes = computed(() =>
       <div class="guide" v-html="htmlPrincipal" />
 
       <section v-if="questionsFrequentes.length" class="guide mt-7">
-        <h2>9. Questions fréquentes</h2>
+        <h2>{{ sectionsGuide.faqTitre }}</h2>
         <div class="grid gap-2">
           <details
             v-for="item in questionsFrequentes"

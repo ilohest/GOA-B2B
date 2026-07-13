@@ -1,4 +1,4 @@
-<!-- guide-version: 1.0 -->
+<!-- guide-version: 1.1 -->
 <!-- guide-updated-at: 2026-07-13 -->
 
 # Guide administrateur — plateforme de commande GOA
@@ -36,7 +36,7 @@ Pour ne pas saturer Easybeer, la plateforme **ne lit jamais Easybeer en direct**
 
 - La synchro tourne **automatiquement** (planifiée, ex. la nuit / toutes les
   quelques heures).
-- Vous pouvez la **déclencher à la main** avec le bouton **« Synchroniser »**
+- Vous pouvez la **déclencher à la main** avec le bouton **« Actualiser depuis Easybeer »**
   (utile juste après un changement important dans Easybeer).
 - Entre un changement dans Easybeer et la synchro suivante, les clients voient
   **la dernière version synchronisée**.
@@ -120,7 +120,7 @@ palette** (par défaut). Rien à choisir par commande.
 ## 9. Questions fréquentes
 
 **J'ai changé un prix dans Easybeer, le client voit encore l'ancien.**
-→ Normal jusqu'à la prochaine synchro. Cliquez **« Synchroniser »** pour forcer
+→ Normal jusqu'à la prochaine synchro. Cliquez **« Actualiser depuis Easybeer »** pour forcer
 la mise à jour immédiatement.
 
 **Je rends un produit visible : son prix apparaît-il tout de suite ?**
@@ -136,7 +136,16 @@ réessayez après le compte à rebours. Les données en cache restent affichées
 → Vérifiez ses spams, et que son email est correct dans Easybeer. Sinon, copiez
 le **lien** et envoyez-le lui manuellement.
 
----
+## 10. Support
 
-_Ce guide évolue avec la plateforme. Dernière mise à jour intégrée au fil du
-développement._
+Pour toute question, contactez le support :
+
+- **Email** : [hello@isaure-lohest.com](mailto:hello@isaure-lohest.com)
+- **WhatsApp** : [+34 600 049 801](https://wa.me/34600049801)
+
+Pour aider à résoudre plus vite, ajoutez si possible :
+
+- la **page concernée** (Clients, Commandes, Catalogue, fiche client…) ;
+- le **client**, la **commande** ou le **produit** concerné ;
+- le **message affiché** ou une capture d'écran ;
+- l'heure approximative du problème.

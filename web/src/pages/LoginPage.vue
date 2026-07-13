@@ -25,6 +25,7 @@ const fieldErrors = reactive<{ email?: string; password?: string }>({})
 const submitting = ref(false)
 const resetting = ref(false)
 const motDePasseVisible = ref(false)
+const erreurConnexion = ref('')
 
 const redirectTo = computed(() => {
   const r = route.query.redirect
@@ -56,6 +57,7 @@ function messageFirebase(code: string): string {
 async function onSubmit() {
   fieldErrors.email = undefined
   fieldErrors.password = undefined
+  erreurConnexion.value = ''
   const parsed = schema.safeParse(form)
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
@@ -69,7 +71,7 @@ async function onSubmit() {
     await login(parsed.data.email, parsed.data.password)
     router.push(redirectTo.value)
   } catch (e) {
-    toast.error(messageFirebase((e as { code?: string }).code ?? ''))
+    erreurConnexion.value = messageFirebase((e as { code?: string }).code ?? '')
   } finally {
     submitting.value = false
   }
@@ -77,6 +79,7 @@ async function onSubmit() {
 
 async function onResetPassword() {
   const email = z.email().safeParse(form.email)
+  erreurConnexion.value = ''
   if (!email.success) {
     fieldErrors.email = 'Saisissez votre email pour recevoir le lien de réinitialisation.'
     return
@@ -117,6 +120,7 @@ async function onResetPassword() {
               inputmode="email"
               placeholder="vous@exemple.fr"
               :aria-invalid="Boolean(fieldErrors.email)"
+              @input="erreurConnexion = ''"
             />
             <p v-if="fieldErrors.email" class="text-sm text-destructive">{{ fieldErrors.email }}</p>
           </div>
@@ -130,6 +134,7 @@ async function onResetPassword() {
                 autocomplete="current-password"
                 class="pr-10"
                 :aria-invalid="Boolean(fieldErrors.password)"
+                @input="erreurConnexion = ''"
               />
               <button
                 type="button"
@@ -143,6 +148,16 @@ async function onResetPassword() {
               </button>
             </div>
             <p v-if="fieldErrors.password" class="text-sm text-destructive">{{ fieldErrors.password }}</p>
+          </div>
+          <div
+            v-if="erreurConnexion"
+            class="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            role="alert"
+          >
+            <p class="font-medium">{{ erreurConnexion }}</p>
+            <p class="mt-1 text-xs text-destructive/80">
+              Vérifiez votre saisie ou utilisez “Mot de passe oublié ?”.
+            </p>
           </div>
           <Button type="submit" class="w-full" :disabled="submitting">
             {{ submitting ? 'Connexion…' : 'Se connecter' }}

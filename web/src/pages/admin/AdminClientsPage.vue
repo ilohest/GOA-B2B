@@ -84,9 +84,9 @@ const actualisation = useMutation({
 });
 
 const recherche = ref("");
-const toutAfficher = ref(false);
-const PAR_PAGE = 25;
 const page = ref(1);
+const optionsLignesParPage = [10, 25, 50, 100];
+const lignesParPage = ref(25);
 type CleTriClient = "commerce" | "email" | "categorie" | "compte";
 const tri = ref<{ cle: CleTriClient; direction: "asc" | "desc" }>({
   cle: "commerce",
@@ -138,38 +138,57 @@ const clientsTries = computed(() =>
   }),
 );
 
+const totalClients = computed(() => clientsTries.value.length);
 const totalPages = computed(() =>
-  toutAfficher.value
-    ? 1
-    : Math.max(1, Math.ceil(clientsFiltres.value.length / PAR_PAGE)),
+  Math.max(1, Math.ceil(totalClients.value / lignesParPage.value)),
+);
+const debutPagination = computed(() =>
+  totalClients.value === 0 ? 0 : (page.value - 1) * lignesParPage.value + 1,
+);
+const finPagination = computed(() =>
+  Math.min(totalClients.value, page.value * lignesParPage.value),
 );
 const clientsAffiches = computed(() => {
-  if (toutAfficher.value) return clientsTries.value;
-  const debut = (Math.min(page.value, totalPages.value) - 1) * PAR_PAGE;
-  return clientsTries.value.slice(debut, debut + PAR_PAGE);
+  const debut = (Math.min(page.value, totalPages.value) - 1) * lignesParPage.value;
+  return clientsTries.value.slice(debut, debut + lignesParPage.value);
+});
+
+watch(totalPages, (pages) => {
+  if (page.value > pages) page.value = pages;
 });
 
 function surRecherche() {
   page.value = 1;
 }
 
+function changerLignesParPage(valeur: unknown) {
+  const prochaineValeur = Number(valeur);
+  if (!Number.isFinite(prochaineValeur)) return;
+  lignesParPage.value = prochaineValeur;
+  page.value = 1;
+}
+
+function allerPage(delta: number) {
+  page.value = Math.min(totalPages.value, Math.max(1, page.value + delta));
+}
+
 // --- Sélection (checkbox, conservée à travers pages et recherches) ---
 
 const selection = reactive(new Set<number>());
 
-const idsAffiches = computed(() =>
-  clientsAffiches.value
+const idsSelectionnables = computed(() =>
+  clientsTries.value
     .map((c) => c.idClient)
     .filter((id): id is number => id != null),
 );
 const toutSelectionne = computed(
   () =>
-    idsAffiches.value.length > 0 &&
-    idsAffiches.value.every((id) => selection.has(id)),
+    idsSelectionnables.value.length > 0 &&
+    idsSelectionnables.value.every((id) => selection.has(id)),
 );
 
 function basculerTout(coche: boolean) {
-  for (const id of idsAffiches.value) {
+  for (const id of idsSelectionnables.value) {
     if (coche) selection.add(id);
     else selection.delete(id);
   }
@@ -561,39 +580,45 @@ function ouvrirFiche(client: ClientResume) {
             class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground"
           >
             <span>
-              {{ clientsFiltres.length }} client(s)
-              <template v-if="!toutAfficher">
-                — page {{ Math.min(page, totalPages) }} /
-                {{ totalPages }}</template
-              >
+              {{ debutPagination }}-{{ finPagination }} / {{ totalClients }} client(s)
             </span>
-            <div class="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                @click="
-                  toutAfficher = !toutAfficher;
-                  page = 1;
-                "
-              >
-                {{ toutAfficher ? "Paginer" : "Tout afficher" }}
-              </Button>
-              <template v-if="!toutAfficher">
+
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="whitespace-nowrap">Lignes par page</span>
+              <Select :model-value="String(lignesParPage)" @update:model-value="changerLignesParPage">
+                <SelectTrigger class="h-8 w-20 bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="option in optionsLignesParPage"
+                    :key="option"
+                    :value="String(option)"
+                  >
+                    {{ option }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              <div class="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   :disabled="page <= 1"
-                  @click="page--"
+                  @click="allerPage(-1)"
                   >Précédent</Button
                 >
+                <span class="min-w-24 text-center tabular-nums">
+                  Page {{ page }} / {{ totalPages }}
+                </span>
                 <Button
                   variant="outline"
                   size="sm"
                   :disabled="page >= totalPages"
-                  @click="page++"
+                  @click="allerPage(1)"
                   >Suivant</Button
                 >
-              </template>
+              </div>
             </div>
           </div>
         </template>
