@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ClipboardList } from '@lucide/vue'
 import { useQuery } from '@tanstack/vue-query'
@@ -12,6 +12,7 @@ import { usePanier } from '@/composables/usePanier'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const router = useRouter()
@@ -23,6 +24,28 @@ const { data, isPending, isError, error } = useQuery({
 })
 
 const chargement = ref<number | null>(null)
+
+const confirmationOuverte = ref(false)
+const confirmation = ref<{
+  numero?: number | null
+  totalHT: number
+  totalTTC: number | null
+  remiseTotale: number | null
+  totauxReels: boolean
+  modification: boolean
+} | null>(null)
+
+onMounted(() => {
+  const brut = sessionStorage.getItem('goa-commande-confirmation')
+  if (!brut) return
+  sessionStorage.removeItem('goa-commande-confirmation')
+  try {
+    confirmation.value = JSON.parse(brut)
+    confirmationOuverte.value = true
+  } catch {
+    confirmation.value = null
+  }
+})
 
 // --- Détail dépliable (lignes + documents) ---
 
@@ -47,7 +70,7 @@ async function basculerDetail(idCommande: number) {
 
 const telechargementEnCours = ref<number | null>(null)
 
-/** Décomposition des totaux : sous-total HT, remise, TVA (TTC − HT), consigne, total TTC. */
+/** Décomposition des totaux : sous-total HT, remise, TVA (TTC − HT), total TTC. */
 function lignesTotaux(detail: CommandeDetail) {
   const lignes: { label: string; valeur: string; classe?: string }[] = []
   const muted = 'text-muted-foreground'
@@ -60,7 +83,6 @@ function lignesTotaux(detail: CommandeDetail) {
       classe: muted,
     })
   }
-  if (detail.totalConsigne) lignes.push({ label: 'dont consigne', valeur: prixFr(detail.totalConsigne), classe: muted })
   if (detail.totalTTC != null) lignes.push({ label: 'Total TTC', valeur: prixFr(detail.totalTTC), classe: 'font-semibold' })
   return lignes
 }
@@ -186,7 +208,7 @@ async function modifier(commande: CommandeResume) {
                       <TableCell class="font-medium">{{ l.designation }}</TableCell>
                       <TableCell class="text-right tabular-nums">{{ l.quantite }}</TableCell>
                       <TableCell class="text-right tabular-nums text-muted-foreground">
-                        {{ l.prixUnitaireHT != null ? prixFr(l.prixUnitaireHT * l.quantite) : '—' }}
+                        <span>{{ l.totalHT != null ? prixFr(l.totalHT) : '—' }}</span>
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -235,4 +257,39 @@ async function modifier(commande: CommandeResume) {
       </template>
     </CardContent>
   </Card>
+
+  <Dialog v-model:open="confirmationOuverte">
+    <DialogContent class="sm:max-w-md">
+      <template v-if="confirmation">
+        <DialogHeader>
+          <DialogTitle>{{ confirmation.modification ? 'Commande mise à jour ✓' : 'Commande envoyée ✓' }}</DialogTitle>
+          <DialogDescription>
+            Votre commande a bien été transmise à GOA<template v-if="confirmation.numero">
+              (n° {{ confirmation.numero }})</template
+            >.
+          </DialogDescription>
+        </DialogHeader>
+
+        <dl class="grid gap-1 rounded-lg border bg-muted/40 p-3 text-sm">
+          <div v-if="confirmation.remiseTotale" class="flex justify-between text-muted-foreground">
+            <dt>Remise</dt>
+            <dd class="tabular-nums">− {{ prixFr(confirmation.remiseTotale) }}</dd>
+          </div>
+          <div class="flex justify-between font-semibold">
+            <dt>{{ confirmation.totalTTC != null ? 'Total TTC' : 'Total HT' }}</dt>
+            <dd class="tabular-nums">
+              {{ prixFr(confirmation.totalTTC ?? confirmation.totalHT) }}
+            </dd>
+          </div>
+        </dl>
+        <p v-if="!confirmation.totauxReels" class="text-xs text-muted-foreground">
+          Montant indicatif — le total définitif figurera sur votre facture GOA.
+        </p>
+
+        <DialogFooter>
+          <Button class="w-full" @click="confirmationOuverte = false">Fermer</Button>
+        </DialogFooter>
+      </template>
+    </DialogContent>
+  </Dialog>
 </template>

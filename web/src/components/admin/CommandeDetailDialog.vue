@@ -118,7 +118,7 @@ watch(
                 <TableCell class="font-medium">{{ l.designation }}</TableCell>
                 <TableCell class="text-right tabular-nums">{{ l.quantite }}</TableCell>
                 <TableCell class="text-right tabular-nums text-muted-foreground">
-                  {{ l.prixUnitaireHT != null ? prixFr(l.prixUnitaireHT * l.quantite) : '—' }}
+                  <span>{{ l.totalHT != null ? prixFr(l.totalHT) : '—' }}</span>
                 </TableCell>
               </TableRow>
             </TableBody>

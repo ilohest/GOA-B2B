@@ -130,6 +130,12 @@ const questionsFrequentes = computed(() =>
   padding-left: 1.4rem;
   line-height: 1.6;
 }
+.guide :deep(ul) {
+  list-style: disc;
+}
+.guide :deep(ol) {
+  list-style: decimal;
+}
 .guide :deep(li) {
   margin: 0.3rem 0;
 }

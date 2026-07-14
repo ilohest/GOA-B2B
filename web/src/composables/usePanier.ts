@@ -1,13 +1,61 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+
+const CLE_STOCKAGE = 'goa-panier-v1'
+type ModificationPanier = { idCommande: number; numero: number | null; commentaire: string }
+type PanierStocke = {
+  quantites?: Record<string, number>
+  modification?: ModificationPanier | null
+}
+
+function lirePanierStocke(): PanierStocke {
+  if (typeof window === 'undefined') return {}
+  try {
+    const brut = window.localStorage.getItem(CLE_STOCKAGE)
+    if (!brut) return {}
+    const parse = JSON.parse(brut) as PanierStocke
+    return parse && typeof parse === 'object' ? parse : {}
+  } catch {
+    return {}
+  }
+}
+
+function normaliserQuantites(quantitesStockees: PanierStocke['quantites']) {
+  const resultat: Record<number, number> = {}
+  for (const [id, quantite] of Object.entries(quantitesStockees ?? {})) {
+    const idStockBouteille = Number(id)
+    const quantiteEntiere = Math.floor(Number(quantite))
+    if (Number.isFinite(idStockBouteille) && idStockBouteille > 0 && quantiteEntiere > 0) {
+      resultat[idStockBouteille] = quantiteEntiere
+    }
+  }
+  return resultat
+}
+
+function sauvegarderPanier() {
+  if (typeof window === 'undefined') return
+  const payload: PanierStocke = {
+    quantites: Object.fromEntries(Object.entries(quantites.value).map(([id, quantite]) => [id, quantite])),
+    modification: modification.value,
+  }
+  if (!Object.keys(payload.quantites ?? {}).length && !payload.modification) {
+    window.localStorage.removeItem(CLE_STOCKAGE)
+    return
+  }
+  window.localStorage.setItem(CLE_STOCKAGE, JSON.stringify(payload))
+}
+
+const panierInitial = lirePanierStocke()
 
 /**
  * Panier (quantités par idStockBouteille). État module partagé — sera réutilisé
  * par la modification de commande (étape 6, pré-remplissage).
  */
-const quantites = ref<Record<number, number>>({})
+const quantites = ref<Record<number, number>>(normaliserQuantites(panierInitial.quantites))
 
 /** Renseigné quand le panier édite une commande Easybeer existante (upsert). */
-const modification = ref<{ idCommande: number; numero: number | null; commentaire: string } | null>(null)
+const modification = ref<ModificationPanier | null>(panierInitial.modification ?? null)
+
+watch([quantites, modification], sauvegarderPanier, { deep: true })
 
 export function usePanier() {
   const changer = (idStockBouteille: number, delta: number) => {

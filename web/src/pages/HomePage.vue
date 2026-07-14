@@ -7,6 +7,7 @@ import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CatalogueClientResponse, CommandeResultat, ProduitCatalogueClient } from '@/lib/types'
 import { prixFr } from '@/lib/format'
+import { calculerRemisesCiblees, estimerRemise, libelleRemises } from '@/lib/remises'
 import { useMe } from '@/composables/useMe'
 import { usePanier } from '@/composables/usePanier'
 import ProduitCard from '@/components/catalogue/ProduitCard.vue'
@@ -48,7 +49,7 @@ const comptePreparation = computed(
 
 // --- Panier ---
 
-const { quantites, changer, vider, modification, nbCartons, lignes } = usePanier()
+const { quantites, changer, fixer, vider, modification, nbCartons, lignes } = usePanier()
 
 const produitsParId = computed(() => {
   const map = new Map<number, ProduitCatalogueClient>()
@@ -61,7 +62,18 @@ const lignesDetail = computed(() =>
     .map((l) => {
       const produit = produitsParId.value.get(l.idStockBouteille)
       return produit
-        ? { ...l, libelle: produit.libelle, produit, sousTotal: (produit.prixHT ?? 0) * l.quantite }
+        ? {
+            ...l,
+            libelle: produit.libelle,
+            photoUrl: produit.photoUrl,
+            prixUnitaireHT: produit.prixHT ?? 0,
+            pas: produit.pas,
+            idProduit: produit.idProduit,
+            idContenant: produit.idContenant,
+            idLot: produit.idLot,
+            produit,
+            sousTotal: (produit.prixHT ?? 0) * l.quantite,
+          }
         : null
     })
     .filter((l): l is NonNullable<typeof l> => l !== null),
@@ -70,6 +82,13 @@ const lignesDetail = computed(() =>
 const totalHT = computed(() => lignesDetail.value.reduce((somme, l) => somme + l.sousTotal, 0))
 const minimum = computed(() => data.value?.client?.minimumCommande ?? null)
 const sousMinimum = computed(() => minimum.value != null && totalHT.value < minimum.value)
+// Remises client (indicatives) : conditions affichées + estimation sur le sous-total.
+const remiseLabel = computed(() => libelleRemises(data.value?.client))
+const remiseMontant = computed(() => estimerRemise(totalHT.value, data.value?.client))
+const remisesCibleesDetail = computed(() => calculerRemisesCiblees(lignesDetail.value, data.value?.client))
+const remiseCibleeMontant = computed(() =>
+  remisesCibleesDetail.value.reduce((total, detail) => total + detail.montant, 0),
+)
 const lignesPrixExpires = computed(() => lignesDetail.value.filter((l) => !l.produit.prixEstFrais))
 const commandeBloqueeParPrix = computed(() => lignesPrixExpires.value.length > 0)
 const panierVisible = computed(() => nbCartons.value > 0 || modification.value != null)
@@ -109,7 +128,6 @@ const confirmation = ref<{
   numero?: number | null
   totalHT: number
   totalTTC: number | null
-  totalConsigne: number | null
   remiseTotale: number | null
   totauxReels: boolean
   modification: boolean
@@ -132,19 +150,22 @@ const envoi = useMutation({
       : api.post<CommandeResultat>('/commandes', body)
   },
   onSuccess: (res) => {
-    confirmation.value = {
+    const confirmationCommande = {
       numero: res.easybeer.numero ?? modification.value?.numero ?? null,
       totalHT: res.totalHT,
       totalTTC: res.totalTTC,
-      totalConsigne: res.totalConsigne,
       remiseTotale: res.remiseTotale,
       totauxReels: res.totauxReels,
       modification: modification.value != null,
     }
+    sessionStorage.setItem('goa-commande-confirmation', JSON.stringify(confirmationCommande))
     vider()
     commentaire.value = ''
     barreDepliee.value = false
+    dialogOuvert.value = false
+    confirmation.value = null
     queryClient.invalidateQueries({ queryKey: ['commandes'] })
+    router.push('/commandes')
   },
   onError: (e) => toast.error((e as Error).message),
 })
@@ -158,6 +179,10 @@ function annulerModification() {
   vider()
   commentaire.value = ''
   barreDepliee.value = false
+}
+
+function supprimerLignePanier(idStockBouteille: number) {
+  fixer(idStockBouteille, 0)
 }
 </script>
 
@@ -263,7 +288,19 @@ function annulerModification() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum">
+          <PanierRecap
+            :lignes="lignesDetail"
+            :total-h-t="totalHT"
+            :minimum="minimum"
+            :sous-minimum="sousMinimum"
+            :remise-label="remiseLabel"
+            :remise-montant="remiseMontant"
+            :remise-ciblee-montant="remiseCibleeMontant"
+            :remises-ciblees-detail="remisesCibleesDetail"
+            editable
+            @changer="changer"
+            @supprimer="supprimerLignePanier"
+          >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
               Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
             </p>
@@ -296,7 +333,19 @@ function annulerModification() {
             Modification de la commande n° {{ modification.numero ?? modification.idCommande }} —
             la nouvelle version annule et remplace la précédente.
           </p>
-          <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum">
+          <PanierRecap
+            :lignes="lignesDetail"
+            :total-h-t="totalHT"
+            :minimum="minimum"
+            :sous-minimum="sousMinimum"
+            :remise-label="remiseLabel"
+            :remise-montant="remiseMontant"
+            :remise-ciblee-montant="remiseCibleeMontant"
+            :remises-ciblees-detail="remisesCibleesDetail"
+            editable
+            @changer="changer"
+            @supprimer="supprimerLignePanier"
+          >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
               Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
             </p>
@@ -346,7 +395,19 @@ function annulerModification() {
               {{ modification ? 'Cette version annule et remplace la précédente.' : "Vérifiez les quantités avant l'envoi." }}
             </DialogDescription>
           </DialogHeader>
-          <PanierRecap :lignes="lignesDetail" :total-h-t="totalHT" :minimum="minimum" :sous-minimum="sousMinimum" />
+          <PanierRecap
+            :lignes="lignesDetail"
+            :total-h-t="totalHT"
+            :minimum="minimum"
+            :sous-minimum="sousMinimum"
+            :remise-label="remiseLabel"
+            :remise-montant="remiseMontant"
+            :remise-ciblee-montant="remiseCibleeMontant"
+            :remises-ciblees-detail="remisesCibleesDetail"
+            editable
+            @changer="changer"
+            @supprimer="supprimerLignePanier"
+          />
           <div class="grid gap-1.5">
             <Label for="commentaire">Commentaire (facultatif)</Label>
             <Textarea
@@ -381,15 +442,11 @@ function annulerModification() {
             </DialogDescription>
           </DialogHeader>
 
-          <!-- Totaux RÉELS relus d'Easybeer (remise + consigne inclus) -->
+          <!-- Totaux relus d'Easybeer quand disponibles. -->
           <dl class="grid gap-1 rounded-lg border bg-muted/40 p-3 text-sm">
             <div v-if="confirmation.remiseTotale" class="flex justify-between text-muted-foreground">
               <dt>Remise</dt>
               <dd class="tabular-nums">− {{ prixFr(confirmation.remiseTotale) }}</dd>
-            </div>
-            <div v-if="confirmation.totalConsigne" class="flex justify-between text-muted-foreground">
-              <dt>dont consigne</dt>
-              <dd class="tabular-nums">{{ prixFr(confirmation.totalConsigne) }}</dd>
             </div>
             <div class="flex justify-between font-semibold">
               <dt>{{ confirmation.totalTTC != null ? 'Total TTC' : 'Total HT' }}</dt>
@@ -399,7 +456,7 @@ function annulerModification() {
             </div>
           </dl>
           <p v-if="!confirmation.totauxReels" class="text-xs text-muted-foreground">
-            Montant indicatif — le total définitif (remises, consigne) figurera sur votre facture GOA.
+            Montant indicatif — le total définitif figurera sur votre facture GOA.
           </p>
 
           <DialogFooter>

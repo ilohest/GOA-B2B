@@ -66,7 +66,7 @@ async function avecRetry<T>(
 }
 
 /** Fiche client réduite aux champs exploités par la plateforme. */
-function allegerClient(c: ModeleClient) {
+export function allegerClient(c: ModeleClient) {
   return {
     idClient: c.idClient ?? null,
     nom: c.nom ?? null,
@@ -79,9 +79,57 @@ function allegerClient(c: ModeleClient) {
     remise: c.remise ?? null,
     remise2: c.remise2 ?? null,
     typeRemise2: c.typeRemise2 ?? null,
+    remisesCiblees: normaliserRemisesCibleesCache(c.listeRemises),
     typeLivraisonFav: c.typeLivraisonFav ?? null,
     tags: c.tags ?? null,
   }
+}
+
+function sousObjet(record: Record<string, unknown>, cles: string[]) {
+  for (const cle of cles) {
+    const valeur = record[cle]
+    if (valeur && typeof valeur === 'object') return valeur as Record<string, unknown>
+  }
+  return null
+}
+
+function texteDepuis(record: Record<string, unknown> | null, cles: string[]) {
+  if (!record) return null
+  for (const cle of cles) {
+    const valeur = record[cle]
+    if (typeof valeur === 'string' && valeur.trim()) return valeur.trim()
+    if (typeof valeur === 'number' && Number.isFinite(valeur)) return String(valeur)
+  }
+  return null
+}
+
+function nombreDepuis(record: Record<string, unknown> | null, cles: string[]) {
+  if (!record) return null
+  for (const cle of cles) {
+    const valeur = record[cle]
+    if (typeof valeur === 'number' && Number.isFinite(valeur)) return valeur
+    if (typeof valeur === 'string' && valeur.trim() && Number.isFinite(Number(valeur))) return Number(valeur)
+  }
+  return null
+}
+
+function normaliserRemisesCibleesCache(remises: Record<string, unknown>[] | undefined) {
+  return (remises ?? []).map((remise) => {
+    const produit = sousObjet(remise, ['produit', 'modeleProduit', 'stockProduit'])
+    const contenant = sousObjet(remise, ['contenant', 'modeleContenant'])
+    const lot = sousObjet(remise, ['lot', 'modeleLot'])
+    const stockBouteille = sousObjet(remise, ['stockBouteille', 'modeleStockBouteille'])
+
+    return {
+      idProduit: nombreDepuis(produit, ['idProduit']) ?? nombreDepuis(remise, ['idProduit']),
+      idContenant: nombreDepuis(contenant, ['idContenant']) ?? nombreDepuis(remise, ['idContenant']),
+      idLot: nombreDepuis(lot, ['idLot']) ?? nombreDepuis(remise, ['idLot']),
+      idStockBouteille: nombreDepuis(stockBouteille, ['idStockBouteille']) ?? nombreDepuis(remise, ['idStockBouteille']),
+      quantite: nombreDepuis(remise, ['quantite', 'quantiteMin', 'minimum']),
+      remise: texteDepuis(remise, ['remise', 'valeur', 'montant']),
+      type: texteDepuis(remise, ['type', 'typeRemise']),
+    }
+  })
 }
 
 export type ClientCache = ReturnType<typeof allegerClient>
@@ -649,6 +697,18 @@ async function idsClientsAvecCompte(db: Firestore): Promise<number[]> {
  * synchro des prix clients puisse continuer. Les erreurs sont consignées au
  * rapport. Pour éviter les synchros concurrentes, passer par `lancerSync`.
  */
+/**
+ * Refresh SCOPÉ du catalogue admin depuis Easybeer : produits + types + grille
+ * tarifaire (ce dont dépend l'écran catalogue). N'inclut PAS les prix par client
+ * (ça, c'est la synchro complète). Un ban se propage (EasybeerBanError) → géré
+ * par l'appelant (repli sur le cache existant + compte à rebours UI).
+ */
+export async function rafraichirCatalogue(db: Firestore): Promise<void> {
+  const produits = await syncCatalogue(db)
+  const types = await syncReferentiels(db)
+  await syncGrilleTarifaire(db, types, produits)
+}
+
 export async function syncTout(db: Firestore): Promise<SyncReport> {
   const debut = Date.now()
   const erreurs: string[] = []

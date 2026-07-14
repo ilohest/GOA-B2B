@@ -140,7 +140,7 @@ async function envoyerCommande() {
         prixLotHT: prixUnitaireHT.value,
         designation: produit.libelle,
         tauxTVA: produit.tauxTVA,
-        tarifHorsDroits: true,
+        tarifHorsDroits: false,
       },
     ],
   }

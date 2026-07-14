@@ -128,6 +128,9 @@ export async function catalogueAdmin(
 
 export interface ProduitCatalogueClient {
   idStockBouteille: number
+  idProduit?: number
+  idContenant?: number
+  idLot?: number
   libelle: string
   libelleEasybeer: string
   photoUrl: string | null
@@ -253,6 +256,9 @@ export function catalogueClient(
       const { prixHT, updatedAt } = resoudrePrixUnite(p.idStockBouteille, sources)
       return {
         idStockBouteille: p.idStockBouteille,
+        idProduit: p.idProduit,
+        idContenant: p.idContenant,
+        idLot: p.idLot,
         libelle: o.displayName || p.libelle,
         libelleEasybeer: p.libelle,
         photoUrl: o.photoUrl || null,

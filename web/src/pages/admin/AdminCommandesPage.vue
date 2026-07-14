@@ -8,7 +8,9 @@ import type { AdminCommandesResponse } from '@/lib/types'
 import { dateFr, dateHeureFr, prixFr } from '@/lib/format'
 import { easybeerLien } from '@/lib/easybeer'
 import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
+import { useTriPersistant } from '@/composables/useTriPersistant'
 import EtatBadge from '@/components/EtatBadge.vue'
+import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import CommandeDetailDialog from '@/components/admin/CommandeDetailDialog.vue'
 import EasybeerLink from '@/components/admin/EasybeerLink.vue'
 import EasybeerIndisponible from '@/components/admin/EasybeerIndisponible.vue'
@@ -52,7 +54,8 @@ const optionsLignesParPage = [10, 25, 50, 100]
 const lignesParPage = ref(25)
 const pageCourante = ref(1)
 type CleTri = 'numero' | 'client' | 'dateCreation' | 'etat' | 'facture' | 'paiement' | 'totalHT' | 'totalTTC'
-const tri = ref<{ cle: CleTri; direction: 'asc' | 'desc' }>({ cle: 'dateCreation', direction: 'desc' })
+const clesTri: CleTri[] = ['numero', 'client', 'dateCreation', 'etat', 'facture', 'paiement', 'totalHT', 'totalTTC']
+const tri = useTriPersistant<CleTri>('goa-admin-commandes-tri-v1', { cle: 'dateCreation', direction: 'desc' }, clesTri)
 
 function valeurTri(cmd: AdminCommandesResponse['commandes'][number], cle: CleTri) {
   switch (cle) {
@@ -155,6 +158,11 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
             :href="easybeerLien.commandes(data?.easybeerAppUrl)"
             label="Ouvrir les commandes dans Easybeer"
             class="text-muted-foreground"
+          />
+          <BoutonActualiser
+            label="Actualiser les commandes"
+            :pending="actualisation.isPending.value"
+            @click="actualisation.mutate()"
           />
         </div>
       </div>

@@ -22,8 +22,22 @@ export interface ClientEasybeer {
   type?: { idClientType?: number | null; libelle?: string | null } | null
   // Paramètres commerciaux (fiche allégée du cache serveur)
   minimumCommande?: number | null
+  remise?: string | null
+  remise2?: string | null
+  typeRemise2?: string | null
+  remisesCiblees?: RemiseCibleeClient[]
   typeLivraisonFav?: string | null
   tags?: string[] | string | null
+}
+
+export interface RemiseCibleeClient {
+  idProduit?: number | null
+  idContenant?: number | null
+  idLot?: number | null
+  idStockBouteille?: number | null
+  quantite?: number | null
+  remise?: string | null
+  type?: string | null
 }
 
 export interface AuthUser {
@@ -88,10 +102,16 @@ export interface CatalogueAdminUnite {
 export interface CatalogueAdminResponse {
   syncedAt: number | null
   unites: CatalogueAdminUnite[]
+  /** Refresh scopé qui a heurté un ban Easybeer : données du cache + compte à rebours. */
+  indisponible?: boolean
+  retryAfterSeconds?: number
 }
 
 export interface ProduitCatalogueClient {
   idStockBouteille: number
+  idProduit?: number | null
+  idContenant?: number | null
+  idLot?: number | null
   libelle: string
   libelleEasybeer: string
   photoUrl: string | null
@@ -118,8 +138,7 @@ export interface CommandeResultat {
   totalHT: number
   totalTTC: number | null
   remiseTotale: number | null
-  totalConsigne: number | null
-  /** true si les totaux viennent d'Easybeer (remise + consigne inclus), false = repli local. */
+  /** true si les totaux viennent d'Easybeer, false = repli local. */
   totauxReels: boolean
   easybeer: { id?: number; numero?: number | null }
 }
@@ -240,6 +259,17 @@ export interface AdminClientDetail {
     remise2: string | null
     typeRemise2: string | null
     nbRemisesCiblees: number
+    remisesCiblees: {
+      produit: string | null
+      contenant: string | null
+      lot: string | null
+      quantite: number | null
+      remise: string | null
+      type: string | null
+      dateDebut: string | null
+      dateFin: string | null
+      identifiants: string[]
+    }[]
     typeLivraisonFav: string | null
     tournee: string | null
     tags: string[] | string | null
@@ -280,9 +310,13 @@ export interface CommandeDetail {
   totalHT: number | null
   totalTTC: number | null
   remiseTotale: number | null
-  totalConsigne: number | null
   commentaire: string
-  lignes: { designation: string; quantite: number; prixUnitaireHT: number | null }[]
+  lignes: {
+    designation: string
+    quantite: number
+    prixUnitaireHT: number | null
+    totalHT: number | null
+  }[]
   documents: { idCommandeDocument: number; libelle: string; code: string; nomFichier: string }[]
 }
 

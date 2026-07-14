@@ -8,7 +8,9 @@ import type { CatalogueAdminResponse, CatalogueAdminUnite, CatalogueOverride } f
 import { dateHeureFr, prixFr } from '@/lib/format'
 import { easybeerLien } from '@/lib/easybeer'
 import { useHeaderSaveBar } from '@/composables/useHeaderSaveBar'
+import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
 import PhotoUpload from '@/components/admin/PhotoUpload.vue'
+import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import EasybeerLink from '@/components/admin/EasybeerLink.vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -22,6 +24,23 @@ const { setSaveBar, clearSaveBar } = useHeaderSaveBar()
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'catalogue'],
   queryFn: () => api.get<CatalogueAdminResponse>('/admin/catalogue'),
+})
+
+// Actualisation SCOPÉE : ne resynchronise que le catalogue (produits + grille),
+// pas les prix par client — pour ça, c'est la synchro complète du dashboard.
+const actualisation = useMutation({
+  mutationFn: () => api.get<CatalogueAdminResponse>('/admin/catalogue?refresh=1'),
+  onSuccess: (res) => {
+    queryClient.setQueryData(['admin', 'catalogue'], res)
+    queryClient.invalidateQueries({ queryKey: ['catalogue'] })
+    if (res.indisponible && res.retryAfterSeconds) {
+      signalerBanEasybeer(res.retryAfterSeconds)
+      toast.warning('Easybeer momentanément saturé — catalogue inchangé, réessayez dans un instant.')
+    } else {
+      toast.success('Catalogue resynchronisé depuis Easybeer.')
+    }
+  },
+  onError: (e) => toast.error((e as Error).message),
 })
 
 const recherche = ref('')
@@ -165,6 +184,11 @@ async function retirerPhoto(idStockBouteille: number) {
               :href="easybeerLien.grilleTarifaire()"
               label="Ouvrir la grille tarifaire dans Easybeer"
               class="text-muted-foreground"
+            />
+            <BoutonActualiser
+              label="Actualiser le catalogue"
+              :pending="actualisation.isPending.value"
+              @click="actualisation.mutate()"
             />
           </div>
         </div>

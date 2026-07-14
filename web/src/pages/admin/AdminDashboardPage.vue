@@ -110,8 +110,8 @@ const stats = computed(() => {
           Aucune synchronisation
         </p>
         <BoutonActualiser
-          label="Actualiser depuis Easybeer"
-          label-pending="Actualisation…"
+          label="Tout synchroniser"
+          label-pending="Synchronisation…"
           :pending="synchro.isPending.value"
           @click="synchro.mutate()"
         />

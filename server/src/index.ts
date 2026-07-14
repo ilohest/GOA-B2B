@@ -24,6 +24,7 @@ import {
   type ProduitAutocomplete,
 } from './easybeer.js'
 import {
+  allegerClient,
   CacheIndisponibleError,
   lireCacheClient,
   lireCatalogue,
@@ -34,6 +35,7 @@ import {
   lireReferentiels,
   lancerSync,
   normaliserEtatCommande,
+  rafraichirCatalogue,
   remplirCacheClientCible,
   syncCommandesClient,
   type CacheClientDoc,
@@ -77,6 +79,86 @@ app.onError((err, c) => {
   console.error('[server]', err)
   return c.json({ error: err.message || 'Erreur interne' }, 500)
 })
+
+type RemiseCibleeDetail = {
+  produit: string | null
+  contenant: string | null
+  lot: string | null
+  quantite: number | null
+  remise: string | null
+  type: string | null
+  dateDebut: string | null
+  dateFin: string | null
+  identifiants: string[]
+}
+
+function sousObjet(record: Record<string, unknown>, cles: string[]) {
+  for (const cle of cles) {
+    const valeur = record[cle]
+    if (valeur && typeof valeur === 'object') return valeur as Record<string, unknown>
+  }
+  return null
+}
+
+function texteDepuis(record: Record<string, unknown> | null, cles: string[]) {
+  if (!record) return null
+  for (const cle of cles) {
+    const valeur = record[cle]
+    if (typeof valeur === 'string' && valeur.trim()) return valeur.trim()
+    if (typeof valeur === 'number' && Number.isFinite(valeur)) return String(valeur)
+  }
+  return null
+}
+
+function nombreDepuis(record: Record<string, unknown> | null, cles: string[]) {
+  if (!record) return null
+  for (const cle of cles) {
+    const valeur = record[cle]
+    if (typeof valeur === 'number' && Number.isFinite(valeur)) return valeur
+    if (typeof valeur === 'string' && valeur.trim() && Number.isFinite(Number(valeur))) return Number(valeur)
+  }
+  return null
+}
+
+function dateIsoDepuis(record: Record<string, unknown>, cles: string[]) {
+  for (const cle of cles) {
+    const valeur = record[cle]
+    if (typeof valeur !== 'string' && typeof valeur !== 'number') continue
+    const date = new Date(valeur)
+    if (!Number.isNaN(date.getTime())) return date.toISOString()
+  }
+  return null
+}
+
+function normaliserRemisesCiblees(remises: Record<string, unknown>[] | undefined): RemiseCibleeDetail[] {
+  return (remises ?? []).map((remise) => {
+    const produit = sousObjet(remise, ['produit', 'modeleProduit', 'stockProduit'])
+    const contenant = sousObjet(remise, ['contenant', 'modeleContenant'])
+    const lot = sousObjet(remise, ['lot', 'modeleLot'])
+    const stockBouteille = sousObjet(remise, ['stockBouteille', 'modeleStockBouteille'])
+
+    const identifiants = [
+      ['idProduit', nombreDepuis(produit, ['idProduit']) ?? nombreDepuis(remise, ['idProduit'])],
+      ['idContenant', nombreDepuis(contenant, ['idContenant']) ?? nombreDepuis(remise, ['idContenant'])],
+      ['idLot', nombreDepuis(lot, ['idLot']) ?? nombreDepuis(remise, ['idLot'])],
+      ['idStockBouteille', nombreDepuis(stockBouteille, ['idStockBouteille']) ?? nombreDepuis(remise, ['idStockBouteille'])],
+    ]
+      .filter(([, valeur]) => valeur != null)
+      .map(([label, valeur]) => `${label} ${valeur}`)
+
+    return {
+      produit: texteDepuis(produit, ['libelle', 'nom', 'designation']) ?? texteDepuis(remise, ['produit', 'libelleProduit']),
+      contenant: texteDepuis(contenant, ['libelle', 'nom']) ?? texteDepuis(remise, ['contenant', 'libelleContenant']),
+      lot: texteDepuis(lot, ['libelle', 'nom']) ?? texteDepuis(remise, ['lot', 'packaging', 'libelleLot']),
+      quantite: nombreDepuis(remise, ['quantite', 'quantiteMin', 'minimum']),
+      remise: texteDepuis(remise, ['remise', 'valeur', 'montant']),
+      type: texteDepuis(remise, ['type', 'typeRemise']),
+      dateDebut: dateIsoDepuis(remise, ['dateDebut', 'debut']),
+      dateFin: dateIsoDepuis(remise, ['dateFin', 'fin']),
+      identifiants,
+    }
+  })
+}
 
 app.get('/api/health', (c) => c.json({ ok: true, authDisabled: config.authDisabled }))
 
@@ -348,15 +430,20 @@ async function resoudreLignes(
 /** Créer une commande dans Easybeer (recette EASYBEER.md §4). */
 /**
  * Relit les totaux RÉELS calculés par Easybeer juste après création/modif
- * (remise client + consigne + TVA appliquées — que le total local calculé à
- * partir des tarifs de base ignore). Repli gracieux sur le total local si
- * Easybeer est indisponible : la commande a bien été créée, seul l'affichage
- * du montant exact est reporté à la prochaine synchro.
+ * (remise client + TVA appliquées — que le total local calculé à partir des
+ * tarifs de base ignore). Repli gracieux sur le total local si Easybeer est
+ * indisponible : la commande a bien été créée, seul l'affichage du montant
+ * exact est reporté à la prochaine synchro.
  */
 async function totauxReelsEasybeer(
   idCommande: number,
   totalHTLocal: number,
-): Promise<{ totalHT: number; totalTTC: number | null; remiseTotale: number | null; totalConsigne: number | null; reels: boolean }> {
+): Promise<{
+  totalHT: number
+  totalTTC: number | null
+  remiseTotale: number | null
+  reels: boolean
+}> {
   try {
     const detail = await detailCommande(idCommande)
     const totalHT = detail.totalHT as number | undefined
@@ -364,11 +451,10 @@ async function totauxReelsEasybeer(
       totalHT: totalHT ?? totalHTLocal,
       totalTTC: (detail.totalTTC as number | undefined) ?? null,
       remiseTotale: (detail.remiseTotale as number | undefined) ?? null,
-      totalConsigne: (detail.totalConsigne as number | undefined) ?? null,
       reels: totalHT != null,
     }
   } catch {
-    return { totalHT: totalHTLocal, totalTTC: null, remiseTotale: null, totalConsigne: null, reels: false }
+    return { totalHT: totalHTLocal, totalTTC: null, remiseTotale: null, reels: false }
   }
 }
 
@@ -395,7 +481,7 @@ app.post('/api/commandes', requireAuth, async (c) => {
     lignes,
   })
 
-  // Totaux réels (remise + consigne) relus d'Easybeer pour l'affichage exact.
+  // Totaux réels relus d'Easybeer pour l'affichage exact.
   const totaux = await totauxReelsEasybeer(resultat.id!, totalHT)
 
   // Trace Firestore (suivi/debug — la source de vérité reste Easybeer).
@@ -437,7 +523,6 @@ app.post('/api/commandes', requireAuth, async (c) => {
     totalHT: totaux.totalHT,
     totalTTC: totaux.totalTTC,
     remiseTotale: totaux.remiseTotale,
-    totalConsigne: totaux.totalConsigne,
     totauxReels: totaux.reels,
     easybeer: { id: resultat.id, numero: resultat.numero },
   })
@@ -529,13 +614,21 @@ interface DocumentEasybeer {
 
 /** Construit le détail d'affichage d'une commande (lignes, totaux, documents). */
 function construireDetailCommande(commande: Record<string, unknown>, idCommande: number) {
-  const lignes = ((commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []).map((e) => ({
-    designation:
-      ((e.stockProduit as { libelle?: string } | undefined)?.libelle as string) ??
-      ((e.designation as string) || 'Produit'),
-    quantite: e.quantite as number,
-    prixUnitaireHT: (e.prixUnitaireHTHorsRemise as number) ?? null,
-  }))
+  const lignes = ((commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []).map((e) => {
+    const prixUnitaireHT = (e.prixUnitaireHTHorsRemise as number | undefined) ?? null
+    const quantite = (e.quantite as number | undefined) ?? 0
+    const totalHT =
+      (e.prixTotalHT as number | undefined) ??
+      (prixUnitaireHT != null ? prixUnitaireHT * quantite : null)
+    return {
+      designation:
+        ((e.stockProduit as { libelle?: string } | undefined)?.libelle as string) ??
+        ((e.designation as string) || 'Produit'),
+      quantite,
+      prixUnitaireHT,
+      totalHT,
+    }
+  })
   const documents = ((commande.documents as DocumentEasybeer[] | undefined) ?? [])
     .filter((d) => !d.annule && d.idCommandeDocument != null)
     .map((d) => ({
@@ -552,7 +645,6 @@ function construireDetailCommande(commande: Record<string, unknown>, idCommande:
     totalHT: commande.totalHT ?? null,
     totalTTC: commande.totalTTC ?? null,
     remiseTotale: commande.remiseTotale ?? null,
-    totalConsigne: commande.totalConsigne ?? null,
     commentaire: (commande.commentaire as string) || '',
     lignes,
     documents,
@@ -650,7 +742,7 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
     lignes,
   })
 
-  // Totaux réels (remise + consigne) recalculés par Easybeer après la modif.
+  // Totaux réels recalculés par Easybeer après la modif.
   const totaux = await totauxReelsEasybeer(idCommande, totalHT)
 
   await db.collection('orders').add({
@@ -683,7 +775,6 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
     totalHT: totaux.totalHT,
     totalTTC: totaux.totalTTC,
     remiseTotale: totaux.remiseTotale,
-    totalConsigne: totaux.totalConsigne,
     totauxReels: totaux.reels,
     easybeer: { id: resultat.id, numero: resultat.numero },
   })
@@ -883,6 +974,8 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
   const comptes: { email: string; status: string }[] = []
   const db = getDb()
   if (db) {
+    await db.doc(`cacheClients/${idClient}`).set({ client: allegerClient(client), clientUpdatedAt: Date.now() }, { merge: true })
+
     const snap = await db.collection('users').where('easybeerIdClient', '==', idClient).get()
     for (const doc of snap.docs) {
       const d = doc.data()
@@ -907,6 +1000,7 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
       remise2: client.remise2 ?? null,
       typeRemise2: client.typeRemise2 ?? null,
       nbRemisesCiblees: client.listeRemises?.length ?? 0,
+      remisesCiblees: normaliserRemisesCiblees(client.listeRemises),
       typeLivraisonFav: client.typeLivraisonFav || null,
       tournee: client.tournee?.libelle ?? null,
       tags: client.tags ?? null,
@@ -991,10 +1085,24 @@ app.post('/api/admin/clients/bulk-params', requireAuth, requireAdmin, async (c) 
 
 // ---- Admin : gestion du catalogue (visible / nom / photo / rupture) ----
 
-/** Tous les produits Easybeer + overrides, pour l'écran admin catalogue. */
+/**
+ * Tous les produits Easybeer + overrides, pour l'écran admin catalogue.
+ * `?refresh=1` resynchronise UNIQUEMENT le catalogue (produits + types + grille),
+ * pas les prix par client (ça, c'est la synchro complète du dashboard).
+ */
 app.get('/api/admin/catalogue', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  if (c.req.query('refresh') === '1') {
+    try {
+      await rafraichirCatalogue(db)
+    } catch (e) {
+      if (!(e instanceof EasybeerBanError)) throw e
+      // Ban : on renvoie le cache existant + de quoi armer le compte à rebours UI.
+      const data = await catalogueAdmin(db)
+      return c.json({ ...data, indisponible: true, retryAfterSeconds: etatBanEasybeer().secondesRestantes })
+    }
+  }
   return c.json(await catalogueAdmin(db))
 })
 
@@ -1308,7 +1416,7 @@ async function executerSyncCache() {
   const res = await lancerSync(db)
   if ('enCours' in res) return { status: 409, body: { error: 'Une synchronisation est déjà en cours.' } }
 
-  // Un ban a pu survenir PENDANT la synchro (syncTout le consigne sans planter) :
+  // Un ban a pu survenir PENDANT la synchro (syncTout le signale sans planter) :
   // on le remonte pour que l'UI affiche le compte à rebours plutôt qu'un faux succès.
   const apres = etatBanEasybeer()
   if (apres.banni) {

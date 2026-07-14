@@ -1,5 +1,5 @@
-<!-- guide-version: 1.1 -->
-<!-- guide-updated-at: 2026-07-13 -->
+<!-- guide-version: 1.2 -->
+<!-- guide-updated-at: 2026-07-14 -->
 
 # Guide administrateur — plateforme de commande GOA
 
@@ -34,12 +34,41 @@ Pour ne pas saturer Easybeer, la plateforme **ne lit jamais Easybeer en direct**
 à chaque visite d'un client : elle lit un **cache** rempli périodiquement par une
 **synchronisation**.
 
-- La synchro tourne **automatiquement** (planifiée, ex. la nuit / toutes les
-  quelques heures).
-- Vous pouvez la **déclencher à la main** avec le bouton **« Actualiser depuis Easybeer »**
-  (utile juste après un changement important dans Easybeer).
+- La synchro doit tourner **automatiquement** via un job planifié, idéalement
+  **chaque nuit vers 04:00**. C'est le fonctionnement normal.
+- Le bouton **« Actualiser depuis Easybeer »** du tableau de bord déclenche une
+  **synchronisation complète manuelle**. Il sert uniquement si vous avez besoin
+  qu'un changement Easybeer soit visible tout de suite.
 - Entre un changement dans Easybeer et la synchro suivante, les clients voient
   **la dernière version synchronisée**.
+
+### Quand cliquer sur « Actualiser depuis Easybeer » ?
+
+Utilisez-le seulement dans ces cas :
+
+- vous avez changé un **prix**, une **grille tarifaire**, une **remise**, une
+  fiche client ou un produit dans Easybeer et le changement doit être visible
+  immédiatement ;
+- vous préparez une ouverture de commande et le tableau de bord signale une
+  synchronisation trop ancienne.
+
+Évitez de cliquer plusieurs fois : Easybeer limite le nombre d'appels API. La
+plateforme bloque les synchros concurrentes et affiche un compte à rebours si
+Easybeer est saturé.
+
+### Ce qui se met à jour autrement
+
+- **Job nocturne** : met à jour le cache complet (catalogue, clients, commandes,
+  prix par client, grilles, référentiels).
+- **Bouton du tableau de bord** : même effet qu'une synchro complète, mais lancé
+  manuellement.
+- **Validation d'une commande client** : quand un client confirme sa commande, elle est immédiatement créée dans Easybeer. Easybeer calcule ensuite le total final de référence.
+- **Boutons « Ouvrir dans Easybeer »** : ils n'actualisent rien, ils ouvrent
+  seulement la page correspondante dans Easybeer.
+
+Les pages Clients, Commandes et Catalogue affichent surtout la date de dernière
+mise à jour. Elles ne doivent pas être utilisées comme des boutons de refresh au
+quotidien.
 
 **Garde-fou prix** : un prix qui n'a pas été rafraîchi depuis trop longtemps
 (36 h par défaut) **bloque la commande** de cet article (message « tarif en cours
@@ -85,12 +114,11 @@ prix Distributeur. Si un client a un **tarif négocié personnalisé** dans Easy
 c'est ce prix-là qui prime.
 
 > **Les prix affichés dans le catalogue et le panier sont des tarifs de base HT**,
-> **hors remises et hors consigne**. Easybeer applique la remise du client et la
-> consigne à la **facturation** : au moment de la commande, l'écran de confirmation
-> et l'historique affichent donc le **montant réel calculé par Easybeer** (remise
-> et consigne incluses), qui peut différer du total « indicatif » du panier. Le
-> **minimum de commande** est lui comparé au total **avant remise** (ce que le
-> client voit dans son panier).
+> **hors remises**. Easybeer applique les remises du client à la **facturation** :
+> au moment de la commande, l'écran de confirmation et l'historique affichent donc
+> le **montant réel calculé par Easybeer**, qui peut différer du total « indicatif »
+> du panier. Le **minimum de commande** est lui comparé au total **avant remise**
+> (ce que le client voit dans son panier).
 
 ## 6. Clients et invitations
 
@@ -132,13 +160,24 @@ palette** (par défaut). Rien à choisir par commande.
 ## 9. Questions fréquentes
 
 **J'ai changé un prix dans Easybeer, le client voit encore l'ancien.**
-→ Normal jusqu'à la prochaine synchro. Cliquez **« Actualiser depuis Easybeer »** pour forcer
-la mise à jour immédiatement.
+→ Normal jusqu'à la prochaine synchro nocturne. Si le changement doit être visible
+immédiatement, cliquez **« Actualiser depuis Easybeer »** sur le tableau de bord.
 
 **Je rends un produit visible : son prix apparaît-il tout de suite ?**
 → Oui. Le prix vient de la **grille tarifaire** (déjà synchronisée), pas besoin de
 resynchroniser. Un éventuel **tarif négocié** propre à un client s'appliquera, lui,
 à la synchro suivante.
+
+**Faut-il cliquer tous les jours sur « Actualiser depuis Easybeer » ?**
+→ Non. Le fonctionnement normal repose sur la **synchro automatique nocturne**.
+Le bouton manuel sert seulement en cas de changement urgent ou si le tableau de
+bord signale une donnée trop ancienne.
+
+**Qu'est-ce qui déclenche une mise à jour sans clic admin ?**
+→ Le **job planifié** met à jour le cache complet. Une commande passée par un
+client est, elle, envoyée directement dans Easybeer au moment de la validation.
+Les boutons **« Ouvrir dans Easybeer »** ne synchronisent rien : ils ouvrent
+seulement Easybeer dans un nouvel onglet.
 
 **Un bandeau « API Easybeer saturée » apparaît.**
 → Easybeer limite le nombre d'appels. La plateforme attend automatiquement ;

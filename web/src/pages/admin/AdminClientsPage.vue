@@ -20,9 +20,11 @@ import type {
 } from "@/lib/types";
 import { dateHeureFr } from "@/lib/format";
 import { easybeerLien } from "@/lib/easybeer";
+import BoutonActualiser from "@/components/admin/BoutonActualiser.vue";
 import EasybeerLink from "@/components/admin/EasybeerLink.vue";
 import EasybeerIndisponible from "@/components/admin/EasybeerIndisponible.vue";
 import { signalerBanEasybeer } from "@/composables/useEasybeerBan";
+import { useTriPersistant } from "@/composables/useTriPersistant";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -88,10 +90,12 @@ const page = ref(1);
 const optionsLignesParPage = [10, 25, 50, 100];
 const lignesParPage = ref(25);
 type CleTriClient = "commerce" | "email" | "categorie" | "compte";
-const tri = ref<{ cle: CleTriClient; direction: "asc" | "desc" }>({
-  cle: "commerce",
-  direction: "asc",
-});
+const clesTriClient: CleTriClient[] = ["commerce", "email", "categorie", "compte"];
+const tri = useTriPersistant<CleTriClient>(
+  "goa-admin-clients-tri-v1",
+  { cle: "commerce", direction: "asc" },
+  clesTriClient,
+);
 
 const clientsFiltres = computed(() => {
   const q = recherche.value.trim().toLowerCase();
@@ -479,6 +483,11 @@ function ouvrirFiche(client: ClientResume) {
               :href="easybeerLien.clients()"
               label="Ouvrir les clients dans Easybeer"
               class="text-muted-foreground"
+            />
+            <BoutonActualiser
+              label="Actualiser les clients"
+              :pending="actualisation.isPending.value"
+              @click="actualisation.mutate()"
             />
           </div>
         </div>

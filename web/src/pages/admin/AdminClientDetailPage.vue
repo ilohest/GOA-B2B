@@ -99,13 +99,23 @@ const conditions = computed(() => [
       ? `${client.value.remise2}${client.value.typeRemise2 ? ` (${client.value.typeRemise2.toLowerCase()})` : ""}`
       : null,
   },
-  {
-    label: "Remises ciblées (produit/lot)",
-    valeur: client.value?.nbRemisesCiblees
-      ? String(client.value.nbRemisesCiblees)
-      : null,
-  },
 ]);
+
+const remisesCiblees = computed(() => client.value?.remisesCiblees ?? []);
+
+function metaRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees"][number]) {
+  const elements = [
+    remise.quantite != null ? `Quantité minimale : ${remise.quantite}` : null,
+  ].filter(Boolean);
+  return elements.join(" · ");
+}
+
+function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees"][number]) {
+  if (!remise.dateDebut && !remise.dateFin) return null;
+  const debut = remise.dateDebut ? dateFr(new Date(remise.dateDebut).getTime()) : "…";
+  const fin = remise.dateFin ? dateFr(new Date(remise.dateFin).getTime()) : "…";
+  return `${debut} → ${fin}`;
+}
 </script>
 
 <template>
@@ -189,6 +199,42 @@ const conditions = computed(() => [
                 >
                   <dt class="text-muted-foreground">{{ c.label }}</dt>
                   <dd>{{ c.valeur || "—" }}</dd>
+                </div>
+                <div class="grid gap-0.5 sm:grid-cols-[12rem_1fr]">
+                  <dt class="text-muted-foreground">
+                    Remises ciblées (produit/lot)
+                  </dt>
+                  <dd v-if="remisesCiblees.length" class="grid gap-2">
+                    <div
+                      v-for="(remise, index) in remisesCiblees"
+                      :key="index"
+                      class="rounded-lg border bg-muted/30 p-3 text-sm"
+                    >
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <p class="font-medium">
+                            {{ remise.produit || "Produit ciblé" }}
+                          </p>
+                          <Badge v-if="remise.contenant" variant="outline">
+                            {{ remise.contenant }}
+                          </Badge>
+                          <Badge v-if="remise.lot" variant="outline">
+                            {{ remise.lot }}
+                          </Badge>
+                        </div>
+                        <Badge v-if="remise.remise" variant="secondary">
+                          {{ remise.remise }}
+                        </Badge>
+                      </div>
+                      <p v-if="metaRemiseCiblee(remise)" class="mt-1 text-xs text-muted-foreground">
+                        {{ metaRemiseCiblee(remise) }}
+                      </p>
+                      <p v-if="periodeRemiseCiblee(remise)" class="mt-1 text-xs text-muted-foreground">
+                        {{ periodeRemiseCiblee(remise) }}
+                      </p>
+                    </div>
+                  </dd>
+                  <dd v-else>—</dd>
                 </div>
               </dl>
             </CardContent>

@@ -461,7 +461,7 @@ export async function enregistrerCommande(input: EnregistrerCommandeInput): Prom
       prixLotHT: l.prixUnitaireHT,
       designation: l.produit.libelle,
       tauxTVA: l.produit.tauxTVA ?? input.tauxTVA,
-      tarifHorsDroits: true,
+      tarifHorsDroits: false,
     })),
   }
   const { status, json } = await eb<{
@@ -511,6 +511,7 @@ export async function modifierCommande(input: {
         quantite: l.quantite,
         prixUnitaireHTHorsRemise: l.prixUnitaireHT,
         prixLotHT: l.prixUnitaireHT,
+        tarifHorsDroits: false,
       }
     }
     return {
@@ -521,7 +522,7 @@ export async function modifierCommande(input: {
       prixLotHT: l.prixUnitaireHT,
       designation: l.produit.libelle,
       tauxTVA: l.produit.tauxTVA ?? {},
-      tarifHorsDroits: true,
+      tarifHorsDroits: false,
     }
   })
   commande.commentaire = input.commentaire
