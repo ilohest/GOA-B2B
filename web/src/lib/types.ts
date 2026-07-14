@@ -108,6 +108,20 @@ export interface CatalogueClientResponse {
   syncedAt: number
   prixMaxAgeMinutes: number
   prixPlusAncienAgeMs: number | null
+  /** Cache client en cours de création (compte tout juste activé) — prix à venir. */
+  cacheEnPreparation?: boolean
+}
+
+/** Réponse de création/modification de commande : totaux réels d'Easybeer. */
+export interface CommandeResultat {
+  ok: boolean
+  totalHT: number
+  totalTTC: number | null
+  remiseTotale: number | null
+  totalConsigne: number | null
+  /** true si les totaux viennent d'Easybeer (remise + consigne inclus), false = repli local. */
+  totauxReels: boolean
+  easybeer: { id?: number; numero?: number | null }
 }
 
 export interface SyncReport {
@@ -159,6 +173,9 @@ export interface MeResponse {
   user: AuthUser
   client: ClientEasybeer | null
   idGrilleTarifaire: number | null
+  syncedAt?: number
+  /** Cache client en cours de création (compte tout juste activé). */
+  cacheEnPreparation?: boolean
 }
 
 export interface EtatCommande {

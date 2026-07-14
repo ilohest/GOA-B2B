@@ -10,5 +10,8 @@ export function useMe() {
     queryKey: ['me'],
     queryFn: () => api.get<MeResponse>('/me'),
     enabled: isAuthenticated,
+    // Compte tout juste activé : le cache client se prépare en tâche de fond
+    // côté serveur → on re-sonde toutes les 4 s jusqu'à ce qu'il soit prêt.
+    refetchInterval: (query) => (query.state.data?.cacheEnPreparation ? 4000 : false),
   })
 }

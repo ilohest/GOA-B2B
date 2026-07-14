@@ -39,6 +39,10 @@ defineProps<{
         <span class="tabular-nums">{{ prixFr(totalHT) }}</span>
       </li>
     </ul>
+    <p class="text-xs text-muted-foreground">
+      Montant indicatif, hors remises et consigne éventuelles — le total définitif figurera sur
+      votre facture GOA.
+    </p>
     <p v-if="sousMinimum && minimum != null" class="text-xs text-destructive">
       Minimum de commande : {{ prixFr(minimum) }} HT
     </p>

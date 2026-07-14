@@ -5,7 +5,7 @@ import { PackageCheck, Store } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
-import type { CatalogueClientResponse, ProduitCatalogueClient } from '@/lib/types'
+import type { CatalogueClientResponse, CommandeResultat, ProduitCatalogueClient } from '@/lib/types'
 import { prixFr } from '@/lib/format'
 import { useMe } from '@/composables/useMe'
 import { usePanier } from '@/composables/usePanier'
@@ -36,7 +36,15 @@ watchEffect(() => {
 const catalogue = useQuery({
   queryKey: ['catalogue'],
   queryFn: () => api.get<CatalogueClientResponse>('/catalogue'),
+  // Cache client en préparation (compte tout juste activé) : les prix arrivent
+  // en tâche de fond → on re-sonde jusqu'à ce qu'ils soient là.
+  refetchInterval: (query) => (query.state.data?.cacheEnPreparation ? 4000 : false),
 })
+
+// Compte fraîchement activé : le cache client (prix) se prépare côté serveur.
+const comptePreparation = computed(
+  () => Boolean(data.value?.cacheEnPreparation) || Boolean(catalogue.data.value?.cacheEnPreparation),
+)
 
 // --- Panier ---
 
@@ -97,7 +105,15 @@ const barreDepliee = ref(false)
 const queryClient = useQueryClient()
 const dialogOuvert = ref(false)
 const commentaire = ref('')
-const confirmation = ref<{ numero?: number | null; totalHT: number; modification: boolean } | null>(null)
+const confirmation = ref<{
+  numero?: number | null
+  totalHT: number
+  totalTTC: number | null
+  totalConsigne: number | null
+  remiseTotale: number | null
+  totauxReels: boolean
+  modification: boolean
+} | null>(null)
 
 // En mode modification, on repart du commentaire existant de la commande.
 watch(
@@ -112,16 +128,17 @@ const envoi = useMutation({
   mutationFn: () => {
     const body = { commentaire: commentaire.value, lignes: lignes.value }
     return modification.value
-      ? api.put<{ ok: boolean; totalHT: number; easybeer: { numero?: number } }>(
-          `/commandes/${modification.value.idCommande}`,
-          body,
-        )
-      : api.post<{ ok: boolean; totalHT: number; easybeer: { numero?: number } }>('/commandes', body)
+      ? api.put<CommandeResultat>(`/commandes/${modification.value.idCommande}`, body)
+      : api.post<CommandeResultat>('/commandes', body)
   },
   onSuccess: (res) => {
     confirmation.value = {
       numero: res.easybeer.numero ?? modification.value?.numero ?? null,
       totalHT: res.totalHT,
+      totalTTC: res.totalTTC,
+      totalConsigne: res.totalConsigne,
+      remiseTotale: res.remiseTotale,
+      totauxReels: res.totauxReels,
       modification: modification.value != null,
     }
     vider()
@@ -148,6 +165,20 @@ function annulerModification() {
   <div class="grid items-start gap-4 pb-28 lg:grid-cols-[minmax(0,1fr)_20rem] lg:pb-4">
     <!-- Colonne principale -->
     <div class="grid gap-4">
+      <!-- Compte fraîchement activé : les prix se préparent -->
+      <div
+        v-if="comptePreparation"
+        class="flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      >
+        <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-amber-700 shadow-xs">
+          <Store class="size-4" />
+        </span>
+        <div class="grid gap-0.5">
+          <p class="font-medium">Votre compte se prépare…</p>
+          <p>Vos tarifs sont en cours de chargement. Cette page se met à jour automatiquement dans quelques secondes.</p>
+        </div>
+      </div>
+
       <!-- Bandeau mode modification -->
       <div
         v-if="modification"
@@ -344,13 +375,33 @@ function annulerModification() {
           <DialogHeader>
             <DialogTitle>{{ confirmation.modification ? 'Commande mise à jour ✓' : 'Commande envoyée ✓' }}</DialogTitle>
             <DialogDescription>
-              Votre commande de {{ prixFr(confirmation.totalHT) }} HT a bien été transmise à GOA<template
-                v-if="confirmation.numero"
-              >
+              Votre commande a bien été transmise à GOA<template v-if="confirmation.numero">
                 (n° {{ confirmation.numero }})</template
               >.
             </DialogDescription>
           </DialogHeader>
+
+          <!-- Totaux RÉELS relus d'Easybeer (remise + consigne inclus) -->
+          <dl class="grid gap-1 rounded-lg border bg-muted/40 p-3 text-sm">
+            <div v-if="confirmation.remiseTotale" class="flex justify-between text-muted-foreground">
+              <dt>Remise</dt>
+              <dd class="tabular-nums">− {{ prixFr(confirmation.remiseTotale) }}</dd>
+            </div>
+            <div v-if="confirmation.totalConsigne" class="flex justify-between text-muted-foreground">
+              <dt>dont consigne</dt>
+              <dd class="tabular-nums">{{ prixFr(confirmation.totalConsigne) }}</dd>
+            </div>
+            <div class="flex justify-between font-semibold">
+              <dt>{{ confirmation.totalTTC != null ? 'Total TTC' : 'Total HT' }}</dt>
+              <dd class="tabular-nums">
+                {{ prixFr(confirmation.totalTTC ?? confirmation.totalHT) }}
+              </dd>
+            </div>
+          </dl>
+          <p v-if="!confirmation.totauxReels" class="text-xs text-muted-foreground">
+            Montant indicatif — le total définitif (remises, consigne) figurera sur votre facture GOA.
+          </p>
+
           <DialogFooter>
             <Button class="w-full" @click="dialogOuvert = false">Fermer</Button>
           </DialogFooter>

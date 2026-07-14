@@ -65,6 +65,10 @@ Pour chaque unité vous pouvez :
 La **visibilité s'applique à l'unité** (un conditionnement) : tous ses tarifs
 suivent. Le client ne voit que **le prix de son type** (voir §5).
 
+> **La rupture est gérée ICI, pas par le stock Easybeer.** Un produit en stock
+> chez Easybeer peut être masqué/en rupture dans l'app, et inversement : c'est
+> **vous** qui pilotez la disponibilité affichée au client via ces interrupteurs.
+
 ## 5. Comment le prix du client est déterminé
 
 Les types de client Easybeer sont **hiérarchiques**. GOA n'a défini des prix que
@@ -79,6 +83,14 @@ de `client PRO` :
 Donc un client GMS ou CHR voit le prix `client PRO` ; seul un Distributeur voit le
 prix Distributeur. Si un client a un **tarif négocié personnalisé** dans Easybeer,
 c'est ce prix-là qui prime.
+
+> **Les prix affichés dans le catalogue et le panier sont des tarifs de base HT**,
+> **hors remises et hors consigne**. Easybeer applique la remise du client et la
+> consigne à la **facturation** : au moment de la commande, l'écran de confirmation
+> et l'historique affichent donc le **montant réel calculé par Easybeer** (remise
+> et consigne incluses), qui peut différer du total « indicatif » du panier. Le
+> **minimum de commande** est lui comparé au total **avant remise** (ce que le
+> client voit dans son panier).
 
 ## 6. Clients et invitations
 

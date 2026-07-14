@@ -144,11 +144,13 @@ app.get('/api/catalogue', requireAuth, async (c) => {
   // Cache client absent → catalogue quand même servi (produits sans prix =
   // « temporairement indisponible » côté client), remplissage en tâche de fond.
   let cacheClient: CacheClientDoc | null = null
+  let cacheEnPreparation = false
   if (user.easybeerIdClient != null) {
     try {
       cacheClient = await lireCacheClient(db, user.easybeerIdClient)
     } catch (e) {
       if (!(e instanceof CacheIndisponibleError)) throw e
+      cacheEnPreparation = true
       remplirCacheClientCible(db, user.easybeerIdClient).catch(() => {})
     }
   }
@@ -172,6 +174,7 @@ app.get('/api/catalogue', requireAuth, async (c) => {
     syncedAt,
     prixMaxAgeMinutes: config.cache.prixMaxAgeMinutes,
     prixPlusAncienAgeMs: ages.length ? Math.max(...ages) : null,
+    cacheEnPreparation,
   })
 })
 
@@ -343,6 +346,32 @@ async function resoudreLignes(
 }
 
 /** Créer une commande dans Easybeer (recette EASYBEER.md §4). */
+/**
+ * Relit les totaux RÉELS calculés par Easybeer juste après création/modif
+ * (remise client + consigne + TVA appliquées — que le total local calculé à
+ * partir des tarifs de base ignore). Repli gracieux sur le total local si
+ * Easybeer est indisponible : la commande a bien été créée, seul l'affichage
+ * du montant exact est reporté à la prochaine synchro.
+ */
+async function totauxReelsEasybeer(
+  idCommande: number,
+  totalHTLocal: number,
+): Promise<{ totalHT: number; totalTTC: number | null; remiseTotale: number | null; totalConsigne: number | null; reels: boolean }> {
+  try {
+    const detail = await detailCommande(idCommande)
+    const totalHT = detail.totalHT as number | undefined
+    return {
+      totalHT: totalHT ?? totalHTLocal,
+      totalTTC: (detail.totalTTC as number | undefined) ?? null,
+      remiseTotale: (detail.remiseTotale as number | undefined) ?? null,
+      totalConsigne: (detail.totalConsigne as number | undefined) ?? null,
+      reels: totalHT != null,
+    }
+  } catch {
+    return { totalHT: totalHTLocal, totalTTC: null, remiseTotale: null, totalConsigne: null, reels: false }
+  }
+}
+
 app.post('/api/commandes', requireAuth, async (c) => {
   const user = c.get('user')
   if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
@@ -365,6 +394,9 @@ app.post('/api/commandes', requireAuth, async (c) => {
     estDevis: config.commandeEstDevis,
     lignes,
   })
+
+  // Totaux réels (remise + consigne) relus d'Easybeer pour l'affichage exact.
+  const totaux = await totauxReelsEasybeer(resultat.id!, totalHT)
 
   // Trace Firestore (suivi/debug — la source de vérité reste Easybeer).
   const orderId = randomUUID()
@@ -393,13 +425,22 @@ app.post('/api/commandes', requireAuth, async (c) => {
       libelle: config.commandeEstDevis ? 'Devis' : 'Transmise à GOA',
       couleur: null,
     },
-    totalHT,
-    totalTTC: null,
+    totalHT: totaux.totalHT,
+    totalTTC: totaux.totalTTC,
     dateCreation: Date.now(),
     modifiable: true,
   })
 
-  return c.json({ ok: true, orderId, totalHT, easybeer: { id: resultat.id, numero: resultat.numero } })
+  return c.json({
+    ok: true,
+    orderId,
+    totalHT: totaux.totalHT,
+    totalTTC: totaux.totalTTC,
+    remiseTotale: totaux.remiseTotale,
+    totalConsigne: totaux.totalConsigne,
+    totauxReels: totaux.reels,
+    easybeer: { id: resultat.id, numero: resultat.numero },
+  })
 })
 
 /**
@@ -609,12 +650,15 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
     lignes,
   })
 
+  // Totaux réels (remise + consigne) recalculés par Easybeer après la modif.
+  const totaux = await totauxReelsEasybeer(idCommande, totalHT)
+
   await db.collection('orders').add({
     uid: user.uid,
     easybeerIdClient: user.easybeerIdClient,
     easybeerIdCommande: idCommande,
     action: 'modification',
-    totalHT,
+    totalHT: totaux.totalHT,
     lignes: lignes.map((l) => ({
       idStockBouteille: l.produit.idStockBouteille,
       quantite: l.quantite,
@@ -628,13 +672,21 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
     idCommande,
     numero: resultat.numero ?? ((commande.numero as number | undefined) ?? null),
     etat: etatAffichage(commande.etat),
-    totalHT,
-    totalTTC: (commande.totalTTC as number | undefined) ?? null,
+    totalHT: totaux.totalHT,
+    totalTTC: totaux.totalTTC ?? (commande.totalTTC as number | undefined) ?? null,
     dateCreation: (commande.dateCreation == null ? Date.now() : new Date(commande.dateCreation as string | number).getTime()) || Date.now(),
     modifiable: true,
   })
 
-  return c.json({ ok: true, totalHT, easybeer: { id: resultat.id, numero: resultat.numero } })
+  return c.json({
+    ok: true,
+    totalHT: totaux.totalHT,
+    totalTTC: totaux.totalTTC,
+    remiseTotale: totaux.remiseTotale,
+    totalConsigne: totaux.totalConsigne,
+    totauxReels: totaux.reels,
+    easybeer: { id: resultat.id, numero: resultat.numero },
+  })
 })
 
 // ---- Admin : invitations (flux §5 du brief) ----
