@@ -59,14 +59,18 @@ const questionsFrequentes = computed(() =>
 <template>
   <Card>
     <CardHeader>
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <CardTitle class="flex items-center gap-2 text-lg">
-          <CircleHelp class="size-5 text-muted-foreground" />
-          Aide
-        </CardTitle>
-        <p class="text-xs text-muted-foreground">
-          Guide v{{ metadata.version }}<template v-if="dateGuide"> · mis à jour le {{ dateGuide }}</template>
-        </p>
+      <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
+        <div class="min-w-0">
+          <CardTitle class="flex items-center gap-2 text-lg">
+            <CircleHelp class="size-5 text-muted-foreground" />
+            Aide
+          </CardTitle>
+        </div>
+        <div class="grid justify-items-start gap-2 sm:justify-items-end">
+          <p class="text-xs text-muted-foreground">
+            Guide v{{ metadata.version }}<template v-if="dateGuide"> · mis à jour le {{ dateGuide }}</template>
+          </p>
+        </div>
       </div>
     </CardHeader>
     <CardContent class="pt-0 pb-6">

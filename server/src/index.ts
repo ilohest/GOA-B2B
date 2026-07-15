@@ -21,6 +21,7 @@ import {
   detailCommande,
   telechargerDocument,
   listeDocumentsFacturesRecentes,
+  type LigneCommandeInput,
   type ProduitAutocomplete,
 } from './easybeer.js'
 import {
@@ -38,6 +39,8 @@ import {
   rafraichirCatalogue,
   remplirCacheClientCible,
   syncCommandesClient,
+  syncCommandesRecentes,
+  typesClientEnCascade,
   type CacheClientDoc,
   type CommandeClientCache,
 } from './sync.js'
@@ -60,6 +63,13 @@ import {
   pasDeCommande,
   resoudrePrixUnite,
 } from './catalogue.js'
+import {
+  calculerRemisesCommande,
+  enrichirLigneAvecRemises,
+  lignesSansRemise2,
+  lignesSansRemises,
+  type RemisesCommandeLocales,
+} from './remisesCommande.js'
 import { creerInvitation, lireInvitation, consommerInvitation } from './invitations.js'
 import { emailActif, envoyerInvitationEmail } from './email.js'
 
@@ -284,6 +294,36 @@ async function upsertCommandeClientCache(
   await ref.set({ commandes, syncedAt: data?.syncedAt ?? Date.now(), localUpdatedAt: Date.now() }, { merge: true })
 }
 
+async function retirerCommandeClientCache(
+  db: NonNullable<ReturnType<typeof getDb>>,
+  idClient: number,
+  idCommande: number,
+): Promise<void> {
+  const ref = db.doc(`cacheCommandesClients/${idClient}`)
+  const snap = await ref.get()
+  if (!snap.exists) return
+  const data = snap.data() as { commandes?: CommandeClientCache[]; syncedAt?: number } | undefined
+  const commandes = (data?.commandes ?? []).filter((c) => c.idCommande !== idCommande)
+  await ref.set({ commandes, syncedAt: Date.now(), localUpdatedAt: Date.now() }, { merge: true })
+}
+
+async function rafraichirCachesCommandeClient(
+  db: NonNullable<ReturnType<typeof getDb>>,
+  idClient: number,
+  contexte: string,
+) {
+  try {
+    await syncCommandesRecentes(db)
+  } catch (e) {
+    console.warn(`[sync] commandes récentes après ${contexte} : ${(e as Error).message}`)
+    try {
+      await syncCommandesClient(db, idClient)
+    } catch (fallbackError) {
+      console.warn(`[sync] commandes client après ${contexte} : ${(fallbackError as Error).message}`)
+    }
+  }
+}
+
 async function lireCommandesLocales(
   db: NonNullable<ReturnType<typeof getDb>>,
   idClient: number,
@@ -314,6 +354,66 @@ async function lireCommandesLocales(
   return [...parCommande.values()].sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
 }
 
+
+async function enregistrerCommandeAvecFallback(input: Parameters<typeof enregistrerCommande>[0]) {
+  const variantesGrille = [
+    input.idGrilleTarifaire,
+    input.idGrilleTarifaireFallback ?? input.idGrilleTarifaire,
+  ].filter((id, index, ids) => Number.isFinite(id) && ids.indexOf(id) === index)
+
+  let derniereErreur: unknown = null
+  for (const idGrilleTarifaire of variantesGrille) {
+    const tentative = { ...input, idGrilleTarifaire }
+    if (idGrilleTarifaire !== input.idGrilleTarifaire) {
+      console.warn(`[commande] retry avec grille racine ${idGrilleTarifaire}`)
+    }
+    try {
+      return await enregistrerCommande(tentative)
+    } catch (premiereErreur) {
+      if (premiereErreur instanceof EasybeerBanError) throw premiereErreur
+      derniereErreur = premiereErreur
+      console.warn(`[commande] création avec remises refusée, retry sans remise2 : ${(premiereErreur as Error).message}`)
+      try {
+        return await enregistrerCommande({ ...tentative, lignes: lignesSansRemise2(input.lignes) })
+      } catch (deuxiemeErreur) {
+        if (deuxiemeErreur instanceof EasybeerBanError) throw deuxiemeErreur
+        derniereErreur = deuxiemeErreur
+        console.warn(`[commande] création avec remise1 refusée, retry sans remises : ${(deuxiemeErreur as Error).message}`)
+        try {
+          return await enregistrerCommande({ ...tentative, lignes: lignesSansRemises(input.lignes) })
+        } catch (troisiemeErreur) {
+          if (troisiemeErreur instanceof EasybeerBanError) throw troisiemeErreur
+          derniereErreur = troisiemeErreur
+        }
+      }
+    }
+  }
+  throw new Error(`Création Easybeer impossible. Dernière erreur : ${(derniereErreur as Error)?.message ?? 'échec inconnu'}`)
+}
+
+async function modifierCommandeAvecFallback(input: Parameters<typeof modifierCommande>[0]) {
+  try {
+    return await modifierCommande(input)
+  } catch (premiereErreur) {
+    if (premiereErreur instanceof EasybeerBanError) throw premiereErreur
+    console.warn(`[commande] modification avec remises refusée, retry sans remise2 : ${(premiereErreur as Error).message}`)
+    try {
+      return await modifierCommande({ ...input, lignes: lignesSansRemise2(input.lignes) })
+    } catch (deuxiemeErreur) {
+      if (deuxiemeErreur instanceof EasybeerBanError) throw deuxiemeErreur
+      console.warn(`[commande] modification avec remise1 refusée, retry sans remises : ${(deuxiemeErreur as Error).message}`)
+      try {
+        return await modifierCommande({ ...input, lignes: lignesSansRemises(input.lignes) })
+      } catch (troisiemeErreur) {
+        if (troisiemeErreur instanceof EasybeerBanError) throw troisiemeErreur
+        throw new Error(
+          `Modification Easybeer impossible. Dernière erreur : ${(troisiemeErreur as Error).message}`,
+        )
+      }
+    }
+  }
+}
+
 /**
  * Résout et valide les lignes d'une commande depuis le CACHE (produits
  * complets, prix du client, visibilité/rupture, minimum). Les prix ne sont
@@ -327,10 +427,12 @@ async function resoudreLignes(
   | { ok: false; erreur: string }
   | {
       ok: true
-      lignes: { produit: ProduitAutocomplete; quantite: number; prixUnitaireHT: number }[]
+      lignes: LigneCommandeInput[]
       totalHT: number
       idGrilleTarifaire: number
+      idGrilleTarifaireFallback: number
       tags: string[] | string | null
+      remisesEstimees: RemisesCommandeLocales
     }
 > {
   const ko = (erreur: string) => ({ ok: false as const, erreur })
@@ -369,7 +471,7 @@ async function resoudreLignes(
   const now = Date.now()
 
   const parId = new Map<number, ProduitAutocomplete>(produits.map((p) => [p.idStockBouteille, p]))
-  const lignes: { produit: ProduitAutocomplete; quantite: number; prixUnitaireHT: number }[] = []
+  const lignes: LigneCommandeInput[] = []
   for (const l of valides) {
     const produit = parId.get(l.idStockBouteille)
     const override = overrides[String(l.idStockBouteille)]
@@ -414,16 +516,20 @@ async function resoudreLignes(
     return ko(`Minimum de commande : ${minimum.toFixed(2)} € HT (panier : ${totalHT.toFixed(2)} € HT)`)
   }
 
+  const lignesAvecRemises = lignes.map((ligne) => enrichirLigneAvecRemises(ligne, cacheClient.client))
+
   return {
     ok: true,
-    lignes,
+    lignes: lignesAvecRemises,
     totalHT,
     // Grille du prix réellement appliqué (ex. Distributeur pour un distributeur),
     // pas la racine — cohérence prix ↔ grille sur la commande Easybeer (vérifié
     // 2026-07-14 : les types enfants à grille propre sont acceptés, et Easybeer
     // garde le prix envoyé). Repli sur la racine si aucune grille résolue.
     idGrilleTarifaire: idTypeGrille ?? cacheClient.idGrilleTarifaire,
+    idGrilleTarifaireFallback: cacheClient.idGrilleTarifaire,
     tags: cacheClient.client.tags,
+    remisesEstimees: calculerRemisesCommande(lignes, cacheClient.client),
   }
 }
 
@@ -470,16 +576,23 @@ app.post('/api/commandes', requireAuth, async (c) => {
 
   const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes)
   if (!resolution.ok) return c.json({ error: resolution.erreur }, 400)
-  const { lignes, totalHT, idGrilleTarifaire } = resolution
+  const { lignes, totalHT, idGrilleTarifaire, idGrilleTarifaireFallback, remisesEstimees } = resolution
 
-  const resultat = await enregistrerCommande({
-    idClient: user.easybeerIdClient,
-    idGrilleTarifaire,
-    tauxTVA: lignes[0].produit.tauxTVA ?? {},
-    commentaire: body.commentaire?.trim() || 'Commande via la plateforme GOA',
-    estDevis: config.commandeEstDevis,
-    lignes,
-  })
+  let resultat
+  try {
+    resultat = await enregistrerCommandeAvecFallback({
+      idClient: user.easybeerIdClient,
+      idGrilleTarifaire,
+      idGrilleTarifaireFallback,
+      tauxTVA: lignes[0].produit.tauxTVA ?? { idTauxTVA: 13087, libelle: '5,5 %', taux: 5.5 },
+      commentaire: body.commentaire?.trim() || 'Commande via la plateforme GOA',
+      estDevis: config.commandeEstDevis,
+      lignes,
+    })
+  } catch (e) {
+    if (e instanceof EasybeerBanError) throw e
+    return c.json({ error: (e as Error).message }, 502)
+  }
 
   // Totaux réels relus d'Easybeer pour l'affichage exact.
   const totaux = await totauxReelsEasybeer(resultat.id!, totalHT)
@@ -499,6 +612,7 @@ app.post('/api/commandes', requireAuth, async (c) => {
       quantite: l.quantite,
       prixUnitaireHT: l.prixUnitaireHT,
     })),
+    remisesEstimees,
     commentaire: body.commentaire ?? '',
     createdAt: Date.now(),
   })
@@ -516,6 +630,11 @@ app.post('/api/commandes', requireAuth, async (c) => {
     dateCreation: Date.now(),
     modifiable: true,
   })
+  // Réconciliation du cache commandes (admin + client) depuis Easybeer : en
+  // TÂCHE DE FOND, jamais sur le chemin de la réponse — sinon chaque commande
+  // attend un resync de ~200 commandes (lent, et déclencheur de throttle → 500).
+  // La commande vient d'être ajoutée au cache client localement (upsert ci-dessus).
+  void rafraichirCachesCommandeClient(db, user.easybeerIdClient, `création commande ${resultat.id}`)
 
   return c.json({
     ok: true,
@@ -612,21 +731,65 @@ interface DocumentEasybeer {
   dateCreation?: number
 }
 
+async function lireRemisesLocalesCommande(
+  db: NonNullable<ReturnType<typeof getDb>>,
+  uid: string,
+  idCommande: number,
+): Promise<RemisesCommandeLocales | null> {
+  const snap = await db.collection('orders').where('easybeerIdCommande', '==', idCommande).get()
+  const docs = snap.docs
+    .map((doc) => doc.data() as { uid?: string; createdAt?: number; remisesEstimees?: RemisesCommandeLocales })
+    .filter((doc) => doc.uid === uid && doc.remisesEstimees)
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
+  return docs[0]?.remisesEstimees ?? null
+}
+
 /** Construit le détail d'affichage d'une commande (lignes, totaux, documents). */
-function construireDetailCommande(commande: Record<string, unknown>, idCommande: number) {
+function construireDetailCommande(
+  commande: Record<string, unknown>,
+  idCommande: number,
+  remisesLocales: RemisesCommandeLocales | null = null,
+) {
+  const formaterLibelleRemise = (valeur: string | null) => {
+    if (!valeur || valeur === '0') return null
+    return /^[0-9]+([.,][0-9]+)?$/.test(valeur) ? `${valeur.replace('.', ',')} %` : valeur
+  }
+
+  const remisesLocalesParStock = new Map((remisesLocales?.ciblees ?? []).map((remise) => [remise.idStockBouteille, remise]))
+
   const lignes = ((commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []).map((e) => {
     const prixUnitaireHT = (e.prixUnitaireHTHorsRemise as number | undefined) ?? null
     const quantite = (e.quantite as number | undefined) ?? 0
     const totalHT =
       (e.prixTotalHT as number | undefined) ??
       (prixUnitaireHT != null ? prixUnitaireHT * quantite : null)
+    const totalAvantRemiseHT = prixUnitaireHT != null ? Math.round(prixUnitaireHT * quantite * 100) / 100 : null
+    const remiseMontant =
+      totalAvantRemiseHT != null && totalHT != null
+        ? Math.max(0, Math.round((totalAvantRemiseHT - totalHT) * 100) / 100)
+        : null
+    const libellesRemise = [
+      texteDepuis(e, ['remiseLibelle', 'remise', 'valeurRemise']),
+    ]
+      .map(formaterLibelleRemise)
+      .filter((libelle): libelle is string => Boolean(libelle))
+    const remiseLabel = [...new Set(libellesRemise)].join(' + ') || null
+    const stockBouteille = sousObjet(e, ['stockBouteille', 'modeleStockBouteille', 'stockProduit'])
+    const idStockBouteille = nombreDepuis(stockBouteille, ['idStockBouteille']) ?? nombreDepuis(e, ['idStockBouteille'])
+    const remiseLocale = idStockBouteille != null ? remisesLocalesParStock.get(idStockBouteille) : null
+    const tvaLigne =
+      (e.totalTVA as number | undefined) ??
+      (totalHT != null ? Math.max(0, Math.round(totalHT * 0.055 * 100) / 100) : null)
     return {
       designation:
         ((e.stockProduit as { libelle?: string } | undefined)?.libelle as string) ??
         ((e.designation as string) || 'Produit'),
       quantite,
       prixUnitaireHT,
+      remiseLabel: remiseLabel ?? remiseLocale?.remiseLabel ?? null,
+      remiseMontant: remiseMontant && remiseMontant > 0 ? remiseMontant : (remiseLocale?.montant ?? null),
       totalHT,
+      tvaLigne,
     }
   })
   const documents = ((commande.documents as DocumentEasybeer[] | undefined) ?? [])
@@ -644,7 +807,8 @@ function construireDetailCommande(commande: Record<string, unknown>, idCommande:
     etat: etatAffichage(commande.etat),
     totalHT: commande.totalHT ?? null,
     totalTTC: commande.totalTTC ?? null,
-    remiseTotale: commande.remiseTotale ?? null,
+    remiseTotale: commande.remiseTotale ?? remisesLocales?.globaleMontant ?? null,
+    remiseLabel: remisesLocales?.globaleLabel ?? null,
     commentaire: (commande.commentaire as string) || '',
     lignes,
     documents,
@@ -656,9 +820,14 @@ app.get('/api/commandes/:id', requireAuth, async (c) => {
   const user = c.get('user')
   if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
   const idCommande = Number(c.req.param('id'))
+  const db = getDb()
   const commande = await chargerCommandeClient(idCommande, user.easybeerIdClient)
-  if (!commande) return c.json({ error: 'Commande introuvable' }, 404)
-  return c.json(construireDetailCommande(commande, idCommande))
+  if (!commande) {
+    if (db) await retirerCommandeClientCache(db, user.easybeerIdClient, idCommande)
+    return c.json({ error: 'Commande introuvable' }, 404)
+  }
+  const remisesLocales = db ? await lireRemisesLocalesCommande(db, user.uid, idCommande) : null
+  return c.json(construireDetailCommande(commande, idCommande, remisesLocales))
 })
 
 /** Téléchargement d'un document (facture, BL…) — toujours la version à jour d'Easybeer. */
@@ -734,13 +903,19 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
 
   const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes)
   if (!resolution.ok) return c.json({ error: resolution.erreur }, 400)
-  const { lignes, totalHT } = resolution
+  const { lignes, totalHT, remisesEstimees } = resolution
 
-  const resultat = await modifierCommande({
-    idCommande,
-    commentaire: body.commentaire?.trim() || 'Commande via la plateforme GOA (modifiée)',
-    lignes,
-  })
+  let resultat
+  try {
+    resultat = await modifierCommandeAvecFallback({
+      idCommande,
+      commentaire: body.commentaire?.trim() || 'Commande via la plateforme GOA (modifiée)',
+      lignes,
+    })
+  } catch (e) {
+    if (e instanceof EasybeerBanError) throw e
+    return c.json({ error: (e as Error).message }, 502)
+  }
 
   // Totaux réels recalculés par Easybeer après la modif.
   const totaux = await totauxReelsEasybeer(idCommande, totalHT)
@@ -756,6 +931,7 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
       quantite: l.quantite,
       prixUnitaireHT: l.prixUnitaireHT,
     })),
+    remisesEstimees,
     commentaire: body.commentaire ?? '',
     createdAt: Date.now(),
   })
@@ -769,6 +945,8 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
     dateCreation: (commande.dateCreation == null ? Date.now() : new Date(commande.dateCreation as string | number).getTime()) || Date.now(),
     modifiable: true,
   })
+  // Réconciliation en tâche de fond (cf. création) — jamais bloquant.
+  void rafraichirCachesCommandeClient(db, user.easybeerIdClient, `modification commande ${idCommande}`)
 
   return c.json({
     ok: true,
@@ -973,8 +1151,18 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
 
   const comptes: { email: string; status: string }[] = []
   const db = getDb()
+  const typesClient = await listeTypesClient().catch(() => [])
+  const clientAvecRemises = allegerClient(client, typesClient)
+  const typesApplicables = typesClientEnCascade(client.type?.idClientType, typesClient)
+    .map((type) => ({
+      idClientType: type.idClientType ?? null,
+      libelle: type.libelle ?? null,
+      remise: type.remise ?? null,
+      remisesCiblees: normaliserRemisesCiblees(type.listeRemises),
+    }))
+    .filter((type) => type.remise || type.remisesCiblees.length)
   if (db) {
-    await db.doc(`cacheClients/${idClient}`).set({ client: allegerClient(client), clientUpdatedAt: Date.now() }, { merge: true })
+    await db.doc(`cacheClients/${idClient}`).set({ client: clientAvecRemises, clientUpdatedAt: Date.now() }, { merge: true })
 
     const snap = await db.collection('users').where('easybeerIdClient', '==', idClient).get()
     for (const doc of snap.docs) {
@@ -996,11 +1184,12 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
       categorie: client.type?.libelle ?? null,
       minimumCommande: client.minimumCommande ?? client.minimumCommandeAutorise ?? null,
       fraisLivraisonHT: client.fraisLivraisonHT ?? null,
-      remise: client.remise ?? null,
-      remise2: client.remise2 ?? null,
-      typeRemise2: client.typeRemise2 ?? null,
+      remise: clientAvecRemises.remise ?? null,
+      remise2: clientAvecRemises.remise2 ?? null,
+      typeRemise2: clientAvecRemises.typeRemise2 ?? null,
       nbRemisesCiblees: client.listeRemises?.length ?? 0,
       remisesCiblees: normaliserRemisesCiblees(client.listeRemises),
+      remisesType: typesApplicables,
       typeLivraisonFav: client.typeLivraisonFav || null,
       tournee: client.tournee?.libelle ?? null,
       tags: client.tags ?? null,

@@ -80,7 +80,9 @@ const actualisation = useMutation({
   mutationFn: () => api.get<AdminClientsResponse>("/admin/clients?refresh=1"),
   onSuccess: (res) => {
     queryClient.setQueryData(["admin", "clients"], res);
-    toast.success("Liste resynchronisée depuis Easybeer.");
+    toast.success("Clients actualisés.", {
+      description: "Les données clients ont été mises à jour.",
+    });
   },
   onError: (e) => toast.error((e as Error).message),
 });
@@ -270,9 +272,11 @@ function ouvrirBulkInvitations() {
 // --- Paramètres en masse (tournée / mode de livraison / minimum) ---
 
 const dialogParams = ref(false);
+const typeParametreChoisi = ref<"tournee" | "livraison" | "minimum">("tournee");
 const tourneeChoisie = ref<string>("");
 const livraisonChoisie = ref<string>("");
-const minimumSaisi = ref<string>("");
+const minimumSaisi = ref<string | number>("");
+const minimumSaisiNormalise = computed(() => String(minimumSaisi.value).trim());
 
 const referentiels = useQuery({
   queryKey: ["admin", "tournees"],
@@ -290,13 +294,13 @@ const bulkParams = useMutation({
       "/admin/clients/bulk-params",
       {
         idsClients: [...selection],
-        ...(tourneeChoisie.value
+        ...(typeParametreChoisi.value === "tournee" && tourneeChoisie.value
           ? { idClientTournee: Number(tourneeChoisie.value) }
           : {}),
-        ...(livraisonChoisie.value
+        ...(typeParametreChoisi.value === "livraison" && livraisonChoisie.value
           ? { typeLivraison: livraisonChoisie.value }
           : {}),
-        ...(minimumSaisi.value.trim() !== ""
+        ...(typeParametreChoisi.value === "minimum" && minimumSaisiNormalise.value !== ""
           ? { minimumCommande: Number(minimumSaisi.value) }
           : {}),
       },
@@ -311,6 +315,7 @@ const bulkParams = useMutation({
     }
     selection.clear();
     dialogParams.value = false;
+    typeParametreChoisi.value = "tournee";
     tourneeChoisie.value = "";
     livraisonChoisie.value = "";
     minimumSaisi.value = "";
@@ -319,13 +324,16 @@ const bulkParams = useMutation({
 });
 
 const bulkParamsValide = computed(
-  () =>
-    (tourneeChoisie.value ||
-      livraisonChoisie.value ||
-      minimumSaisi.value.trim() !== "") &&
-    (minimumSaisi.value.trim() === "" || Number(minimumSaisi.value) >= 0) &&
-    // Minimum = 2 appels Easybeer par client : lot limité à 30 (limite serveur).
-    (minimumSaisi.value.trim() === "" || selection.size <= 30),
+  () => {
+    if (typeParametreChoisi.value === "tournee") return Boolean(tourneeChoisie.value);
+    if (typeParametreChoisi.value === "livraison") return Boolean(livraisonChoisie.value);
+    return (
+      minimumSaisiNormalise.value !== "" &&
+      Number(minimumSaisi.value) >= 0 &&
+      // Minimum = 2 appels Easybeer par client : lot limité à 30 (limite serveur).
+      selection.size <= 30
+    );
+  },
 );
 
 // --- Table ---
@@ -468,22 +476,29 @@ function ouvrirFiche(client: ClientResume) {
   <div class="grid gap-4">
     <Card>
       <CardHeader class="gap-3">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div class="min-w-0">
+        <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
+          <div class="flex min-w-0 items-center justify-between gap-3 sm:block">
             <CardTitle class="flex items-center gap-2 text-lg">
               <Users class="size-5 text-muted-foreground" />
               Clients
             </CardTitle>
-          </div>
-          <div class="flex items-center gap-2">
-            <p v-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
-              À jour : {{ dateHeureFr(data.syncedAt) }}
-            </p>
             <EasybeerLink
               :href="easybeerLien.clients()"
               label="Ouvrir les clients dans Easybeer"
-              class="text-muted-foreground"
+              class="shrink-0 text-muted-foreground sm:hidden"
             />
+          </div>
+          <div class="grid justify-items-start gap-2 sm:justify-items-end">
+            <div class="flex items-center gap-2">
+              <p v-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
+                À jour : {{ dateHeureFr(data.syncedAt) }}
+              </p>
+              <EasybeerLink
+                :href="easybeerLien.clients()"
+                label="Ouvrir les clients dans Easybeer"
+                class="hidden text-muted-foreground sm:inline-flex"
+              />
+            </div>
             <BoutonActualiser
               label="Actualiser les clients"
               :pending="actualisation.isPending.value"
@@ -773,17 +788,30 @@ function ouvrirFiche(client: ClientResume) {
           <DialogTitle>Paramètres en masse</DialogTitle>
           <DialogDescription>
             Appliqués aux {{ selection.size }} client(s) sélectionné(s),
-            directement dans Easybeer. Ne renseignez que ce que vous voulez
-            modifier.
+            directement dans Easybeer. Choisissez un seul paramètre à appliquer.
           </DialogDescription>
         </DialogHeader>
 
         <div class="grid gap-4">
           <div class="grid gap-1.5">
+            <Label>Paramètre à modifier</Label>
+            <Select v-model="typeParametreChoisi">
+              <SelectTrigger class="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tournee">Tournée</SelectItem>
+                <SelectItem value="livraison">Mode de livraison</SelectItem>
+                <SelectItem value="minimum">Minimum de commande</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div v-if="typeParametreChoisi === 'tournee'" class="grid gap-1.5">
             <Label>Tournée</Label>
             <Select v-model="tourneeChoisie">
               <SelectTrigger class="w-full">
-                <SelectValue placeholder="Ne pas modifier" />
+                <SelectValue placeholder="Choisir une tournée" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
@@ -797,11 +825,11 @@ function ouvrirFiche(client: ClientResume) {
             </Select>
           </div>
 
-          <div class="grid gap-1.5">
+          <div v-if="typeParametreChoisi === 'livraison'" class="grid gap-1.5">
             <Label>Mode de livraison</Label>
             <Select v-model="livraisonChoisie">
               <SelectTrigger class="w-full">
-                <SelectValue placeholder="Ne pas modifier" />
+                <SelectValue placeholder="Choisir un mode de livraison" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem
@@ -818,7 +846,7 @@ function ouvrirFiche(client: ClientResume) {
             </p>
           </div>
 
-          <div class="grid gap-1.5">
+          <div v-if="typeParametreChoisi === 'minimum'" class="grid gap-1.5">
             <Label for="minimum-bulk">Minimum de commande HT (€)</Label>
             <Input
               id="minimum-bulk"
@@ -826,10 +854,10 @@ function ouvrirFiche(client: ClientResume) {
               type="number"
               min="0"
               step="0.01"
-              placeholder="Ne pas modifier"
+              placeholder="Ex. 30"
             />
             <p
-              v-if="minimumSaisi.trim() !== '' && selection.size > 30"
+              v-if="minimumSaisiNormalise !== '' && selection.size > 30"
               class="text-xs text-destructive"
             >
               Le minimum s'écrit fiche par fiche : 30 clients maximum par lot.

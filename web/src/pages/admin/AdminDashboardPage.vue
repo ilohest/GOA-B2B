@@ -34,7 +34,9 @@ const syncAncienne = computed(() => {
 const synchro = useMutation({
   mutationFn: () => api.post<{ ok: boolean; report: SyncReport }>('/admin/sync'),
   onSuccess: ({ report }) => {
-    toast.success(`Synchro terminée en ${Math.round(report.dureeMs / 1000)} s.`)
+    toast.success('Synchronisation terminée.', {
+      description: `Les données Easybeer sont à jour (${Math.round(report.dureeMs / 1000)} s).`,
+    })
     queryClient.invalidateQueries()
   },
   onError: (e) => {
@@ -95,20 +97,22 @@ const stats = computed(() => {
 
 <template>
   <div class="grid gap-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
       <div>
         <h1 class="flex items-center gap-2 text-xl font-semibold tracking-tight">
           <LayoutDashboard class="size-5 text-muted-foreground" />
           Tableau de bord
         </h1>
       </div>
-      <div class="flex items-center gap-2">
-        <p v-if="data?.dernierSync" class="text-xs whitespace-nowrap text-muted-foreground">
-          À jour : {{ dateHeureFr(data.dernierSync) }}
-        </p>
-        <p v-else class="text-xs whitespace-nowrap text-muted-foreground">
-          Aucune synchronisation
-        </p>
+      <div class="grid justify-items-start gap-2 sm:justify-items-end">
+        <div class="flex items-center gap-2">
+          <p v-if="data?.dernierSync" class="text-xs whitespace-nowrap text-muted-foreground">
+            À jour : {{ dateHeureFr(data.dernierSync) }}
+          </p>
+          <p v-else class="text-xs whitespace-nowrap text-muted-foreground">
+            Aucune synchronisation
+          </p>
+        </div>
         <BoutonActualiser
           label="Tout synchroniser"
           label-pending="Synchronisation…"

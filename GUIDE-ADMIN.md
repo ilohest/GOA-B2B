@@ -1,4 +1,4 @@
-<!-- guide-version: 1.2 -->
+<!-- guide-version: 1.5 -->
 <!-- guide-updated-at: 2026-07-14 -->
 
 # Guide administrateur — plateforme de commande GOA
@@ -120,7 +120,66 @@ c'est ce prix-là qui prime.
 > du panier. Le **minimum de commande** est lui comparé au total **avant remise**
 > (ce que le client voit dans son panier).
 
-## 6. Clients et invitations
+## 6. Remises
+
+Les remises doivent être renseignées dans Easybeer, mais toutes les zones Easybeer
+ne se comportent pas de la même manière dans une commande.
+
+Les 4 cas utiles :
+
+| Où dans Easybeer | Ce que ça fait | Portée |
+| ---------------- | -------------- | ------ |
+| **Fiche client → section Remise → produit sélectionné** | Remise produit / conditionnement | **Client individuel** |
+| **Fiche client → section Commande** | Remise globale sur la commande | **Client individuel** |
+| **Fiche “type de client” → section Remise → produit sélectionné** | Remise produit / conditionnement | **Segment de clients** |
+| **Fiche “type de client” → section Commande** | Remise globale sur la commande | **Segment de clients** |
+
+La plateforme prend en compte ces 4 familles de remises :
+
+- **Remise spéciale** : remise globale du client (ex. `12%`). Elle est prise en
+  compte dans l'estimation du panier et transmise à Easybeer. Si le client n'a
+  pas de remise individuelle, la remise globale de son **type de client** sert
+  de fallback.
+- **Remises ciblées produit/lot** : remise sur un produit, un contenant ou un lot
+  précis, avec éventuellement une quantité minimale. Les remises ciblées de la
+  fiche client et celles du **type de client** sont combinées. Sur une ligne de
+  commande, la remise ciblée remplace la remise globale.
+
+### Priorité d'application des remises
+
+La plateforme applique la même logique qu'Easybeer :
+
+1. **Si une remise produit existe sur la ligne, elle remplace la remise commande.**
+   Exemple : si Cola a une remise produit, la remise commande `12%` n'est pas
+   appliquée sur cette ligne.
+2. **La remise produit du CLIENT INDIVIDUEL prime sur celle du SEGMENT** (et non
+   la plus avantageuse). Exemple : Cola a `10%` sur la fiche client et `20%` sur
+   le segment → la ligne prend **`10%`** (le client l'emporte, même s'il est plus
+   faible). La remise produit du segment ne s'applique que si le client n'a
+   **aucune** remise produit pour ce produit. *(Comportement d'Easybeer vérifié
+   sur une commande manuelle : le 10 % client s'applique automatiquement, pas le
+   20 % segment.)*
+3. **S'il n'y a pas de remise produit sur la ligne, la remise commande s'applique.**
+   Là aussi, la remise commande du **client individuel** prime sur celle du
+   **segment de clients**. Exemple : Framboise n'a pas de remise produit, donc
+   `12%` client gagne face à `11%` segment.
+
+En résumé, à chaque niveau (produit comme commande), **le réglage du client
+individuel prime sur celui du segment de clients** ; le segment sert de repli.
+
+À éviter :
+
+- **Remise 2** : ne rien renseigner dans ce champ. Easybeer peut l'afficher, mais
+  il ne l'applique pas correctement dans le total de commande. Pour éviter des
+  écarts entre le panier, la commande et la facture, la plateforme ne l'utilise
+  pas et ne la transmet pas.
+
+En résumé : utilisez **Remise spéciale** pour une remise client générale, et
+**Remises ciblées** pour une remise liée à un produit ou un conditionnement. Si
+la règle concerne plusieurs clients, configurez-la sur le **type de client** ;
+si elle concerne un seul client, configurez-la sur sa **fiche client**.
+
+## 7. Clients et invitations
 
 - La liste **Clients** vient du cache Easybeer. Cliquez sur un client pour sa
   fiche (conditions commerciales, historique, comptes plateforme).
@@ -134,7 +193,7 @@ c'est ce prix-là qui prime.
   appliquer d'un coup une **tournée**, un **mode de livraison** ou un **minimum de
   commande** (écrit directement dans Easybeer).
 
-## 7. Transport et livraison
+## 8. Transport et livraison
 
 Deux modes de livraison :
 
@@ -148,7 +207,7 @@ Le mode se gère avec un **tag `laposte`** sur la fiche client Easybeer : un cli
 tagué `laposte` subit la règle des multiples ; **sans ce tag, il est en mode
 palette** (par défaut). Rien à choisir par commande.
 
-## 8. Commandes
+## 9. Commandes
 
 - La page **Commandes** liste les commandes récentes (30 derniers jours), depuis
   le cache. Cliquez une commande pour son détail (lignes, totaux, documents).
@@ -157,7 +216,7 @@ palette** (par défaut). Rien à choisir par commande.
 - Une commande passée sur la plateforme est **poussée dans Easybeer** ; c'est là
   que vous la validez, préparez, facturez.
 
-## 9. Questions fréquentes
+## 10. Questions fréquentes
 
 **J'ai changé un prix dans Easybeer, le client voit encore l'ancien.**
 → Normal jusqu'à la prochaine synchro nocturne. Si le changement doit être visible
@@ -167,6 +226,13 @@ immédiatement, cliquez **« Actualiser depuis Easybeer »** sur le tableau de b
 → Oui. Le prix vient de la **grille tarifaire** (déjà synchronisée), pas besoin de
 resynchroniser. Un éventuel **tarif négocié** propre à un client s'appliquera, lui,
 à la synchro suivante.
+
+**Où renseigner une remise client ?**
+→ Utilisez **Remise spéciale** pour une remise globale, ou **Remises ciblées**
+pour une remise liée à un produit/lot. Pour un seul client, faites-le sur sa
+fiche client ; pour un segment, faites-le sur la fiche **type de client**. Ne
+remplissez pas **Remise 2** : Easybeer peut l'afficher mais ne l'applique pas
+correctement au total de commande.
 
 **Faut-il cliquer tous les jours sur « Actualiser depuis Easybeer » ?**
 → Non. Le fonctionnement normal repose sur la **synchro automatique nocturne**.
@@ -187,7 +253,7 @@ réessayez après le compte à rebours. Les données en cache restent affichées
 → Vérifiez ses spams, et que son email est correct dans Easybeer. Sinon, copiez
 le **lien** et envoyez-le lui manuellement.
 
-## 10. Support
+## 11. Support
 
 Pour toute question, contactez le support :
 

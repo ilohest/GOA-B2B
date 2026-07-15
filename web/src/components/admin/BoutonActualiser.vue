@@ -5,6 +5,7 @@
  * prolonger le ban).
  */
 import { computed } from 'vue'
+import { Loader2 } from '@lucide/vue'
 import { useEasybeerBan } from '@/composables/useEasybeerBan'
 import { Button } from '@/components/ui/button'
 
@@ -37,6 +38,7 @@ const texte = computed(() => {
     :title="banni ? 'API Easybeer momentanément saturée' : undefined"
     @click="emit('click')"
   >
+    <Loader2 v-if="pending && !banni" class="size-4 animate-spin" />
     {{ texte }}
   </Button>
 </template>

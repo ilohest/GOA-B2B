@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agePrixMs, prixEstFrais, type CacheClientDoc } from '../src/sync.js'
+import { agePrixMs, allegerClient, prixEstFrais, type CacheClientDoc } from '../src/sync.js'
 
 describe('fraîcheur des prix en cache', () => {
   const cache = {
@@ -18,5 +18,63 @@ describe('fraîcheur des prix en cache', () => {
   it("expose l'âge d'un prix quand il existe", () => {
     expect(agePrixMs(cache, 2, 12_000)).toBe(2_000)
     expect(agePrixMs(cache, 3, 12_000)).toBeNull()
+  })
+})
+
+describe('remises client + segment', () => {
+  it('garde la remise commande du client quand une remise segment existe aussi', () => {
+    const client = allegerClient(
+      {
+        idClient: 246,
+        remise: '12%',
+        type: { idClientType: 2, libelle: 'type test' },
+      },
+      [
+        { idClientType: 1, libelle: 'client PRO', remise: '11%' },
+        { idClientType: 2, libelle: 'type test', idParent: 1, remise: '11%' },
+      ],
+    )
+
+    expect(client.remise).toBe('12%')
+  })
+
+  it('utilise la remise commande du segment si le client n’a pas de remise propre', () => {
+    const client = allegerClient(
+      {
+        idClient: 246,
+        type: { idClientType: 2, libelle: 'type test' },
+      },
+      [
+        { idClientType: 2, libelle: 'type test', remise: '11%' },
+      ],
+    )
+
+    expect(client.remise).toBe('11%')
+  })
+
+  it('combine les remises produit du client et du segment', () => {
+    const client = allegerClient(
+      {
+        idClient: 246,
+        type: { idClientType: 2, libelle: 'type test' },
+        listeRemises: [
+          { idProduit: 10, idContenant: 20, idLot: 30, quantite: 2, remise: '10%' },
+        ],
+      },
+      [
+        {
+          idClientType: 2,
+          libelle: 'type test',
+          listeRemises: [
+            { idProduit: 10, idContenant: 20, idLot: 30, quantite: 10, remise: '20%' },
+          ],
+        },
+      ],
+    )
+
+    expect(client.remisesCiblees.map((remise) => remise.remise)).toEqual(['10%', '20%'])
+    // La PORTÉE est conservée (client d'abord, segment ensuite) — c'est elle qui
+    // permet à l'application de faire primer la remise produit CLIENT sur SEGMENT.
+    expect(client.remisesCiblees.map((remise) => remise.scope)).toEqual(['client', 'segment'])
   })
 })

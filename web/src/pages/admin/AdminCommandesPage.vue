@@ -45,7 +45,9 @@ const actualisation = useMutation({
   mutationFn: () => api.get<AdminCommandesResponse>('/admin/commandes?refresh=1'),
   onSuccess: (res) => {
     queryClient.setQueryData(['admin', 'commandes'], res)
-    toast.success('Commandes resynchronisées depuis Easybeer.')
+    toast.success('Commandes actualisées.', {
+      description: 'Les données commandes ont été mises à jour.',
+    })
   },
   onError: (e) => toast.error((e as Error).message),
 })
@@ -83,6 +85,17 @@ function basculerTri(cle: CleTri) {
     tri.value.cle === cle
       ? { cle, direction: tri.value.direction === 'asc' ? 'desc' : 'asc' }
       : { cle, direction: 'asc' }
+  pageCourante.value = 1
+}
+
+function changerTriMobile(cle: unknown) {
+  if (!clesTri.includes(cle as CleTri)) return
+  tri.value = { cle: cle as CleTri, direction: tri.value.direction }
+  pageCourante.value = 1
+}
+
+function basculerDirectionTri() {
+  tri.value = { cle: tri.value.cle, direction: tri.value.direction === 'asc' ? 'desc' : 'asc' }
   pageCourante.value = 1
 }
 
@@ -143,22 +156,29 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
 <template>
   <Card>
     <CardHeader class="gap-3">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="min-w-0">
-          <CardTitle class="flex items-center gap-2 text-lg">
-            <ReceiptText class="size-5 text-muted-foreground" />
-            Commandes
-          </CardTitle>
-        </div>
-        <div class="flex items-center gap-2">
-          <p v-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
-            À jour : {{ dateHeureFr(data.syncedAt) }}
-          </p>
-          <EasybeerLink
-            :href="easybeerLien.commandes(data?.easybeerAppUrl)"
-            label="Ouvrir les commandes dans Easybeer"
-            class="text-muted-foreground"
-          />
+        <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
+          <div class="flex min-w-0 items-center justify-between gap-3 sm:block">
+            <CardTitle class="flex items-center gap-2 text-lg">
+              <ReceiptText class="size-5 text-muted-foreground" />
+              Commandes
+            </CardTitle>
+            <EasybeerLink
+              :href="easybeerLien.commandes(data?.easybeerAppUrl)"
+              label="Ouvrir les commandes dans Easybeer"
+              class="shrink-0 text-muted-foreground sm:hidden"
+            />
+          </div>
+          <div class="grid justify-items-start gap-2 sm:justify-items-end">
+            <div class="flex items-center gap-2">
+              <p v-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
+                À jour : {{ dateHeureFr(data.syncedAt) }}
+            </p>
+            <EasybeerLink
+              :href="easybeerLien.commandes(data?.easybeerAppUrl)"
+              label="Ouvrir les commandes dans Easybeer"
+              class="hidden text-muted-foreground sm:inline-flex"
+            />
+          </div>
           <BoutonActualiser
             label="Actualiser les commandes"
             :pending="actualisation.isPending.value"
@@ -181,7 +201,88 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
       />
 
       <template v-else>
-        <div class="rounded-lg border [&_[data-slot=table-container]]:overflow-visible">
+        <div class="grid gap-3 md:hidden">
+          <div class="grid gap-2 rounded-lg border bg-muted/30 p-3">
+            <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Trier par</span>
+            <div class="flex items-center gap-2">
+              <Select :model-value="tri.cle" @update:model-value="changerTriMobile">
+                <SelectTrigger class="h-9 min-w-0 flex-1 bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="colonne in colonnesTri"
+                    :key="colonne.cle"
+                    :value="colonne.cle"
+                  >
+                    {{ colonne.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" class="h-9 shrink-0" @click="basculerDirectionTri">
+                <ArrowUp v-if="tri.direction === 'asc'" class="size-4" />
+                <ArrowDown v-else class="size-4" />
+                <span class="sr-only">Changer le sens du tri</span>
+              </Button>
+            </div>
+          </div>
+
+          <button
+            v-for="cmd in commandesAffichees"
+            :key="cmd.idCommande"
+            class="grid gap-3 rounded-xl border bg-background p-3 text-left shadow-xs transition-colors hover:bg-muted/40"
+            @click="commandeOuverte = cmd.idCommande"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="font-semibold">Commande n° {{ cmd.numero ?? cmd.idCommande }}</p>
+                <p class="text-xs text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</p>
+              </div>
+              <p class="shrink-0 text-right font-semibold tabular-nums">
+                {{ cmd.totalTTC != null ? prixFr(cmd.totalTTC) : '—' }}
+                <span class="block text-[11px] font-medium text-muted-foreground">TTC</span>
+              </p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <EtatBadge :etat="cmd.etat" />
+              <PaiementBadge :paiement="cmd.paiement" />
+              <span
+                v-if="cmd.facture?.existe"
+                class="inline-flex items-center gap-1 rounded-full border border-cyan-100 bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-700"
+              >
+                <FileText class="size-3.5" />
+                Facture
+              </span>
+            </div>
+
+            <div class="grid gap-2 text-sm">
+              <RouterLink
+                v-if="cmd.client?.idClient"
+                :to="`/admin/clients/${cmd.client.idClient}`"
+                class="min-w-0 hover:underline"
+                @click.stop
+              >
+                <span class="block truncate font-medium">{{ cmd.client.nom }}</span>
+                <span class="text-xs text-muted-foreground">{{ cmd.client.numero }}</span>
+              </RouterLink>
+              <span v-else class="text-muted-foreground">Client non renseigné</span>
+
+              <div class="flex items-center justify-between gap-3 border-t pt-2 text-xs">
+                <span class="text-muted-foreground">Total HT</span>
+                <span class="font-medium tabular-nums">
+                  {{ totalHTCommande(cmd) != null ? prixFr(totalHTCommande(cmd)!) : '—' }}
+                </span>
+              </div>
+            </div>
+          </button>
+
+          <p v-if="!data?.commandes.length" class="rounded-lg border p-4 text-center text-sm text-muted-foreground">
+            Aucune commande.
+          </p>
+        </div>
+
+        <div class="hidden rounded-lg border [&_[data-slot=table-container]]:overflow-visible md:block">
           <Table class="table-fixed">
             <colgroup>
               <col style="width: 6%" />

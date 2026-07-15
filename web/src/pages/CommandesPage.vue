@@ -14,11 +14,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
 
 const router = useRouter()
 const { chargerCommande } = usePanier()
 
-const { data, isPending, isError, error } = useQuery({
+const { data, isPending, isError, error, refetch } = useQuery({
   queryKey: ['commandes'],
   queryFn: () => api.get<CommandesClientResponse>('/commandes'),
 })
@@ -64,6 +65,12 @@ async function basculerDetail(idCommande: number) {
     details.value[idCommande] = await api.get<CommandeDetail>(`/commandes/${idCommande}`)
   } catch (e) {
     details.value[idCommande] = 'erreur'
+    if ((e as Error).message.toLowerCase().includes('introuvable')) {
+      toast.info('Cette commande n’existe plus dans Easybeer. La liste a été actualisée.')
+      detailOuvert.value = null
+      await refetch()
+      return
+    }
     toast.error((e as Error).message)
   }
 }
@@ -72,10 +79,20 @@ const telechargementEnCours = ref<number | null>(null)
 
 /** Décomposition des totaux : sous-total HT, remise, TVA (TTC − HT), total TTC. */
 function lignesTotaux(detail: CommandeDetail) {
-  const lignes: { label: string; valeur: string; classe?: string }[] = []
+  const lignes: { label: string; valeur: string; classe?: string; remiseLabels?: string[] }[] = []
   const muted = 'text-muted-foreground'
   if (detail.totalHT != null) lignes.push({ label: 'Sous-total HT', valeur: prixFr(detail.totalHT), classe: muted })
-  if (detail.remiseTotale) lignes.push({ label: 'Remise', valeur: `− ${prixFr(detail.remiseTotale)}`, classe: muted })
+  if (detail.remiseTotale) {
+    const remisesLignes = [
+      ...new Set(detail.lignes.map((ligne) => ligne.remiseLabel).filter((label): label is string => Boolean(label))),
+    ]
+    lignes.push({
+      label: 'Votre remise',
+      valeur: `− ${prixFr(detail.remiseTotale)}`,
+      classe: 'text-green-700',
+      remiseLabels: remisesLignes.length ? remisesLignes : (detail.remiseLabel ? [detail.remiseLabel] : []),
+    })
+  }
   if (detail.totalHT != null && detail.totalTTC != null) {
     lignes.push({
       label: 'TVA (5,5 %)',
@@ -196,6 +213,9 @@ async function modifier(commande: CommandeResume) {
                     <TableRow>
                       <TableHead>Produit</TableHead>
                       <TableHead class="text-right">Qté</TableHead>
+                      <TableHead class="text-right">Prix unitaire HT</TableHead>
+                      <TableHead class="text-right">Remise</TableHead>
+                      <TableHead class="text-right">TVA</TableHead>
                       <TableHead class="text-right">Total HT</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -207,6 +227,21 @@ async function modifier(commande: CommandeResume) {
                     >
                       <TableCell class="font-medium">{{ l.designation }}</TableCell>
                       <TableCell class="text-right tabular-nums">{{ l.quantite }}</TableCell>
+                      <TableCell class="text-right tabular-nums text-muted-foreground">
+                        {{ l.prixUnitaireHT != null ? prixFr(l.prixUnitaireHT) : '—' }}
+                      </TableCell>
+                      <TableCell class="text-right tabular-nums">
+                        <span v-if="l.remiseLabel || l.remiseMontant" class="inline-grid justify-items-end gap-1">
+                          <Badge v-if="l.remiseLabel" variant="secondary" class="border border-green-200 bg-green-50 text-green-700">
+                            {{ l.remiseLabel }}
+                          </Badge>
+                          <span v-if="l.remiseMontant" class="text-green-700">− {{ prixFr(l.remiseMontant) }}</span>
+                        </span>
+                        <span v-else class="text-muted-foreground">—</span>
+                      </TableCell>
+                      <TableCell class="text-right tabular-nums text-muted-foreground">
+                        {{ l.tvaLigne != null ? prixFr(l.tvaLigne) : '—' }}
+                      </TableCell>
                       <TableCell class="text-right tabular-nums text-muted-foreground">
                         <span>{{ l.totalHT != null ? prixFr(l.totalHT) : '—' }}</span>
                       </TableCell>
@@ -221,7 +256,17 @@ async function modifier(commande: CommandeResume) {
               >
                 <template v-for="ligne in lignesTotaux(details[cmd.idCommande] as CommandeDetail)" :key="ligne.label">
                   <div class="flex items-baseline justify-between gap-3" :class="ligne.classe">
-                    <dt>{{ ligne.label }}</dt>
+                    <dt>
+                      {{ ligne.label }}
+                      <Badge
+                        v-for="remiseLabel in ligne.remiseLabels ?? []"
+                        :key="remiseLabel"
+                        variant="secondary"
+                        class="ml-1 align-middle border border-green-200 bg-green-50 text-green-700"
+                      >
+                        {{ remiseLabel }}
+                      </Badge>
+                    </dt>
                     <dd class="tabular-nums">{{ ligne.valeur }}</dd>
                   </div>
                 </template>
@@ -282,10 +327,6 @@ async function modifier(commande: CommandeResume) {
             </dd>
           </div>
         </dl>
-        <p v-if="!confirmation.totauxReels" class="text-xs text-muted-foreground">
-          Montant indicatif — le total définitif figurera sur votre facture GOA.
-        </p>
-
         <DialogFooter>
           <Button class="w-full" @click="confirmationOuverte = false">Fermer</Button>
         </DialogFooter>

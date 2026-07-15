@@ -60,6 +60,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     // Rate-limit Easybeer : alimente le compte à rebours partagé.
     const retry = (data as { retryAfterSeconds?: number }).retryAfterSeconds
     if (res.status === 503 && typeof retry === 'number') signalerBanEasybeer(retry)
+    if ((res.status === 502 || res.status === 500) && path.startsWith('/commandes')) {
+      throw new Error("Nous n'avons pas pu transmettre votre commande. Réessayez dans un instant ou contactez GOA.")
+    }
     throw new Error((data as { error?: string }).error || `Erreur ${res.status}`)
   }
   return data as T

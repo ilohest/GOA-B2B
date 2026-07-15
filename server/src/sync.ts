@@ -65,8 +65,32 @@ async function avecRetry<T>(
   throw new Error(`[sync] ${label} : échec après ${tentatives} tentatives — ${(derniereErreur as Error)?.message}`)
 }
 
+export function typesClientEnCascade(idClientType: number | undefined, types: ModeleClientType[]) {
+  if (idClientType == null) return []
+  const parId = new Map(types.map((t) => [t.idClientType, t]))
+  const resultat: ModeleClientType[] = []
+  const vus = new Set<number>()
+  let courant = parId.get(idClientType)
+  while (courant?.idClientType != null && !vus.has(courant.idClientType)) {
+    resultat.push(courant)
+    vus.add(courant.idClientType)
+    courant = courant.idParent ? parId.get(courant.idParent) : undefined
+  }
+  return resultat
+}
+
+export function premiereRemiseType(idClientType: number | undefined, types: ModeleClientType[]) {
+  return typesClientEnCascade(idClientType, types).find((type) => type.remise?.trim())?.remise ?? null
+}
+
+export function remisesCibleesTypes(idClientType: number | undefined, types: ModeleClientType[]) {
+  return typesClientEnCascade(idClientType, types).flatMap((type) => type.listeRemises ?? [])
+}
+
 /** Fiche client réduite aux champs exploités par la plateforme. */
-export function allegerClient(c: ModeleClient) {
+export function allegerClient(c: ModeleClient, types: ModeleClientType[] = []) {
+  const remiseType = premiereRemiseType(c.type?.idClientType, types)
+  const remisesCibleesSegment = remisesCibleesTypes(c.type?.idClientType, types)
   return {
     idClient: c.idClient ?? null,
     nom: c.nom ?? null,
@@ -76,10 +100,17 @@ export function allegerClient(c: ModeleClient) {
     type: c.type ? { idClientType: c.type.idClientType ?? null, libelle: c.type.libelle ?? null } : null,
     minimumCommande: c.minimumCommande ?? c.minimumCommandeAutorise ?? null,
     fraisLivraisonHT: c.fraisLivraisonHT ?? null,
-    remise: c.remise ?? null,
+    remise: c.remise ?? remiseType ?? null,
     remise2: c.remise2 ?? null,
     typeRemise2: c.typeRemise2 ?? null,
-    remisesCiblees: normaliserRemisesCibleesCache(c.listeRemises),
+    // La PORTÉE est conservée : Easybeer applique en priorité la remise produit
+    // du CLIENT ; celle du SEGMENT (type) ne sert que si le client n'en a pas
+    // pour ce produit (vérifié manuellement : client 10 % l'emporte sur segment
+    // 20 %). Le champ `scope` porte cette distinction pour la résolution.
+    remisesCiblees: [
+      ...normaliserRemisesCibleesCache(c.listeRemises).map((r) => ({ ...r, scope: 'client' as const })),
+      ...normaliserRemisesCibleesCache(remisesCibleesSegment).map((r) => ({ ...r, scope: 'segment' as const })),
+    ],
     typeLivraisonFav: c.typeLivraisonFav ?? null,
     tags: c.tags ?? null,
   }
@@ -345,7 +376,7 @@ export async function syncClient(
     }
   }
 
-  const doc: CacheClientDoc = { client: allegerClient(fiche), idGrilleTarifaire, prix, prixUpdatedAt, syncedAt: Date.now() }
+  const doc: CacheClientDoc = { client: allegerClient(fiche, types), idGrilleTarifaire, prix, prixUpdatedAt, syncedAt: Date.now() }
   await db.doc(`cacheClients/${idClient}`).set(doc)
   return doc
 }
@@ -491,6 +522,10 @@ function resumerCommandeClient(r: CommandeResume): CommandeClientCache | null {
 
 /** Les commandes admin récentes, en un doc de cache. */
 export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResumeCache[]> {
+  const ancienSnap = await db.doc('cache/commandesRecentes').get()
+  const anciennes = ancienSnap.exists
+    ? ((ancienSnap.data() as { commandes?: CommandeResumeCache[] }).commandes ?? [])
+    : []
   const depuisMs = Date.now() - config.cache.adminCommandesJours * 24 * 60 * 60 * 1000
   const { commandes } = await listeCommandesRecentes(200, depuisMs)
   let facturesParCommande = new Map<number, DocumentCommandeResume>()
@@ -511,7 +546,48 @@ export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResu
     syncedAt: Date.now(),
     periodeJours: config.cache.adminCommandesJours,
   })
+  await syncCachesCommandesClientsImpactes(db, anciennes, resumees)
   return resumees
+}
+
+function commandesParClient(commandes: CommandeResumeCache[]) {
+  const parClient = new Map<number, Set<number>>()
+  for (const commande of commandes) {
+    const idClient = commande.client?.idClient
+    const idCommande = commande.idCommande
+    if (idClient == null || idCommande == null) continue
+    const ids = parClient.get(idClient) ?? new Set<number>()
+    ids.add(idCommande)
+    parClient.set(idClient, ids)
+  }
+  return parClient
+}
+
+function memesCommandes(a: Set<number> | undefined, b: Set<number> | undefined) {
+  if (!a && !b) return true
+  if (!a || !b || a.size !== b.size) return false
+  for (const id of a) if (!b.has(id)) return false
+  return true
+}
+
+async function syncCachesCommandesClientsImpactes(
+  db: Firestore,
+  anciennes: CommandeResumeCache[],
+  nouvelles: CommandeResumeCache[],
+) {
+  const avant = commandesParClient(anciennes)
+  const apres = commandesParClient(nouvelles)
+  const idsClients = new Set([...avant.keys(), ...apres.keys()])
+  for (const idClient of idsClients) {
+    if (memesCommandes(avant.get(idClient), apres.get(idClient))) continue
+    try {
+      await syncCommandesClient(db, idClient)
+    } catch (e) {
+      if (e instanceof EasybeerBanError) throw e
+      // La liste admin reste valide ; un cache client ponctuellement non
+      // réconcilié sera corrigé à la prochaine synchro ou à l'ouverture détail.
+    }
+  }
 }
 
 export async function syncCommandesClient(db: Firestore, idClient: number): Promise<CommandeClientCache[]> {

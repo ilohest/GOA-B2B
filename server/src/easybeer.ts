@@ -137,6 +137,16 @@ export interface ModeleTauxTVA {
   taux?: number
 }
 
+const TAUX_TVA_KOMBUCHA: ModeleTauxTVA = {
+  idTauxTVA: 13087,
+  libelle: '5,5 %',
+  taux: 5.5,
+}
+
+function tauxTVAValide(taux: ModeleTauxTVA | null | undefined): ModeleTauxTVA {
+  return taux?.idTauxTVA ? taux : TAUX_TVA_KOMBUCHA
+}
+
 export interface ModeleAdresse {
   ligne1?: string
   ligne2?: string
@@ -158,6 +168,10 @@ export interface ModeleClientType {
   libelle?: string
   idParent?: number
   libelleParent?: string
+  remise?: string
+  remise2?: string
+  typeRemise2?: string
+  listeRemises?: Record<string, unknown>[]
 }
 
 export interface ModeleClient {
@@ -424,11 +438,20 @@ export interface LigneCommandeInput {
   produit: ProduitAutocomplete
   quantite: number
   prixUnitaireHT: number
+  remise?: string | null
+  remise2?: string | null
+  typeRemise2?: string | null
+  remiseLibelle?: string | null
+  remise2Libelle?: string | null
+  valeurRemise?: number | null
+  prixUnitaireHTRemise?: number | null
+  prixTotalHT?: number | null
 }
 
 export interface EnregistrerCommandeInput {
   idClient: number
   idGrilleTarifaire: number
+  idGrilleTarifaireFallback?: number | null
   tauxTVA: ModeleTauxTVA
   commentaire: string
   estDevis: boolean
@@ -442,15 +465,22 @@ export interface ResultatEnregistrement {
   brut: unknown
 }
 
+function champsRemiseLigne(l: LigneCommandeInput) {
+  return {
+    ...(l.remise ? { remise: l.remise } : {}),
+  }
+}
+
 /**
  * POST /commande/enregistrer — recette VÉRIFIÉE (cf. EASYBEER.md).
  * Références légères par id ; tauxTVAFraisLivraison requis ; succès => { map: { id, numero } }.
  */
 export async function enregistrerCommande(input: EnregistrerCommandeInput): Promise<ResultatEnregistrement> {
+  const tauxTVACommande = tauxTVAValide(input.tauxTVA)
   const payload = {
     client: { idClient: input.idClient },
     grilleTarifaire: { idClientType: input.idGrilleTarifaire },
-    tauxTVAFraisLivraison: input.tauxTVA,
+    tauxTVAFraisLivraison: tauxTVACommande,
     commentaire: input.commentaire || 'Commande plateforme GOA',
     estDevis: input.estDevis,
     elementsBouteilles: input.lignes.map((l) => ({
@@ -459,8 +489,9 @@ export async function enregistrerCommande(input: EnregistrerCommandeInput): Prom
       quantite: l.quantite,
       prixUnitaireHTHorsRemise: l.prixUnitaireHT,
       prixLotHT: l.prixUnitaireHT,
+      ...champsRemiseLigne(l),
       designation: l.produit.libelle,
-      tauxTVA: l.produit.tauxTVA ?? input.tauxTVA,
+      tauxTVA: tauxTVAValide(l.produit.tauxTVA ?? tauxTVACommande),
       tarifHorsDroits: false,
     })),
   }
@@ -472,7 +503,23 @@ export async function enregistrerCommande(input: EnregistrerCommandeInput): Prom
 
   const id = json?.map?.id
   if (status !== 200 || json?.succes === false || id == null) {
-    throw new Error(`Easybeer ${status} sur /commande/enregistrer — ${json?.message || 'échec inconnu'}`)
+    console.warn('[easybeer] /commande/enregistrer refusé', {
+      status,
+      idClient: input.idClient,
+      idGrilleTarifaire: input.idGrilleTarifaire,
+      idTauxTVA: tauxTVACommande.idTauxTVA,
+      nbLignes: input.lignes.length,
+      premiereLigne: input.lignes[0]
+        ? {
+            idStockBouteille: input.lignes[0].produit.idStockBouteille,
+            quantite: input.lignes[0].quantite,
+            prixUnitaireHT: input.lignes[0].prixUnitaireHT,
+            idTauxTVA: tauxTVAValide(input.lignes[0].produit.tauxTVA ?? tauxTVACommande).idTauxTVA,
+          }
+        : null,
+      message: json?.message || json?.map?.message || null,
+    })
+    throw new Error(`Easybeer ${status} sur /commande/enregistrer — ${json?.message || json?.map?.message || 'échec inconnu'}`)
   }
   return { id, numero: json.map?.numero, message: json.map?.message, brut: json }
 }
@@ -498,6 +545,9 @@ export async function modifierCommande(input: {
   )
   if (status !== 200) throw new Error(`Easybeer ${status} sur /commande/edition/${input.idCommande}`)
 
+  const tauxTVACommande = tauxTVAValide((commande.tauxTVAFraisLivraison as ModeleTauxTVA | undefined) ?? input.lignes[0]?.produit.tauxTVA)
+  commande.tauxTVAFraisLivraison = tauxTVACommande
+
   const existants = (commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []
   const parIdStock = new Map(
     existants.map((e) => [(e.stockBouteille as { idStockBouteille?: number })?.idStockBouteille, e]),
@@ -511,6 +561,8 @@ export async function modifierCommande(input: {
         quantite: l.quantite,
         prixUnitaireHTHorsRemise: l.prixUnitaireHT,
         prixLotHT: l.prixUnitaireHT,
+        ...champsRemiseLigne(l),
+        tauxTVA: tauxTVAValide((existant.tauxTVA as ModeleTauxTVA | undefined) ?? l.produit.tauxTVA ?? tauxTVACommande),
         tarifHorsDroits: false,
       }
     }
@@ -520,8 +572,9 @@ export async function modifierCommande(input: {
       quantite: l.quantite,
       prixUnitaireHTHorsRemise: l.prixUnitaireHT,
       prixLotHT: l.prixUnitaireHT,
+      ...champsRemiseLigne(l),
       designation: l.produit.libelle,
-      tauxTVA: l.produit.tauxTVA ?? {},
+      tauxTVA: tauxTVAValide(l.produit.tauxTVA ?? tauxTVACommande),
       tarifHorsDroits: false,
     }
   })
@@ -535,7 +588,14 @@ export async function modifierCommande(input: {
 
   const id = json?.map?.id
   if (statusEnr !== 200 || json?.succes === false || id == null) {
-    throw new Error(`Easybeer ${statusEnr} sur /commande/enregistrer (upsert) — ${json?.message || 'échec inconnu'}`)
+    console.warn('[easybeer] /commande/enregistrer upsert refusé', {
+      status: statusEnr,
+      idCommande: input.idCommande,
+      idTauxTVA: tauxTVACommande.idTauxTVA,
+      nbLignes: input.lignes.length,
+      message: json?.message || json?.map?.message || null,
+    })
+    throw new Error(`Easybeer ${statusEnr} sur /commande/enregistrer (upsert) — ${json?.message || json?.map?.message || 'échec inconnu'}`)
   }
   return { id, numero: json.map?.numero, message: json.map?.message, brut: json }
 }

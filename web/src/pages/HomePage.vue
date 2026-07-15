@@ -1,19 +1,29 @@
 <script setup lang="ts">
-import { computed, ref, watch, watchEffect } from 'vue'
-import { useRouter } from 'vue-router'
-import { PackageCheck, Store } from '@lucide/vue'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
-import { toast } from 'vue-sonner'
-import { api } from '@/lib/api'
-import type { CatalogueClientResponse, CommandeResultat, ProduitCatalogueClient } from '@/lib/types'
-import { prixFr } from '@/lib/format'
-import { calculerRemisesCiblees, estimerRemise, libelleRemises } from '@/lib/remises'
-import { useMe } from '@/composables/useMe'
-import { usePanier } from '@/composables/usePanier'
-import ProduitCard from '@/components/catalogue/ProduitCard.vue'
-import PanierRecap from '@/components/catalogue/PanierRecap.vue'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { computed, ref, watch, watchEffect } from "vue";
+import { useRouter } from "vue-router";
+import { Loader2, PackageCheck, Store } from "@lucide/vue";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { toast } from "vue-sonner";
+import { api } from "@/lib/api";
+import type {
+  CatalogueClientResponse,
+  CommandeResultat,
+  ProduitCatalogueClient,
+} from "@/lib/types";
+import { prixFr } from "@/lib/format";
+import { estimerRemisesCommande } from "@/lib/remises";
+import { useMe } from "@/composables/useMe";
+import { usePanier } from "@/composables/usePanier";
+import ProduitCard from "@/components/catalogue/ProduitCard.vue";
+import PanierRecap from "@/components/catalogue/PanierRecap.vue";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,46 +31,51 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Textarea } from '@/components/ui/textarea'
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 
-const router = useRouter()
-const { data, isPending, isError, error } = useMe()
+const router = useRouter();
+const { data, isPending, isError, error } = useMe();
 
 // L'admin n'a pas d'espace boutique : direction l'administration.
 watchEffect(() => {
-  if (data.value?.user.role === 'admin') router.replace('/admin')
-})
+  if (data.value?.user.role === "admin") router.replace("/admin");
+});
 
 const catalogue = useQuery({
-  queryKey: ['catalogue'],
-  queryFn: () => api.get<CatalogueClientResponse>('/catalogue'),
+  queryKey: ["catalogue"],
+  queryFn: () => api.get<CatalogueClientResponse>("/catalogue"),
   // Cache client en préparation (compte tout juste activé) : les prix arrivent
   // en tâche de fond → on re-sonde jusqu'à ce qu'ils soient là.
-  refetchInterval: (query) => (query.state.data?.cacheEnPreparation ? 4000 : false),
-})
+  refetchInterval: (query) =>
+    query.state.data?.cacheEnPreparation ? 4000 : false,
+});
 
 // Compte fraîchement activé : le cache client (prix) se prépare côté serveur.
 const comptePreparation = computed(
-  () => Boolean(data.value?.cacheEnPreparation) || Boolean(catalogue.data.value?.cacheEnPreparation),
-)
+  () =>
+    Boolean(data.value?.cacheEnPreparation) ||
+    Boolean(catalogue.data.value?.cacheEnPreparation),
+);
 
 // --- Panier ---
 
-const { quantites, changer, fixer, vider, modification, nbCartons, lignes } = usePanier()
+const { quantites, changer, fixer, vider, modification, nbCartons, lignes } =
+  usePanier();
 
 const produitsParId = computed(() => {
-  const map = new Map<number, ProduitCatalogueClient>()
-  for (const p of catalogue.data.value?.produits ?? []) map.set(p.idStockBouteille, p)
-  return map
-})
+  const map = new Map<number, ProduitCatalogueClient>();
+  for (const p of catalogue.data.value?.produits ?? [])
+    map.set(p.idStockBouteille, p);
+  return map;
+});
 
 const lignesDetail = computed(() =>
   lignes.value
     .map((l) => {
-      const produit = produitsParId.value.get(l.idStockBouteille)
+      const produit = produitsParId.value.get(l.idStockBouteille);
       return produit
         ? {
             ...l,
@@ -74,80 +89,100 @@ const lignesDetail = computed(() =>
             produit,
             sousTotal: (produit.prixHT ?? 0) * l.quantite,
           }
-        : null
+        : null;
     })
     .filter((l): l is NonNullable<typeof l> => l !== null),
-)
+);
 
-const totalHT = computed(() => lignesDetail.value.reduce((somme, l) => somme + l.sousTotal, 0))
-const minimum = computed(() => data.value?.client?.minimumCommande ?? null)
-const sousMinimum = computed(() => minimum.value != null && totalHT.value < minimum.value)
-// Remises client (indicatives) : conditions affichées + estimation sur le sous-total.
-const remiseLabel = computed(() => libelleRemises(data.value?.client))
-const remiseMontant = computed(() => estimerRemise(totalHT.value, data.value?.client))
-const remisesCibleesDetail = computed(() => calculerRemisesCiblees(lignesDetail.value, data.value?.client))
-const remiseCibleeMontant = computed(() =>
-  remisesCibleesDetail.value.reduce((total, detail) => total + detail.montant, 0),
-)
-const lignesPrixExpires = computed(() => lignesDetail.value.filter((l) => !l.produit.prixEstFrais))
-const commandeBloqueeParPrix = computed(() => lignesPrixExpires.value.length > 0)
-const panierVisible = computed(() => nbCartons.value > 0 || modification.value != null)
+const totalHT = computed(() =>
+  lignesDetail.value.reduce((somme, l) => somme + l.sousTotal, 0),
+);
+const minimum = computed(() => data.value?.client?.minimumCommande ?? null);
+const sousMinimum = computed(
+  () => minimum.value != null && totalHT.value < minimum.value,
+);
+// Une remise par ligne : ciblée produit si applicable, sinon remise globale principale.
+const remisesDetail = computed(() =>
+  estimerRemisesCommande(lignesDetail.value, data.value?.client),
+);
+const remiseMontant = computed(() =>
+  remisesDetail.value.reduce((total, d) => total + d.montant, 0),
+);
+const lignesPrixExpires = computed(() =>
+  lignesDetail.value.filter((l) => !l.produit.prixEstFrais),
+);
+const commandeBloqueeParPrix = computed(
+  () => lignesPrixExpires.value.length > 0,
+);
+const panierVisible = computed(
+  () => nbCartons.value > 0 || modification.value != null,
+);
 const tagsClient = computed(() => {
-  const tags = data.value?.client?.tags
-  if (!tags) return []
-  return (Array.isArray(tags) ? tags : String(tags).split(','))
+  const tags = data.value?.client?.tags;
+  if (!tags) return [];
+  return (Array.isArray(tags) ? tags : String(tags).split(","))
     .map((tag) => tag.trim().toLowerCase())
-    .filter(Boolean)
-})
-const livraisonPostale = computed(() => tagsClient.value.includes('laposte'))
+    .filter(Boolean);
+});
+const livraisonPostale = computed(() => tagsClient.value.includes("laposte"));
 const pasLivraisonPostale = computed(() =>
-  [...new Set((catalogue.data.value?.produits ?? []).map((p) => p.pas).filter((pas) => pas > 1))]
-    .sort((a, b) => a - b),
-)
+  [
+    ...new Set(
+      (catalogue.data.value?.produits ?? [])
+        .map((p) => p.pas)
+        .filter((pas) => pas > 1),
+    ),
+  ].sort((a, b) => a - b),
+);
 const resumeLivraisonPostale = computed(() => {
-  if (!pasLivraisonPostale.value.length) return 'La Poste impose des colis homogènes : commande par cartons complets.'
-  return `La Poste impose des colis homogènes : commande par ${pasLivraisonPostale.value.join(' ou ')} cartons selon le format.`
-})
+  if (!pasLivraisonPostale.value.length)
+    return "La Poste impose des colis homogènes : commande par cartons complets.";
+  return `La Poste impose des colis homogènes : commande par ${pasLivraisonPostale.value.join(" ou ")} cartons selon le format.`;
+});
 const agePrixCatalogue = computed(() => {
-  const ageMs = catalogue.data.value?.prixPlusAncienAgeMs
-  if (ageMs == null) return null
-  const minutes = Math.max(1, Math.ceil(ageMs / 60_000))
-  if (minutes < 60) return `${minutes} min`
-  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`
-})
+  const ageMs = catalogue.data.value?.prixPlusAncienAgeMs;
+  if (ageMs == null) return null;
+  const minutes = Math.max(1, Math.ceil(ageMs / 60_000));
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+});
 
 /** Volet détail de la barre mobile. */
-const barreDepliee = ref(false)
+const barreDepliee = ref(false);
 
 // --- Envoi de la commande ---
 
-const queryClient = useQueryClient()
-const dialogOuvert = ref(false)
-const commentaire = ref('')
+const queryClient = useQueryClient();
+const dialogOuvert = ref(false);
+const commentaire = ref("");
+const erreurEnvoi = ref<string | null>(null);
 const confirmation = ref<{
-  numero?: number | null
-  totalHT: number
-  totalTTC: number | null
-  remiseTotale: number | null
-  totauxReels: boolean
-  modification: boolean
-} | null>(null)
+  numero?: number | null;
+  totalHT: number;
+  totalTTC: number | null;
+  remiseTotale: number | null;
+  totauxReels: boolean;
+  modification: boolean;
+} | null>(null);
 
 // En mode modification, on repart du commentaire existant de la commande.
 watch(
   modification,
   (m) => {
-    if (m) commentaire.value = m.commentaire
+    if (m) commentaire.value = m.commentaire;
   },
   { immediate: true },
-)
+);
 
 const envoi = useMutation({
   mutationFn: () => {
-    const body = { commentaire: commentaire.value, lignes: lignes.value }
+    const body = { commentaire: commentaire.value, lignes: lignes.value };
     return modification.value
-      ? api.put<CommandeResultat>(`/commandes/${modification.value.idCommande}`, body)
-      : api.post<CommandeResultat>('/commandes', body)
+      ? api.put<CommandeResultat>(
+          `/commandes/${modification.value.idCommande}`,
+          body,
+        )
+      : api.post<CommandeResultat>("/commandes", body);
   },
   onSuccess: (res) => {
     const confirmationCommande = {
@@ -157,37 +192,46 @@ const envoi = useMutation({
       remiseTotale: res.remiseTotale,
       totauxReels: res.totauxReels,
       modification: modification.value != null,
-    }
-    sessionStorage.setItem('goa-commande-confirmation', JSON.stringify(confirmationCommande))
-    vider()
-    commentaire.value = ''
-    barreDepliee.value = false
-    dialogOuvert.value = false
-    confirmation.value = null
-    queryClient.invalidateQueries({ queryKey: ['commandes'] })
-    router.push('/commandes')
+    };
+    sessionStorage.setItem(
+      "goa-commande-confirmation",
+      JSON.stringify(confirmationCommande),
+    );
+    vider();
+    commentaire.value = "";
+    barreDepliee.value = false;
+    dialogOuvert.value = false;
+    confirmation.value = null;
+    queryClient.invalidateQueries({ queryKey: ["commandes"] });
+    router.push("/commandes");
   },
-  onError: (e) => toast.error((e as Error).message),
-})
+  onError: (e) => {
+    erreurEnvoi.value = (e as Error).message;
+    toast.error((e as Error).message);
+  },
+});
 
 function ouvrirRecap() {
-  confirmation.value = null
-  dialogOuvert.value = true
+  confirmation.value = null;
+  erreurEnvoi.value = null;
+  dialogOuvert.value = true;
 }
 
 function annulerModification() {
-  vider()
-  commentaire.value = ''
-  barreDepliee.value = false
+  vider();
+  commentaire.value = "";
+  barreDepliee.value = false;
 }
 
 function supprimerLignePanier(idStockBouteille: number) {
-  fixer(idStockBouteille, 0)
+  fixer(idStockBouteille, 0);
 }
 </script>
 
 <template>
-  <div class="grid items-start gap-4 pb-28 lg:grid-cols-[minmax(0,1fr)_20rem] lg:pb-4">
+  <div
+    class="grid items-start gap-4 pb-28 lg:grid-cols-[minmax(0,1fr)_20rem] lg:pb-4"
+  >
     <!-- Colonne principale -->
     <div class="grid gap-4">
       <!-- Compte fraîchement activé : les prix se préparent -->
@@ -195,12 +239,17 @@ function supprimerLignePanier(idStockBouteille: number) {
         v-if="comptePreparation"
         class="flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900"
       >
-        <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-amber-700 shadow-xs">
+        <span
+          class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-amber-700 shadow-xs"
+        >
           <Store class="size-4" />
         </span>
         <div class="grid gap-0.5">
           <p class="font-medium">Votre compte se prépare…</p>
-          <p>Vos tarifs sont en cours de chargement. Cette page se met à jour automatiquement dans quelques secondes.</p>
+          <p>
+            Vos tarifs sont en cours de chargement. Cette page se met à jour
+            automatiquement dans quelques secondes.
+          </p>
         </div>
       </div>
 
@@ -211,21 +260,26 @@ function supprimerLignePanier(idStockBouteille: number) {
       >
         <p class="text-sm">
           <span class="font-semibold text-primary">
-            Modification de la commande n° {{ modification.numero ?? modification.idCommande }}
+            Modification de la commande n°
+            {{ modification.numero ?? modification.idCommande }}
           </span>
           <span class="text-muted-foreground">
-            — ajustez les quantités ci-dessous puis validez. La nouvelle version annule et
-            remplace la précédente.
+            — ajustez les quantités ci-dessous puis validez. La nouvelle version
+            annule et remplace la précédente.
           </span>
         </p>
-        <Button variant="outline" size="sm" @click="annulerModification">Annuler</Button>
+        <Button variant="outline" size="sm" @click="annulerModification"
+          >Annuler</Button
+        >
       </div>
 
       <div
         v-if="livraisonPostale"
         class="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
       >
-        <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-primary shadow-xs">
+        <span
+          class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-primary shadow-xs"
+        >
           <PackageCheck class="size-4" />
         </span>
         <div class="grid gap-0.5">
@@ -233,14 +287,17 @@ function supprimerLignePanier(idStockBouteille: number) {
             Livraison La Poste : commande par cartons complets
           </p>
           <p class="text-muted-foreground">
-            {{ resumeLivraisonPostale }} Les boutons +/− suivent ce pas automatiquement.
+            {{ resumeLivraisonPostale }} Les boutons +/− suivent ce pas
+            automatiquement.
           </p>
         </div>
       </div>
 
       <section>
         <div class="mb-5">
-          <h1 class="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          <h1
+            class="flex items-center gap-2 text-2xl font-semibold tracking-tight"
+          >
             <Store class="size-5 text-muted-foreground" />
             Nos kombuchas
           </h1>
@@ -249,18 +306,25 @@ function supprimerLignePanier(idStockBouteille: number) {
           </p>
         </div>
 
-        <div v-if="catalogue.isPending.value || isPending" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          v-if="catalogue.isPending.value || isPending"
+          class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        >
           <Skeleton v-for="i in 6" :key="i" class="h-72 w-full rounded-2xl" />
         </div>
 
         <p v-else-if="catalogue.isError.value" class="text-sm text-destructive">
-          Impossible de charger le catalogue : {{ (catalogue.error.value as Error)?.message }}
+          Impossible de charger le catalogue :
+          {{ (catalogue.error.value as Error)?.message }}
         </p>
         <p v-else-if="isError" class="text-sm text-destructive">
           Impossible de charger votre compte : {{ (error as Error)?.message }}
         </p>
 
-        <p v-else-if="!catalogue.data.value?.produits.length" class="text-sm text-muted-foreground">
+        <p
+          v-else-if="!catalogue.data.value?.produits.length"
+          class="text-sm text-muted-foreground"
+        >
           Le catalogue n'est pas encore disponible — revenez bientôt.
         </p>
 
@@ -281,7 +345,11 @@ function supprimerLignePanier(idStockBouteille: number) {
       <Card>
         <CardHeader>
           <CardTitle class="text-lg">
-            {{ modification ? `Modification n° ${modification.numero ?? modification.idCommande}` : 'Votre commande' }}
+            {{
+              modification
+                ? `Modification n° ${modification.numero ?? modification.idCommande}`
+                : "Votre commande"
+            }}
           </CardTitle>
           <CardDescription v-if="modification">
             La nouvelle version annule et remplace la précédente.
@@ -293,10 +361,8 @@ function supprimerLignePanier(idStockBouteille: number) {
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
-            :remise-label="remiseLabel"
             :remise-montant="remiseMontant"
-            :remise-ciblee-montant="remiseCibleeMontant"
-            :remises-ciblees-detail="remisesCibleesDetail"
+            :remises-detail="remisesDetail"
             editable
             @changer="changer"
             @supprimer="supprimerLignePanier"
@@ -307,10 +373,12 @@ function supprimerLignePanier(idStockBouteille: number) {
             <Button
               class="mt-2 w-full"
               size="lg"
-              :disabled="sousMinimum || commandeBloqueeParPrix || nbCartons === 0"
+              :disabled="
+                sousMinimum || commandeBloqueeParPrix || nbCartons === 0
+              "
               @click="ouvrirRecap"
             >
-              {{ modification ? 'Mettre à jour' : 'Commander' }}
+              {{ modification ? "Mettre à jour" : "Commander" }}
             </Button>
             <Button
               v-if="modification"
@@ -326,22 +394,26 @@ function supprimerLignePanier(idStockBouteille: number) {
     </aside>
 
     <!-- Barre panier (mobile) : résumé + volet détail dépliable -->
-    <div v-if="panierVisible" class="fixed inset-x-0 bottom-0 z-20 px-4 pb-4 lg:hidden">
-      <div class="mx-auto w-full max-w-5xl rounded-xl border bg-background shadow-lg">
+    <div
+      v-if="panierVisible"
+      class="fixed inset-x-0 bottom-0 z-20 px-4 pb-4 lg:hidden"
+    >
+      <div
+        class="mx-auto w-full max-w-5xl rounded-xl border bg-background shadow-lg"
+      >
         <div v-if="barreDepliee" class="border-b p-4">
           <p v-if="modification" class="mb-2 text-xs font-medium text-primary">
-            Modification de la commande n° {{ modification.numero ?? modification.idCommande }} —
-            la nouvelle version annule et remplace la précédente.
+            Modification de la commande n°
+            {{ modification.numero ?? modification.idCommande }} — la nouvelle
+            version annule et remplace la précédente.
           </p>
           <PanierRecap
             :lignes="lignesDetail"
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
-            :remise-label="remiseLabel"
             :remise-montant="remiseMontant"
-            :remise-ciblee-montant="remiseCibleeMontant"
-            :remises-ciblees-detail="remisesCibleesDetail"
+            :remises-detail="remisesDetail"
             editable
             @changer="changer"
             @supprimer="supprimerLignePanier"
@@ -366,18 +438,26 @@ function supprimerLignePanier(idStockBouteille: number) {
             @click="barreDepliee = !barreDepliee"
           >
             <p v-if="modification" class="text-xs font-medium text-primary">
-              Modification n° {{ modification.numero ?? modification.idCommande }}
+              Modification n°
+              {{ modification.numero ?? modification.idCommande }}
             </p>
             <p class="text-sm font-semibold">
-              {{ nbCartons }} carton{{ nbCartons > 1 ? 's' : '' }} — {{ prixFr(totalHT) }} HT
-              <span class="ml-1 text-muted-foreground">{{ barreDepliee ? '▾' : '▴' }}</span>
+              {{ nbCartons }} carton{{ nbCartons > 1 ? "s" : "" }} —
+              {{ prixFr(totalHT) }} HT
+              <span class="ml-1 text-muted-foreground">{{
+                barreDepliee ? "▾" : "▴"
+              }}</span>
             </p>
             <p v-if="sousMinimum" class="text-xs text-destructive">
               Minimum : {{ prixFr(minimum!) }} HT
             </p>
           </button>
-          <Button size="lg" :disabled="sousMinimum || commandeBloqueeParPrix || nbCartons === 0" @click="ouvrirRecap">
-            {{ modification ? 'Mettre à jour' : 'Commander' }}
+          <Button
+            size="lg"
+            :disabled="sousMinimum || commandeBloqueeParPrix || nbCartons === 0"
+            @click="ouvrirRecap"
+          >
+            {{ modification ? "Mettre à jour" : "Commander" }}
           </Button>
         </div>
       </div>
@@ -386,13 +466,47 @@ function supprimerLignePanier(idStockBouteille: number) {
     <!-- Confirmation -->
     <Dialog v-model:open="dialogOuvert">
       <DialogContent class="sm:max-w-md">
-        <template v-if="!confirmation">
+        <template v-if="envoi.isPending.value">
+          <div class="grid justify-items-center gap-4 py-8 text-center">
+            <span
+              class="grid size-14 place-items-center rounded-full bg-primary/10 text-primary"
+            >
+              <Loader2 class="size-7 animate-spin" />
+            </span>
+            <div class="grid gap-1">
+              <DialogTitle>
+                {{
+                  modification
+                    ? "Mise à jour en cours"
+                    : "Commande en cours de traitement"
+                }}
+              </DialogTitle>
+              <DialogDescription>
+                Cette étape peut prendre quelques secondes.
+              </DialogDescription>
+            </div>
+            <Button class="w-full" size="lg" disabled>
+              <Loader2 class="size-4 animate-spin" />
+              {{ modification ? "Mise à jour…" : "Envoi…" }}
+            </Button>
+          </div>
+        </template>
+
+        <template v-else-if="!confirmation">
           <DialogHeader>
             <DialogTitle>
-              {{ modification ? `Modifier la commande n° ${modification.numero ?? modification.idCommande}` : 'Récapitulatif de votre commande' }}
+              {{
+                modification
+                  ? `Modifier la commande n° ${modification.numero ?? modification.idCommande}`
+                  : "Récapitulatif de votre commande"
+              }}
             </DialogTitle>
             <DialogDescription>
-              {{ modification ? 'Cette version annule et remplace la précédente.' : "Vérifiez les quantités avant l'envoi." }}
+              {{
+                modification
+                  ? "Cette version annule et remplace la précédente."
+                  : "Vérifiez les quantités avant l'envoi."
+              }}
             </DialogDescription>
           </DialogHeader>
           <PanierRecap
@@ -400,10 +514,8 @@ function supprimerLignePanier(idStockBouteille: number) {
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
-            :remise-label="remiseLabel"
             :remise-montant="remiseMontant"
-            :remise-ciblee-montant="remiseCibleeMontant"
-            :remises-ciblees-detail="remisesCibleesDetail"
+            :remises-detail="remisesDetail"
             editable
             @changer="changer"
             @supprimer="supprimerLignePanier"
@@ -421,22 +533,40 @@ function supprimerLignePanier(idStockBouteille: number) {
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
               Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
             </p>
+            <p
+              v-if="erreurEnvoi"
+              class="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
+            >
+              {{ erreurEnvoi }}
+            </p>
             <Button
               class="w-full"
               size="lg"
               :disabled="envoi.isPending.value || commandeBloqueeParPrix"
               @click="envoi.mutate()"
             >
-              {{ envoi.isPending.value ? 'Envoi…' : modification ? 'Confirmer la modification' : 'Confirmer la commande' }}
+              {{
+                envoi.isPending.value
+                  ? "Envoi…"
+                  : modification
+                    ? "Confirmer la modification"
+                    : "Confirmer la commande"
+              }}
             </Button>
           </DialogFooter>
         </template>
 
         <template v-else>
           <DialogHeader>
-            <DialogTitle>{{ confirmation.modification ? 'Commande mise à jour ✓' : 'Commande envoyée ✓' }}</DialogTitle>
+            <DialogTitle>{{
+              confirmation.modification
+                ? "Commande mise à jour ✓"
+                : "Commande envoyée ✓"
+            }}</DialogTitle>
             <DialogDescription>
-              Votre commande a bien été transmise à GOA<template v-if="confirmation.numero">
+              Votre commande a bien été transmise à GOA<template
+                v-if="confirmation.numero"
+              >
                 (n° {{ confirmation.numero }})</template
               >.
             </DialogDescription>
@@ -444,21 +574,24 @@ function supprimerLignePanier(idStockBouteille: number) {
 
           <!-- Totaux relus d'Easybeer quand disponibles. -->
           <dl class="grid gap-1 rounded-lg border bg-muted/40 p-3 text-sm">
-            <div v-if="confirmation.remiseTotale" class="flex justify-between text-muted-foreground">
+            <div
+              v-if="confirmation.remiseTotale"
+              class="flex justify-between text-muted-foreground"
+            >
               <dt>Remise</dt>
-              <dd class="tabular-nums">− {{ prixFr(confirmation.remiseTotale) }}</dd>
+              <dd class="tabular-nums">
+                − {{ prixFr(confirmation.remiseTotale) }}
+              </dd>
             </div>
             <div class="flex justify-between font-semibold">
-              <dt>{{ confirmation.totalTTC != null ? 'Total TTC' : 'Total HT' }}</dt>
+              <dt>
+                {{ confirmation.totalTTC != null ? "Total TTC" : "Total HT" }}
+              </dt>
               <dd class="tabular-nums">
                 {{ prixFr(confirmation.totalTTC ?? confirmation.totalHT) }}
               </dd>
             </div>
           </dl>
-          <p v-if="!confirmation.totauxReels" class="text-xs text-muted-foreground">
-            Montant indicatif — le total définitif figurera sur votre facture GOA.
-          </p>
-
           <DialogFooter>
             <Button class="w-full" @click="dialogOuvert = false">Fermer</Button>
           </DialogFooter>

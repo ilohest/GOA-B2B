@@ -270,6 +270,22 @@ export interface AdminClientDetail {
       dateFin: string | null
       identifiants: string[]
     }[]
+    remisesType?: {
+      idClientType: number | null
+      libelle: string | null
+      remise: string | null
+      remisesCiblees: {
+        produit: string | null
+        contenant: string | null
+        lot: string | null
+        quantite: number | null
+        remise: string | null
+        type: string | null
+        dateDebut: string | null
+        dateFin: string | null
+        identifiants: string[]
+      }[]
+    }[]
     typeLivraisonFav: string | null
     tournee: string | null
     tags: string[] | string | null
@@ -310,11 +326,15 @@ export interface CommandeDetail {
   totalHT: number | null
   totalTTC: number | null
   remiseTotale: number | null
+  remiseLabel: string | null
   commentaire: string
   lignes: {
     designation: string
     quantite: number
     prixUnitaireHT: number | null
+    remiseLabel: string | null
+    remiseMontant: number | null
+    tvaLigne: number | null
     totalHT: number | null
   }[]
   documents: { idCommandeDocument: number; libelle: string; code: string; nomFichier: string }[]
