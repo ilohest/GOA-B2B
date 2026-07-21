@@ -603,7 +603,7 @@ function supprimerLignePanier(idStockBouteille: number) {
     </div>
 
     <!-- Colonne récap (desktop) -->
-    <aside class="sticky top-20 hidden lg:block">
+    <aside class="sticky top-16 hidden lg:block">
       <Card>
         <CardHeader>
           <CardTitle class="text-lg">
