@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { agePrixMs, allegerClient, prixEstFrais, type CacheClientDoc } from '../src/sync.js'
+import {
+  agePrixMs,
+  allegerClient,
+  cacheClientDoitEtreRafraichi,
+  cacheEstAncien,
+  prixEstFrais,
+  type CacheClientDoc,
+} from '../src/sync.js'
 
 describe('fraîcheur des prix en cache', () => {
   const cache = {
@@ -18,6 +25,22 @@ describe('fraîcheur des prix en cache', () => {
   it("expose l'âge d'un prix quand il existe", () => {
     expect(agePrixMs(cache, 2, 12_000)).toBe(2_000)
     expect(agePrixMs(cache, 3, 12_000)).toBeNull()
+  })
+
+  it('demande un refresh proactif avant expiration, ou si un prix visible manque', () => {
+    const cacheComplet = {
+      prix: { '1': 12, '2': 20 },
+      prixUpdatedAt: { '1': 9_000, '2': 7_001 },
+    }
+    expect(cacheClientDoitEtreRafraichi(cacheComplet, [1, 2], 5_000, 12_000)).toBe(false)
+    expect(cacheClientDoitEtreRafraichi(cacheComplet, [1, 2], 4_000, 12_000)).toBe(true)
+    expect(cacheClientDoitEtreRafraichi(cacheComplet, [1, 3], 5_000, 12_000)).toBe(true)
+  })
+
+  it('détecte un cache global absent ou trop ancien', () => {
+    expect(cacheEstAncien(null, 5_000, 12_000)).toBe(true)
+    expect(cacheEstAncien(8_000, 5_000, 12_000)).toBe(false)
+    expect(cacheEstAncien(7_000, 5_000, 12_000)).toBe(true)
   })
 })
 

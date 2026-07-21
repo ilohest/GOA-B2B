@@ -107,16 +107,22 @@ function formatRemise(remise: string | null | undefined) {
   return prixFr(valeur);
 }
 
-function metaRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees"][number]) {
+function metaRemiseCiblee(
+  remise: AdminClientDetail["client"]["remisesCiblees"][number],
+) {
   const elements = [
     remise.quantite != null ? `Quantité minimale : ${remise.quantite}` : null,
   ].filter(Boolean);
   return elements.join(" · ");
 }
 
-function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees"][number]) {
+function periodeRemiseCiblee(
+  remise: AdminClientDetail["client"]["remisesCiblees"][number],
+) {
   if (!remise.dateDebut && !remise.dateFin) return null;
-  const debut = remise.dateDebut ? dateFr(new Date(remise.dateDebut).getTime()) : "…";
+  const debut = remise.dateDebut
+    ? dateFr(new Date(remise.dateDebut).getTime())
+    : "…";
   const fin = remise.dateFin ? dateFr(new Date(remise.dateFin).getTime()) : "…";
   return `${debut} → ${fin}`;
 }
@@ -132,7 +138,16 @@ function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees
         >
           ← Clients
         </RouterLink>
-        <h1 class="flex items-center gap-2 text-xl font-semibold">
+        <div
+          v-if="isPending"
+          class="mt-1 flex items-center gap-2"
+          aria-hidden="true"
+        >
+          <Skeleton class="size-5 rounded-full" />
+          <Skeleton class="h-6 w-48 sm:w-64" />
+          <Skeleton class="h-4 w-14" />
+        </div>
+        <h1 v-else class="flex items-center gap-2 text-xl font-semibold">
           <UserRound class="size-5 text-muted-foreground" />
           {{ client?.nom ?? client?.raisonSociale ?? "…" }}
           <span class="ml-2 text-sm font-normal text-muted-foreground">{{
@@ -141,7 +156,9 @@ function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees
         </h1>
       </div>
       <div class="shrink-0">
+        <Skeleton v-if="isPending" class="size-8 rounded-full" />
         <EasybeerLink
+          v-else
           :href="easybeerLien.clients(data?.easybeerAppUrl)"
           label="Ouvrir le client dans Easybeer"
           class="text-muted-foreground"
@@ -149,9 +166,93 @@ function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees
       </div>
     </div>
 
-    <div v-if="isPending" class="grid gap-3">
-      <Skeleton class="h-40 w-full" />
-      <Skeleton class="h-40 w-full" />
+    <div
+      v-if="isPending"
+      class="grid gap-4"
+      aria-label="Chargement de la fiche client"
+      aria-busy="true"
+    >
+      <div class="grid items-start gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <Skeleton class="h-5 w-28" />
+          </CardHeader>
+          <CardContent class="grid gap-3">
+            <div
+              v-for="i in 7"
+              :key="`info-${i}`"
+              class="grid gap-1.5 sm:grid-cols-[12rem_1fr] sm:items-center"
+            >
+              <Skeleton class="h-3.5 w-28" />
+              <Skeleton class="h-4" :class="i % 3 === 0 ? 'w-4/5' : 'w-2/3'" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div class="grid gap-4">
+          <Card>
+            <CardHeader>
+              <Skeleton class="h-5 w-44" />
+            </CardHeader>
+            <CardContent class="grid gap-4">
+              <div class="grid gap-3">
+                <div
+                  v-for="i in 2"
+                  :key="`condition-${i}`"
+                  class="grid gap-1.5 sm:grid-cols-[12rem_1fr]"
+                >
+                  <Skeleton class="h-3.5 w-32" />
+                  <Skeleton class="h-4 w-24" />
+                </div>
+              </div>
+              <div class="grid gap-2">
+                <Skeleton class="h-4 w-20" />
+                <Skeleton class="h-3 w-64 max-w-full" />
+                <Skeleton class="h-32 w-full rounded-lg" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <Skeleton class="h-5 w-36" />
+            </CardHeader>
+            <CardContent class="grid gap-3">
+              <div
+                v-for="i in 2"
+                :key="`compte-${i}`"
+                class="flex items-center justify-between gap-3"
+              >
+                <Skeleton class="h-4 w-48 max-w-[70%]" />
+                <Skeleton class="h-5 w-14 rounded-full" />
+              </div>
+              <Skeleton class="mt-1 h-8 w-36 rounded-md" />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <Skeleton class="h-5 w-32" />
+        </CardHeader>
+        <CardContent class="grid gap-3">
+          <div
+            v-for="i in 4"
+            :key="`commande-${i}`"
+            class="flex items-center justify-between gap-4 border-b pb-3 last:border-0 last:pb-0"
+          >
+            <div class="flex items-center gap-2">
+              <Skeleton class="h-4 w-20" />
+              <Skeleton class="h-5 w-16 rounded-full" />
+            </div>
+            <div class="flex items-center gap-4">
+              <Skeleton class="hidden h-4 w-20 sm:block" />
+              <Skeleton class="h-4 w-16" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
 
     <p v-else-if="isError" class="text-sm text-destructive">
@@ -213,38 +314,52 @@ function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees
               <div class="mt-4 grid gap-2">
                 <div>
                   <h3 class="text-sm font-medium">Remises</h3>
-                  <p class="text-xs text-muted-foreground">
-                    Lecture par portée : client individuel ou segment de clients.
-                  </p>
                 </div>
                 <div class="overflow-hidden rounded-lg border text-sm">
-                  <div class="grid grid-cols-[7rem_1fr_1fr] bg-muted/70 text-xs font-medium text-muted-foreground">
-                    <div class="border-r px-3 py-2">Type</div>
+                  <div
+                    class="grid grid-cols-[7rem_1fr_1fr] bg-muted/70 text-xs font-medium text-muted-foreground"
+                  >
+                    <div class="border-r px-3 py-2"></div>
                     <div class="border-r px-3 py-2">Client individuel</div>
-                    <div class="px-3 py-2">Segment de clients</div>
+                    <div class="px-3 py-2">Type de client</div>
                   </div>
 
                   <div class="grid grid-cols-[7rem_1fr_1fr] border-t">
-                    <div class="border-r bg-muted/35 px-3 py-3 font-medium text-muted-foreground">
+                    <div
+                      class="border-r bg-muted/35 px-3 py-3 font-medium text-muted-foreground"
+                    >
                       Commande
                     </div>
                     <div class="border-r px-3 py-3">
-                      <Badge v-if="formatRemise(client.remise)" variant="secondary">
+                      <Badge
+                        v-if="formatRemise(client.remise)"
+                        variant="secondary"
+                      >
                         {{ formatRemise(client.remise) }}
                       </Badge>
                       <span v-else class="text-muted-foreground">—</span>
                     </div>
                     <div class="grid gap-2 px-3 py-3">
-                      <template v-if="remisesType.some((type) => formatRemise(type.remise))">
+                      <template
+                        v-if="
+                          remisesType.some((type) => formatRemise(type.remise))
+                        "
+                      >
                         <div
-                          v-for="type in remisesType.filter((type) => formatRemise(type.remise))"
+                          v-for="type in remisesType.filter((type) =>
+                            formatRemise(type.remise),
+                          )"
                           :key="`commande-${type.idClientType ?? type.libelle ?? 'type'}`"
                           class="flex flex-wrap items-center justify-between gap-2"
                         >
                           <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-medium">{{ type.libelle || "Type de client" }}</span>
+                            <span class="font-medium">{{
+                              type.libelle || "Type de client"
+                            }}</span>
                           </div>
-                          <Badge variant="secondary">{{ formatRemise(type.remise) }}</Badge>
+                          <Badge variant="secondary">{{
+                            formatRemise(type.remise)
+                          }}</Badge>
                         </div>
                       </template>
                       <span v-else class="text-muted-foreground">—</span>
@@ -252,7 +367,9 @@ function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees
                   </div>
 
                   <div class="grid grid-cols-[7rem_1fr_1fr] border-t">
-                    <div class="border-r bg-muted/35 px-3 py-3 font-medium text-muted-foreground">
+                    <div
+                      class="border-r bg-muted/35 px-3 py-3 font-medium text-muted-foreground"
+                    >
                       Produit
                     </div>
                     <div class="grid gap-2 border-r px-3 py-3">
@@ -262,7 +379,9 @@ function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees
                           :key="index"
                           class="rounded-md border bg-background p-2"
                         >
-                          <div class="flex flex-wrap items-center justify-between gap-2">
+                          <div
+                            class="flex flex-wrap items-center justify-between gap-2"
+                          >
                             <div class="flex flex-wrap items-center gap-2">
                               <p class="font-medium">
                                 {{ remise.produit || "Produit ciblé" }}
@@ -274,14 +393,23 @@ function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees
                                 {{ remise.lot }}
                               </Badge>
                             </div>
-                            <Badge v-if="formatRemise(remise.remise)" variant="secondary">
+                            <Badge
+                              v-if="formatRemise(remise.remise)"
+                              variant="secondary"
+                            >
                               {{ formatRemise(remise.remise) }}
                             </Badge>
                           </div>
-                          <p v-if="metaRemiseCiblee(remise)" class="mt-1 text-xs text-muted-foreground">
+                          <p
+                            v-if="metaRemiseCiblee(remise)"
+                            class="mt-1 text-xs text-muted-foreground"
+                          >
                             {{ metaRemiseCiblee(remise) }}
                           </p>
-                          <p v-if="periodeRemiseCiblee(remise)" class="mt-1 text-xs text-muted-foreground">
+                          <p
+                            v-if="periodeRemiseCiblee(remise)"
+                            class="mt-1 text-xs text-muted-foreground"
+                          >
                             {{ periodeRemiseCiblee(remise) }}
                           </p>
                         </div>
@@ -289,39 +417,61 @@ function periodeRemiseCiblee(remise: AdminClientDetail["client"]["remisesCiblees
                       <span v-else class="text-muted-foreground">—</span>
                     </div>
                     <div class="grid gap-2 px-3 py-3">
-                      <template v-if="remisesType.some((type) => type.remisesCiblees.length)">
+                      <template
+                        v-if="
+                          remisesType.some((type) => type.remisesCiblees.length)
+                        "
+                      >
                         <template
-                          v-for="type in remisesType.filter((type) => type.remisesCiblees.length)"
+                          v-for="type in remisesType.filter(
+                            (type) => type.remisesCiblees.length,
+                          )"
                           :key="`produits-${type.idClientType ?? type.libelle ?? 'type'}`"
                         >
                           <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-medium">{{ type.libelle || "Type de client" }}</span>
+                            <span class="font-medium">{{
+                              type.libelle || "Type de client"
+                            }}</span>
                           </div>
                           <div
                             v-for="(remise, index) in type.remisesCiblees"
                             :key="`${type.idClientType ?? type.libelle}-${index}`"
                             class="rounded-md border bg-background p-2"
                           >
-                            <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div
+                              class="flex flex-wrap items-center justify-between gap-2"
+                            >
                               <div class="flex flex-wrap items-center gap-2">
                                 <p class="font-medium">
                                   {{ remise.produit || "Produit ciblé" }}
                                 </p>
-                                <Badge v-if="remise.contenant" variant="outline">
+                                <Badge
+                                  v-if="remise.contenant"
+                                  variant="outline"
+                                >
                                   {{ remise.contenant }}
                                 </Badge>
                                 <Badge v-if="remise.lot" variant="outline">
                                   {{ remise.lot }}
                                 </Badge>
                               </div>
-                              <Badge v-if="formatRemise(remise.remise)" variant="secondary">
+                              <Badge
+                                v-if="formatRemise(remise.remise)"
+                                variant="secondary"
+                              >
                                 {{ formatRemise(remise.remise) }}
                               </Badge>
                             </div>
-                            <p v-if="metaRemiseCiblee(remise)" class="mt-1 text-xs text-muted-foreground">
+                            <p
+                              v-if="metaRemiseCiblee(remise)"
+                              class="mt-1 text-xs text-muted-foreground"
+                            >
                               {{ metaRemiseCiblee(remise) }}
                             </p>
-                            <p v-if="periodeRemiseCiblee(remise)" class="mt-1 text-xs text-muted-foreground">
+                            <p
+                              v-if="periodeRemiseCiblee(remise)"
+                              class="mt-1 text-xs text-muted-foreground"
+                            >
                               {{ periodeRemiseCiblee(remise) }}
                             </p>
                           </div>

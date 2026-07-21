@@ -4,7 +4,7 @@
  * clic ou glisser-déposer, remplacement, suppression, état d'envoi.
  */
 import { ref } from 'vue'
-import { Trash2 } from '@lucide/vue'
+import { Plus, Trash2 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
@@ -86,9 +86,15 @@ async function onRetirer() {
           Remplacer
         </span>
       </template>
-      <span v-else class="px-1 text-center text-[11px] leading-tight text-muted-foreground">
-        <span class="mb-0.5 block text-lg leading-none text-primary">+</span>
-        Ajouter une image
+      <span
+        v-else
+        class="grid max-w-full place-items-center gap-1 px-1 text-center text-[11px] leading-tight whitespace-normal text-muted-foreground"
+      >
+        <Plus class="size-5 text-primary" aria-hidden="true" />
+        <span class="block">
+          Ajouter une<br />
+          image
+        </span>
       </span>
       <span
         v-if="enCours"

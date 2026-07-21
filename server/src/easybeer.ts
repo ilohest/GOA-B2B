@@ -95,6 +95,7 @@ async function eb<T>(method: string, path: string, body?: unknown): Promise<{ st
   return passerParLaFile(async () => {
     const res = await fetch(`${BASE}${path}`, {
       method,
+      signal: AbortSignal.timeout(config.easybeer.timeoutMs),
       headers: {
         Authorization: BASIC_AUTH,
         Accept: 'application/json',
@@ -105,7 +106,7 @@ async function eb<T>(method: string, path: string, body?: unknown): Promise<{ st
     const text = await res.text()
 
     // Rate-limit : 400 avec texte « banned » OU 429 standard (vu 2026-07-09).
-    if (res.status === 400 && text.includes('banned')) {
+    if (res.status === 400 && text.toLowerCase().includes('banned')) {
       const secondes = Number(/Try again in (\d+) seconds/.exec(text)?.[1] ?? 60)
       throw new EasybeerBanError(secondes)
     }

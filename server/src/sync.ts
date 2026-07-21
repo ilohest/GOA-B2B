@@ -2,9 +2,9 @@
  * Job de synchro Easybeer → cache Firestore (cf. BRIEF-DEV-V1 §2).
  *
  * L'API Easybeer throttle agressivement (HTTP 200 corps vide) : on n'appelle
- * JAMAIS Easybeer depuis une requête client. Ce module pull périodiquement (ou
- * sur déclenchement admin) et écrit dans Firestore ; les lectures de l'app se
- * font sur le cache.
+ * jamais Easybeer pour construire directement une réponse client. Ce module
+ * remplit Firestore périodiquement, sur déclenchement admin ou en auto-guérison ;
+ * les réponses de l'app restent construites depuis le cache.
  *
  * Structure :
  *  - cache/catalogue            { produits[], syncedAt }
@@ -17,6 +17,7 @@
  * sous le radar du rate-limiting.
  */
 import type { Firestore } from 'firebase-admin/firestore'
+import { randomUUID } from 'node:crypto'
 import { config } from './config.js'
 import {
   EasybeerBanError,
@@ -183,6 +184,7 @@ export interface SyncReport {
   erreurs?: string[]
   dureeMs: number
   syncedAt: number
+  reussi: boolean
 }
 
 export class CacheIndisponibleError extends Error {
@@ -205,6 +207,25 @@ export function prixEstFrais(
 export function agePrixMs(cache: Pick<CacheClientDoc, 'prixUpdatedAt'>, idStockBouteille: number, now = Date.now()) {
   const updatedAt = cache.prixUpdatedAt[String(idStockBouteille)]
   return typeof updatedAt === 'number' ? Math.max(0, now - updatedAt) : null
+}
+
+/** Vrai si au moins un prix visible manque ou mérite un renouvellement proactif. */
+export function cacheClientDoitEtreRafraichi(
+  cache: Pick<CacheClientDoc, 'prix' | 'prixUpdatedAt'>,
+  idsProduits: Iterable<number>,
+  ageRefreshMs: number,
+  now = Date.now(),
+): boolean {
+  for (const id of idsProduits) {
+    const cle = String(id)
+    const updatedAt = cache.prixUpdatedAt?.[cle]
+    if (cache.prix?.[cle] == null || updatedAt == null || now - updatedAt >= ageRefreshMs) return true
+  }
+  return false
+}
+
+export function cacheEstAncien(syncedAt: number | null | undefined, ageRefreshMs: number, now = Date.now()): boolean {
+  return syncedAt == null || now - syncedAt >= ageRefreshMs
 }
 
 /** Catalogue commun (1 appel). */
@@ -697,6 +718,16 @@ export async function lireGrilleTarifaire(db: Firestore): Promise<{ lignes: Gril
 
 /** idStockBouteille rendus visibles par l'admin (overrides) — pour cibler la tarification. */
 async function idsVisibles(db: Firestore): Promise<Set<number>> {
+  const agrege = await db.doc('cache/catalogueOverrides').get()
+  const overrides = agrege.data()?.overrides as Record<string, { visible?: boolean }> | undefined
+  if (overrides) {
+    return new Set(
+      Object.entries(overrides)
+        .filter(([, override]) => override.visible)
+        .map(([id]) => Number(id))
+        .filter(Number.isFinite),
+    )
+  }
   const snap = await db.collection('catalogueOverrides').get()
   const set = new Set<number>()
   for (const d of snap.docs) {
@@ -728,7 +759,7 @@ export async function lireCacheClient(db: Firestore, idClient: number): Promise<
 // Anti-rafale : au plus une tentative par client par fenêtre. Sans ce garde,
 // un client sans cache qui recharge sa page pendant un ban déclencherait un
 // appel Easybeer par visite (et prolongerait le ban).
-const REMPLISSAGE_MIN_INTERVAL_MS = 10 * 60 * 1000
+const REMPLISSAGE_MIN_INTERVAL_MS = config.cache.autoRefreshCooldownMinutes * 60_000
 const dernieresTentativesRemplissage = new Map<number, number>()
 
 /**
@@ -736,12 +767,18 @@ const dernieresTentativesRemplissage = new Map<number, number>()
  * synchro complète. Appelé à l'activation du compte, et en auto-guérison quand
  * une lecture tombe sur un cache manquant. Lit catalogue/référentiels/overrides
  * depuis le CACHE (1 appel fiche + N appels prix vers Easybeer, sérialisés).
- * Renvoie null si une tentative récente a déjà eu lieu (anti-rafale) ou si le
- * cache existe déjà.
+ * Renvoie null si une tentative récente a déjà eu lieu (anti-rafale). Si le
+ * cache existe mais reste incomplet (grille non résolue), retente une passe :
+ * c'est l'auto-guérison déclenchée par les refresh client.
  */
-export async function remplirCacheClientCible(db: Firestore, idClient: number): Promise<CacheClientDoc | null> {
+export async function remplirCacheClientCible(
+  db: Firestore,
+  idClient: number,
+  options: { forcer?: boolean } = {},
+): Promise<CacheClientDoc | null> {
   const existant = await db.doc(`cacheClients/${idClient}`).get()
-  if (existant.exists) return existant.data() as CacheClientDoc
+  const cacheExistant = existant.data() as CacheClientDoc | undefined
+  if (!options.forcer && existant.exists && cacheExistant?.idGrilleTarifaire != null) return cacheExistant
 
   const derniere = dernieresTentativesRemplissage.get(idClient) ?? 0
   if (Date.now() - derniere < REMPLISSAGE_MIN_INTERVAL_MS) return null
@@ -755,6 +792,40 @@ export async function remplirCacheClientCible(db: Firestore, idClient: number): 
   const doc = await syncClient(db, idClient, types, produits, visibles)
   console.log(`[sync] cache client ${idClient} créé à la volée (${Object.keys(doc.prix).length} prix).`)
   return doc
+}
+
+/**
+ * Renouvelle fiche + prix du client en arrière-plan. Le cooldown mémoire évite
+ * les rafales sur une instance ; le bail Firestore déduplique aussi plusieurs
+ * instances Cloud Run. Le cache existant reste lisible pendant toute l'opération.
+ */
+export async function rafraichirCacheClientCible(db: Firestore, idClient: number): Promise<CacheClientDoc | null> {
+  const maintenant = Date.now()
+  const bail = db.doc(`cacheRefreshClients/${idClient}`)
+  const verrouGlobal = db.doc('cache/lock')
+  const owner = `client-${idClient}-${randomUUID()}`
+  const acquis = await db.runTransaction(async (tx) => {
+    const [etat, syncGlobal] = await Promise.all([tx.get(bail), tx.get(verrouGlobal)])
+    const data = etat.data() as { startedAt?: number; lastAttemptAt?: number } | undefined
+    const globalStartedAt = syncGlobal.data()?.startedAt as number | undefined
+    if (globalStartedAt && maintenant - globalStartedAt < SYNC_LOCK_TTL_MS) return false
+    if (data?.startedAt && maintenant - data.startedAt < SYNC_LOCK_TTL_MS) return false
+    if (data?.lastAttemptAt && maintenant - data.lastAttemptAt < REMPLISSAGE_MIN_INTERVAL_MS) return false
+    tx.set(bail, { startedAt: maintenant, lastAttemptAt: maintenant }, { merge: true })
+    tx.set(verrouGlobal, { startedAt: maintenant, owner, kind: 'client' })
+    return true
+  })
+  if (!acquis) return null
+
+  try {
+    return await remplirCacheClientCible(db, idClient, { forcer: true })
+  } finally {
+    await bail.set({ startedAt: null, finishedAt: Date.now() }, { merge: true }).catch(() => {})
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(verrouGlobal)
+      if (snap.data()?.owner === owner) tx.set(verrouGlobal, { startedAt: null, finishedAt: Date.now(), owner: null, kind: null })
+    }).catch(() => {})
+  }
 }
 
 /** Ids des clients Easybeer liés à au moins un compte plateforme. */
@@ -783,6 +854,47 @@ export async function rafraichirCatalogue(db: Firestore): Promise<void> {
   const produits = await syncCatalogue(db)
   const types = await syncReferentiels(db)
   await syncGrilleTarifaire(db, types, produits)
+}
+
+const CATALOGUE_REFRESH_LOCK_TTL_MS = 15 * 60 * 1000
+
+/**
+ * Refresh catalogue/grille dédupliqué entre requêtes et instances. En mode
+ * automatique, un cooldown persistant empêche chaque visite de retenter après
+ * une panne Easybeer. Le bouton admin peut ignorer ce cooldown.
+ */
+export async function lancerRafraichissementCatalogue(
+  db: Firestore,
+  options: { automatique?: boolean } = {},
+): Promise<{ rafraichi: true } | { enCours: true }> {
+  const maintenant = Date.now()
+  const verrou = db.doc('cache/catalogueRefresh')
+  const verrouGlobal = db.doc('cache/lock')
+  const owner = `catalogue-${randomUUID()}`
+  const cooldownMs = config.cache.autoRefreshCooldownMinutes * 60_000
+  const acquis = await db.runTransaction(async (tx) => {
+    const [etat, syncGlobal] = await Promise.all([tx.get(verrou), tx.get(verrouGlobal)])
+    const data = etat.data() as { startedAt?: number; lastAttemptAt?: number } | undefined
+    const globalStartedAt = syncGlobal.data()?.startedAt as number | undefined
+    if (globalStartedAt && maintenant - globalStartedAt < SYNC_LOCK_TTL_MS) return false
+    if (data?.startedAt && maintenant - data.startedAt < CATALOGUE_REFRESH_LOCK_TTL_MS) return false
+    if (options.automatique && data?.lastAttemptAt && maintenant - data.lastAttemptAt < cooldownMs) return false
+    tx.set(verrou, { startedAt: maintenant, lastAttemptAt: maintenant }, { merge: true })
+    tx.set(verrouGlobal, { startedAt: maintenant, owner, kind: 'catalogue' })
+    return true
+  })
+  if (!acquis) return { enCours: true }
+
+  try {
+    await rafraichirCatalogue(db)
+    return { rafraichi: true }
+  } finally {
+    await verrou.set({ startedAt: null, finishedAt: Date.now() }, { merge: true }).catch(() => {})
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(verrouGlobal)
+      if (snap.data()?.owner === owner) tx.set(verrouGlobal, { startedAt: null, finishedAt: Date.now(), owner: null, kind: null })
+    }).catch(() => {})
+  }
 }
 
 export async function syncTout(db: Firestore): Promise<SyncReport> {
@@ -851,6 +963,7 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
     }
   }
 
+  const reussi = erreurs.length === 0 && clients.every((client) => !client.erreur)
   const report: SyncReport = {
     produits: produits.length,
     typesClient: types.length,
@@ -860,8 +973,15 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
     ...(erreurs.length ? { erreurs } : {}),
     dureeMs: Date.now() - debut,
     syncedAt: Date.now(),
+    reussi,
   }
-  await db.doc('cache/meta').set({ dernierSync: report })
+  await db.doc('cache/meta').set(
+    {
+      dernierSync: report,
+      ...(reussi ? { dernierSyncReussiAt: report.syncedAt } : {}),
+    },
+    { merge: true },
+  )
   console.log(
     `[sync] terminé en ${report.dureeMs} ms — ${report.produits} produits, ${clients.length} client(s)` +
       (erreurs.length ? `, ${erreurs.length} section(s) en erreur` : '') +
@@ -872,7 +992,7 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
 
 // --- Verrou single-flight : une seule synchro complète à la fois ---
 
-const VERROU_TTL_MS = 15 * 60 * 1000 // au-delà, un verrou est considéré périmé (sync crashée)
+export const SYNC_LOCK_TTL_MS = 15 * 60 * 1000 // au-delà, un verrou est considéré périmé (sync crashée)
 
 /**
  * Lance `syncTout` sous verrou Firestore : si une synchro tourne déjà (job
@@ -881,17 +1001,34 @@ const VERROU_TTL_MS = 15 * 60 * 1000 // au-delà, un verrou est considéré pér
  */
 export async function lancerSync(db: Firestore): Promise<{ report: SyncReport } | { enCours: true }> {
   const verrou = db.doc('cache/lock')
+  const owner = `sync-${randomUUID()}`
   const acquis = await db.runTransaction(async (tx) => {
     const debut = (await tx.get(verrou)).data()?.startedAt as number | undefined
-    if (debut && Date.now() - debut < VERROU_TTL_MS) return false
-    tx.set(verrou, { startedAt: Date.now() })
+    if (debut && Date.now() - debut < SYNC_LOCK_TTL_MS) return false
+    tx.set(verrou, { startedAt: Date.now(), owner, kind: 'sync' })
     return true
   })
   if (!acquis) return { enCours: true }
 
+  // Une synchro volumineuse peut dépasser le TTL. Le heartbeat empêche alors
+  // une autre instance de considérer le verrou comme abandonné.
+  const heartbeat = setInterval(() => {
+    db.runTransaction(async (tx) => {
+      const snap = await tx.get(verrou)
+      if (snap.data()?.owner === owner) tx.set(verrou, { startedAt: Date.now() }, { merge: true })
+    }).catch(() => {})
+  }, 60_000)
+  heartbeat.unref?.()
+
   try {
     return { report: await syncTout(db) }
   } finally {
-    await verrou.set({ startedAt: null, finishedAt: Date.now() }).catch(() => {})
+    clearInterval(heartbeat)
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(verrou)
+      if (snap.data()?.owner === owner) {
+        tx.set(verrou, { startedAt: null, finishedAt: Date.now(), owner: null, kind: null })
+      }
+    }).catch(() => {})
   }
 }

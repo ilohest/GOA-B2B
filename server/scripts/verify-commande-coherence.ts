@@ -96,7 +96,15 @@ async function api<T = any>(chemin: string, tok: string, init?: RequestInit): Pr
 }
 
 async function main() {
-  console.log(`Serveur ${BASE} — vérif de cohérence d'une commande\n`)
+  console.log(`Serveur ${BASE} — vérif de cohérence d'une commande`)
+  // ⚠️ Selon COMMANDE_EST_DEVIS, ce test écrit un DEVIS (jetable) ou une VRAIE
+  // COMMANDE dans Easybeer. Il la supprime à la fin, mais supprimer une commande
+  // ferme n'est pas neutre côté GOA — d'où l'avertissement explicite.
+  console.log(
+    config.commandeEstDevis
+      ? 'Mode : DEVIS (réversible)\n'
+      : '⚠️  Mode : VRAIE COMMANDE (COMMANDE_EST_DEVIS=false) — une commande ferme va être créée puis supprimée.\n',
+  )
   const [tClient, tAdmin] = await Promise.all([token(CLIENT_EMAIL), token(ADMIN_EMAIL)])
   const db = getDb()
   const { produits } = db ? await lireCatalogue(db) : { produits: [] as any[] }

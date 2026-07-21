@@ -52,9 +52,15 @@ export function pasDeCommande(libelle: string, tags: string[]): number {
 }
 
 export async function lireOverrides(db: Firestore): Promise<Record<string, CatalogueOverride>> {
+  const cacheRef = db.doc('cache/catalogueOverrides')
+  const cache = await cacheRef.get()
+  const agreges = cache.data()?.overrides as Record<string, CatalogueOverride> | undefined
+  if (agreges) return agreges
+
   const snap = await db.collection('catalogueOverrides').get()
   const overrides: Record<string, CatalogueOverride> = {}
   for (const doc of snap.docs) overrides[doc.id] = { ...OVERRIDE_DEFAUT, ...(doc.data() as Partial<CatalogueOverride>) }
+  await cacheRef.set({ overrides, syncedAt: Date.now() })
   return overrides
 }
 
@@ -133,6 +139,8 @@ export interface ProduitCatalogueClient {
   idLot?: number
   libelle: string
   libelleEasybeer: string
+  contenant: string | null
+  packaging: string | null
   photoUrl: string | null
   rupture: boolean
   prixHT: number | null
@@ -243,7 +251,13 @@ export function grillePrixPourClient(
 export function catalogueClient(
   produits: ProduitAutocomplete[],
   overrides: Record<string, CatalogueOverride>,
-  options: SourcesPrixClient & { tagsClient?: unknown } = {},
+  options: SourcesPrixClient & {
+    tagsClient?: unknown
+    unitesMeta?: Record<
+      number,
+      { produit: string | null; contenant: string | null; packaging: string | null }
+    >
+  } = {},
 ): ProduitCatalogueClient[] {
   const tags = normaliserTags(options.tagsClient ?? null)
   const now = options.now ?? Date.now()
@@ -259,8 +273,12 @@ export function catalogueClient(
         idProduit: p.idProduit,
         idContenant: p.idContenant,
         idLot: p.idLot,
-        libelle: o.displayName || p.libelle,
+        // Le format a ses propres badges côté client : sans nom personnalisé,
+        // afficher seulement le produit évite de répéter contenant/packaging.
+        libelle: o.displayName || options.unitesMeta?.[p.idStockBouteille]?.produit || p.libelle,
         libelleEasybeer: p.libelle,
+        contenant: options.unitesMeta?.[p.idStockBouteille]?.contenant ?? null,
+        packaging: options.unitesMeta?.[p.idStockBouteille]?.packaging ?? null,
         photoUrl: o.photoUrl || null,
         rupture: o.rupture,
         prixHT,
@@ -279,12 +297,27 @@ export async function majOverride(
   patch: Partial<CatalogueOverride>,
 ): Promise<CatalogueOverride> {
   const ref = db.collection('catalogueOverrides').doc(String(idStockBouteille))
+  const cacheRef = db.doc('cache/catalogueOverrides')
+  // Initialise l'agrégat si le projet existait avant cette optimisation.
+  await lireOverrides(db)
   const champs: Partial<CatalogueOverride> = {}
   if (typeof patch.visible === 'boolean') champs.visible = patch.visible
   if (typeof patch.rupture === 'boolean') champs.rupture = patch.rupture
   if (typeof patch.displayName === 'string') champs.displayName = patch.displayName.trim()
   // La politique d'URL (chemin local ou https) est validée en amont (schemas.ts).
   if (typeof patch.photoUrl === 'string') champs.photoUrl = patch.photoUrl.trim()
-  await ref.set({ ...champs, updatedAt: Date.now() }, { merge: true })
-  return { ...OVERRIDE_DEFAUT, ...((await ref.get()).data() as Partial<CatalogueOverride>) }
+  const updatedAt = Date.now()
+  return db.runTransaction(async (tx) => {
+    const [existant, cache] = await Promise.all([tx.get(ref), tx.get(cacheRef)])
+    const override = {
+      ...OVERRIDE_DEFAUT,
+      ...(existant.data() as Partial<CatalogueOverride> | undefined),
+      ...champs,
+      updatedAt,
+    }
+    const overrides = (cache.data()?.overrides ?? {}) as Record<string, CatalogueOverride>
+    tx.set(ref, override)
+    tx.set(cacheRef, { overrides: { ...overrides, [String(idStockBouteille)]: override }, syncedAt: updatedAt })
+    return override
+  })
 }

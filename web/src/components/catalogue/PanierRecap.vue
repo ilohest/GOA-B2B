@@ -8,6 +8,7 @@ import { Trash2 } from "@lucide/vue";
 import { prixFr } from "@/lib/format";
 import type { DetailRemiseCiblee } from "@/lib/remises";
 import { Badge } from "@/components/ui/badge";
+import ProduitFormat from "@/components/catalogue/ProduitFormat.vue";
 
 export interface LignePanier {
   idStockBouteille: number;
@@ -15,6 +16,8 @@ export interface LignePanier {
   idContenant?: number | null;
   idLot?: number | null;
   libelle: string;
+  contenant?: string | null;
+  packaging?: string | null;
   photoUrl?: string | null;
   prixUnitaireHT: number;
   pas?: number;
@@ -54,10 +57,14 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
     <p v-if="!lignes.length" class="text-sm text-muted-foreground">
       Votre panier est vide — ajoutez des cartons depuis le catalogue.
     </p>
-    <ul v-else class="grid gap-1.5 text-sm">
-      <li v-for="l in lignes" :key="l.idStockBouteille" class="grid gap-2">
-        <div class="flex items-center justify-between gap-3">
-          <span class="flex min-w-0 flex-1 items-center gap-2.5">
+    <ul v-else class="grid text-sm">
+      <li
+        v-for="l in lignes"
+        :key="l.idStockBouteille"
+        class="grid gap-3 border-b border-border/60 py-3 first:pt-0"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <span class="flex min-w-0 flex-1 items-start gap-2.5">
             <span
               class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted/50"
             >
@@ -82,7 +89,12 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
             </span>
             <span class="min-w-0">
               <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
-              <span class="text-muted-foreground">
+              <ProduitFormat
+                class="mt-1"
+                :contenant="l.contenant"
+                :packaging="l.packaging"
+              />
+              <span class="mt-1 block text-muted-foreground">
                 {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
               </span>
             </span>
@@ -137,7 +149,7 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
         </div>
       </li>
       <li
-        class="flex items-baseline justify-between gap-3 border-t pt-2"
+        class="flex items-baseline justify-between gap-3 pt-3"
         :class="aRemise ? 'text-sm' : 'font-semibold'"
       >
         <span>{{ aRemise ? "Sous-total HT" : "Total HT" }}</span>
@@ -156,6 +168,11 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
           >
             <span class="min-w-0 flex-1">
               <span class="line-clamp-1">{{ detail.libelle }}</span>
+              <ProduitFormat
+                class="mt-1"
+                :contenant="detail.contenant"
+                :packaging="detail.packaging"
+              />
               <Badge variant="secondary" class="mt-1 text-primary">
                 {{ detail.remiseLabel }}
               </Badge>

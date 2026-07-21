@@ -5,6 +5,26 @@ function required(name: string, value: string | undefined): string {
   return value
 }
 
+function nombreConfig(name: string, value: string | undefined, fallback: number, min = 0): number {
+  const nombre = value == null || value === '' ? fallback : Number(value)
+  if (!Number.isFinite(nombre) || nombre < min) {
+    throw new Error(`Variable d'environnement invalide : ${name} doit être un nombre >= ${min}`)
+  }
+  return nombre
+}
+
+const prixMaxAgeMinutes = nombreConfig('PRIX_CACHE_MAX_AGE_MINUTES', process.env.PRIX_CACHE_MAX_AGE_MINUTES, 2160, 1)
+const catalogueRefreshAgeMinutes = nombreConfig(
+  'CATALOGUE_AUTO_REFRESH_MINUTES',
+  process.env.CATALOGUE_AUTO_REFRESH_MINUTES,
+  30,
+  1,
+)
+const prixRefreshAgeMinutes = nombreConfig('PRIX_AUTO_REFRESH_MINUTES', process.env.PRIX_AUTO_REFRESH_MINUTES, 360, 1)
+if (catalogueRefreshAgeMinutes >= prixMaxAgeMinutes || prixRefreshAgeMinutes >= prixMaxAgeMinutes) {
+  throw new Error('Les seuils de refresh proactif doivent être inférieurs à PRIX_CACHE_MAX_AGE_MINUTES')
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 8788),
   webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
@@ -15,6 +35,7 @@ export const config = {
     appUrl: process.env.EASYBEER_APP_URL ?? 'https://app.easybeer.fr',
     username: required('EASYBEER_USERNAME', process.env.EASYBEER_USERNAME),
     password: required('EASYBEER_PASSWORD', process.env.EASYBEER_PASSWORD),
+    timeoutMs: nombreConfig('EASYBEER_TIMEOUT_MS', process.env.EASYBEER_TIMEOUT_MS, 20_000, 1000),
   },
 
   firebase: {
@@ -36,10 +57,23 @@ export const config = {
   commandeEstDevis: process.env.COMMANDE_EST_DEVIS !== 'false',
 
   cache: {
-    // Pensé pour une synchro nocturne (ex. 04:00) : on laisse une marge d'une
-    // journée complète, puis on bloque l'envoi plutôt que d'utiliser un prix
-    // potentiellement obsolète.
-    prixMaxAgeMinutes: Number(process.env.PRIX_CACHE_MAX_AGE_MINUTES ?? 2160),
+    // Garde-fou dur, avec une marge nette après les refreshs proactifs. Au-delà,
+    // on tente une réparation puis on bloque l'envoi plutôt que d'utiliser un
+    // prix potentiellement obsolète.
+    prixMaxAgeMinutes,
+    // Rafraîchissement proactif : on renouvelle les données bien AVANT le
+    // garde-fou dur de 36 h. Le catalogue/grille est peu coûteux et peut être
+    // rafraîchi plusieurs fois par jour ; les prix personnalisés ne le sont que
+    // pour le client qui consulte la boutique.
+    catalogueRefreshAgeMinutes,
+    prixRefreshAgeMinutes,
+    // Après un échec/ban, une visite client ne doit pas relancer une rafale.
+    autoRefreshCooldownMinutes: nombreConfig(
+      'CACHE_AUTO_REFRESH_COOLDOWN_MINUTES',
+      process.env.CACHE_AUTO_REFRESH_COOLDOWN_MINUTES,
+      10,
+      1,
+    ),
     // Cache admin des commandes globales : fenêtre volontairement courte pour
     // limiter le volume utile lu/affiché pendant les tests Easybeer.
     adminCommandesJours: Number(process.env.ADMIN_COMMANDES_CACHE_DAYS ?? 30),

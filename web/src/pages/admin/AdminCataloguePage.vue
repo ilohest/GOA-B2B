@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watchEffect } from 'vue'
-import { ChevronDown, EyeOff, Package, PackageX, Search } from '@lucide/vue'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Eye, EyeOff, Package, PackageX, Search } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
@@ -15,7 +15,9 @@ import EasybeerLink from '@/components/admin/EasybeerLink.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
@@ -35,7 +37,9 @@ const actualisation = useMutation({
   onSuccess: (res) => {
     queryClient.setQueryData(['admin', 'catalogue'], res)
     queryClient.invalidateQueries({ queryKey: ['catalogue'] })
-    if (res.indisponible && res.retryAfterSeconds) {
+    if (res.enCours) {
+      toast.info('Une synchronisation est déjà en cours — le catalogue actuel reste affiché.')
+    } else if (res.indisponible && res.retryAfterSeconds) {
       signalerBanEasybeer(res.retryAfterSeconds)
       toast.warning('Easybeer momentanément saturé — catalogue inchangé, réessayez dans un instant.')
     } else {
@@ -48,13 +52,29 @@ const actualisation = useMutation({
 })
 
 const recherche = ref('')
-const filtreMobile = ref<'tous' | 'visibles' | 'masques' | 'rupture' | 'sans-image'>('tous')
+/** Filtres rapides — réservés à la vue MOBILE (le desktop trie par colonnes). */
+const filtreEtat = ref<'tous' | 'visibles' | 'masques' | 'rupture' | 'sans-image'>('tous')
 type BrouillonCatalogue = Partial<Pick<CatalogueOverride, 'displayName' | 'visible' | 'rupture' | 'photoUrl'>>
 const brouillons = ref<Record<number, BrouillonCatalogue>>({})
 
 function overrideAffiche(u: CatalogueAdminUnite): CatalogueOverride {
   return { ...u.override, ...(brouillons.value[u.idStockBouteille] ?? {}) }
 }
+
+/**
+ * Filtres de contexte au-dessus du tableau. `tous` = pas de filtre.
+ * Les options sont les valeurs réellement présentes au catalogue.
+ */
+const filtresColonne = ref<Record<string, string>>({ contenant: 'tous', packaging: 'tous' })
+
+function valeursDistinctes(champ: 'contenant' | 'packaging') {
+  const valeurs = (data.value?.unites ?? []).map((u) => u[champ]).filter((v): v is string => Boolean(v))
+  return [...new Set(valeurs)].sort((a, b) => a.localeCompare(b, 'fr'))
+}
+const optionsColonne = computed<Record<string, string[]>>(() => ({
+  contenant: valeursDistinctes('contenant'),
+  packaging: valeursDistinctes('packaging'),
+}))
 
 const unitesFiltrees = computed(() => {
   const q = recherche.value.trim().toLowerCase()
@@ -65,23 +85,111 @@ const unitesFiltrees = computed(() => {
       !q ||
       [u.produit, u.contenant, u.packaging, override.displayName, u.libelleEasybeer]
         .some((v) => v?.toLowerCase().includes(q))
-    const correspondFiltre =
-      filtreMobile.value === 'tous' ||
-      (filtreMobile.value === 'visibles' && override.visible) ||
-      (filtreMobile.value === 'masques' && !override.visible) ||
-      (filtreMobile.value === 'rupture' && override.rupture) ||
-      (filtreMobile.value === 'sans-image' && !override.photoUrl)
-    return correspondRecherche && correspondFiltre
+    const correspondEtat =
+      filtreEtat.value === 'tous' ||
+      (filtreEtat.value === 'visibles' && override.visible) ||
+      (filtreEtat.value === 'masques' && !override.visible) ||
+      (filtreEtat.value === 'rupture' && override.rupture) ||
+      (filtreEtat.value === 'sans-image' && !override.photoUrl)
+    const correspondColonnes =
+      (filtresColonne.value.contenant === 'tous' || u.contenant === filtresColonne.value.contenant) &&
+      (filtresColonne.value.packaging === 'tous' || u.packaging === filtresColonne.value.packaging)
+    return correspondRecherche && correspondEtat && correspondColonnes
   })
 })
 
-const filtresMobile = computed(() => [
+const filtresEtat = computed(() => [
   { cle: 'tous' as const, label: 'Tous' },
   { cle: 'visibles' as const, label: 'Visibles' },
   { cle: 'masques' as const, label: 'Masqués' },
   { cle: 'rupture' as const, label: 'Rupture' },
   { cle: 'sans-image' as const, label: 'Sans image' },
 ])
+
+function basculerFiltreEtat(cle: typeof filtreEtat.value) {
+  filtreEtat.value = filtreEtat.value === cle ? 'tous' : cle
+}
+
+const filtresActifs = computed(
+  () =>
+    recherche.value.trim() !== '' ||
+    filtreEtat.value !== 'tous' ||
+    filtresColonne.value.contenant !== 'tous' ||
+    filtresColonne.value.packaging !== 'tous',
+)
+
+function reinitialiserFiltres() {
+  recherche.value = ''
+  filtreEtat.value = 'tous'
+  filtresColonne.value = { contenant: 'tous', packaging: 'tous' }
+}
+
+const statsCatalogue = computed(() => {
+  const unites = data.value?.unites ?? []
+  return {
+    total: unites.length,
+    visibles: unites.filter((u) => overrideAffiche(u).visible).length,
+    ruptures: unites.filter((u) => overrideAffiche(u).rupture).length,
+  }
+})
+
+// --- Tri par colonne (desktop) ---
+
+type CleTri = 'produit' | 'contenant' | 'packaging' | 'tarif' | 'visibilite' | 'stock'
+const colonnesTri: { cle: CleTri; label: string }[] = [
+  { cle: 'produit', label: 'Produit' },
+  { cle: 'contenant', label: 'Contenant' },
+  { cle: 'packaging', label: 'Packaging' },
+  { cle: 'tarif', label: 'Tarif HT' },
+  { cle: 'visibilite', label: 'Visibilité' },
+  { cle: 'stock', label: 'Stock' },
+]
+const tri = ref<{ cle: CleTri; direction: 'asc' | 'desc' }>({ cle: 'produit', direction: 'asc' })
+
+function classeColonneTri(cle: CleTri) {
+  if (cle === 'tarif') return 'w-48'
+  if (cle === 'visibilite') return 'w-48 pl-6'
+  if (cle === 'stock') return 'w-40'
+  return ''
+}
+
+function basculerTri(cle: CleTri) {
+  tri.value =
+    tri.value.cle === cle
+      ? { cle, direction: tri.value.direction === 'asc' ? 'desc' : 'asc' }
+      : { cle, direction: 'asc' }
+}
+
+function valeurTri(u: CatalogueAdminUnite, cle: CleTri): string | number {
+  const override = overrideAffiche(u)
+  switch (cle) {
+    case 'produit':
+      return u.produit.toLowerCase()
+    case 'contenant':
+      return u.contenant?.toLowerCase() ?? ''
+    case 'packaging':
+      return u.packaging?.toLowerCase() ?? ''
+    case 'tarif':
+      // Tarif de référence = le plus bas de l'unité (les unités sans tarif en dernier).
+      return u.tarifs.length ? Math.min(...u.tarifs.map((t) => t.prixHT)) : Number.POSITIVE_INFINITY
+    case 'visibilite':
+      return override.visible ? 1 : 0
+    case 'stock':
+      return override.rupture ? 1 : 0
+  }
+}
+
+const unitesTriees = computed(() =>
+  [...unitesFiltrees.value].sort((a, b) => {
+    const va = valeurTri(a, tri.value.cle)
+    const vb = valeurTri(b, tri.value.cle)
+    const resultat =
+      typeof va === 'number' && typeof vb === 'number'
+        ? va - vb
+        : String(va).localeCompare(String(vb), 'fr', { numeric: true, sensitivity: 'base' })
+    return tri.value.direction === 'asc' ? resultat : -resultat
+  }),
+)
 
 const nbModifs = computed(() => Object.keys(brouillons.value).length)
 const aDesModifs = computed(() => nbModifs.value > 0)
@@ -230,15 +338,16 @@ async function retirerPhoto(idStockBouteille: number) {
             <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input v-model="recherche" placeholder="Rechercher (produit, contenant, packaging)…" class="pl-9" />
           </div>
+          <!-- Filtres rapides : MOBILE uniquement (sur desktop on trie par colonnes). -->
           <div class="flex gap-2 overflow-x-auto pb-1 md:hidden">
             <Button
-              v-for="filtre in filtresMobile"
+              v-for="filtre in filtresEtat"
               :key="filtre.cle"
               type="button"
               size="sm"
-              :variant="filtreMobile === filtre.cle ? 'default' : 'outline'"
+              :variant="filtreEtat === filtre.cle ? 'default' : 'outline'"
               class="shrink-0"
-              @click="filtreMobile = filtre.cle"
+              @click="filtreEtat = filtre.cle"
             >
               {{ filtre.label }}
             </Button>
@@ -254,6 +363,72 @@ async function retirerPhoto(idStockBouteille: number) {
         </p>
 
         <template v-else>
+          <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <button
+              type="button"
+              class="rounded-md border px-2.5 py-1 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+              :class="filtreEtat === 'visibles' ? 'border-primary/50 bg-primary/10 text-foreground' : 'bg-muted/30'"
+              @click="basculerFiltreEtat('visibles')"
+            >
+              <strong class="font-semibold text-foreground">{{ statsCatalogue.visibles }}</strong>
+              / {{ statsCatalogue.total }} produit{{ statsCatalogue.total > 1 ? 's' : '' }} visible{{ statsCatalogue.visibles > 1 ? 's' : '' }}
+            </button>
+            <button
+              type="button"
+              class="rounded-md border px-2.5 py-1 text-left transition-colors hover:border-destructive/40 hover:bg-destructive/5 hover:text-foreground"
+              :class="filtreEtat === 'rupture' ? 'border-destructive/50 bg-destructive/10 text-foreground' : 'bg-muted/30'"
+              @click="basculerFiltreEtat('rupture')"
+            >
+              <strong class="font-semibold text-foreground">{{ statsCatalogue.ruptures }}</strong>
+              / {{ statsCatalogue.total }} produit{{ statsCatalogue.total > 1 ? 's' : '' }} en rupture
+            </button>
+
+            <Select
+              :model-value="filtresColonne.contenant"
+              @update:model-value="filtresColonne.contenant = String($event)"
+            >
+              <SelectTrigger
+                class="h-7 w-[11rem] bg-background text-xs font-normal"
+                :class="filtresColonne.contenant !== 'tous' ? 'border-primary text-primary' : ''"
+                aria-label="Filtrer par contenant"
+              >
+                <SelectValue placeholder="Contenant" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tous">Tous les contenants</SelectItem>
+                <SelectItem v-for="v in optionsColonne.contenant" :key="v" :value="v">{{ v }}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              :model-value="filtresColonne.packaging"
+              @update:model-value="filtresColonne.packaging = String($event)"
+            >
+              <SelectTrigger
+                class="h-7 w-[11rem] bg-background text-xs font-normal"
+                :class="filtresColonne.packaging !== 'tous' ? 'border-primary text-primary' : ''"
+                aria-label="Filtrer par packaging"
+              >
+                <SelectValue placeholder="Packaging" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tous">Tous les packagings</SelectItem>
+                <SelectItem v-for="v in optionsColonne.packaging" :key="v" :value="v">{{ v }}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              v-if="filtresActifs"
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-7 text-xs text-muted-foreground hover:text-foreground"
+              @click="reinitialiserFiltres"
+            >
+              Réinitialiser
+            </Button>
+          </div>
+
           <div class="grid gap-3 md:hidden">
             <article
               v-for="u in unitesFiltrees"
@@ -337,75 +512,114 @@ async function retirerPhoto(idStockBouteille: number) {
             </p>
           </div>
 
-        <ul class="hidden divide-y md:block">
-          <li
-            v-for="u in unitesFiltrees"
-            :key="u.idStockBouteille"
-            class="grid gap-3 py-4 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center"
-          >
-            <PhotoUpload
-              :photo-url="overrideAffiche(u).photoUrl"
-              :libelle="u.override.displayName || u.produit"
-              :envoyer="(f) => envoyerPhoto(u.idStockBouteille, f)"
-              :retirer="() => retirerPhoto(u.idStockBouteille)"
-            />
-
-            <div class="grid gap-2">
-              <div class="flex flex-wrap items-center gap-2">
-                <p class="text-sm font-medium">{{ u.produit }}</p>
-                <Badge variant="outline">{{ u.contenant }}</Badge>
-                <Badge variant="outline">{{ u.packaging }}</Badge>
-                <Badge v-if="overrideAffiche(u).rupture" variant="destructive">
-                  <PackageX class="size-3" />
-                  Rupture
-                </Badge>
-                <Badge v-if="!overrideAffiche(u).visible" variant="secondary" class="border border-border bg-muted text-foreground">
-                  <EyeOff class="size-3" />
-                  Masqué
-                </Badge>
-              </div>
-              <Input
-                :model-value="overrideAffiche(u).displayName"
-                :placeholder="`Nom d'affichage (sinon : ${u.produit} — ${u.packaging})`"
-                class="max-w-md"
-                @update:model-value="(v) => definirBrouillon(u, 'displayName', String(v))"
-                @keydown.enter="($event.target as HTMLInputElement).blur()"
-              />
-            </div>
-
-            <div class="text-sm sm:min-w-44">
-              <div
-                v-for="t in u.tarifs"
-                :key="t.idClientType"
-                class="flex items-baseline justify-between gap-3"
+        <!-- Vue desktop : tableau à colonnes (inspiré d'Easybeer) — contenant et
+             packaging ont leur propre colonne, et la visibilité affiche son ÉTAT
+             en toutes lettres à côté de l'interrupteur. -->
+        <div class="hidden overflow-x-auto rounded-lg border md:block">
+          <Table>
+            <TableHeader class="[&_tr]:bg-muted">
+              <TableRow>
+                <TableHead class="w-16"><span class="sr-only">Photo</span></TableHead>
+                <TableHead
+                  v-for="colonne in colonnesTri"
+                  :key="colonne.cle"
+                  :class="classeColonneTri(colonne.cle)"
+                >
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-background/80"
+                    :aria-label="`Trier par ${colonne.label}`"
+                    @click="basculerTri(colonne.cle)"
+                  >
+                    {{ colonne.label }}
+                    <ArrowUp v-if="tri.cle === colonne.cle && tri.direction === 'asc'" class="size-3" />
+                    <ArrowDown v-else-if="tri.cle === colonne.cle && tri.direction === 'desc'" class="size-3" />
+                    <ArrowUpDown v-else class="size-3 text-muted-foreground/60" />
+                  </button>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow
+                v-for="u in unitesTriees"
+                :key="u.idStockBouteille"
+                :class="overrideAffiche(u).visible ? '' : 'bg-muted/30'"
               >
-                <span class="text-muted-foreground">{{ t.typeClient }}</span>
-                <span class="font-semibold tabular-nums">{{ prixFr(t.prixHT) }} HT</span>
-              </div>
-              <p v-if="!u.tarifs.length" class="text-xs text-muted-foreground">Aucun tarif</p>
-            </div>
+                <TableCell>
+                  <PhotoUpload
+                    :photo-url="overrideAffiche(u).photoUrl"
+                    :libelle="u.override.displayName || u.produit"
+                    :envoyer="(f) => envoyerPhoto(u.idStockBouteille, f)"
+                    :retirer="() => retirerPhoto(u.idStockBouteille)"
+                  />
+                </TableCell>
 
-            <div class="flex items-center gap-6">
-              <label class="flex items-center gap-2 text-sm">
-                <Switch
-                  :model-value="overrideAffiche(u).visible"
-                  @update:model-value="(v: boolean) => definirBrouillon(u, 'visible', v)"
-                />
-                Visible
-              </label>
-              <label class="flex items-center gap-2 text-sm">
-                <Switch
-                  :model-value="overrideAffiche(u).rupture"
-                  @update:model-value="(v: boolean) => definirBrouillon(u, 'rupture', v)"
-                />
-                Rupture
-              </label>
-            </div>
-          </li>
-          <li v-if="!unitesFiltrees.length" class="py-8 text-center text-sm text-muted-foreground">
-            Aucun produit trouvé.
-          </li>
-        </ul>
+                <TableCell class="min-w-64">
+                  <p class="text-sm font-medium">{{ u.produit }}</p>
+                  <Input
+                    :model-value="overrideAffiche(u).displayName"
+                    :placeholder="`Nom d'affichage (sinon : ${u.produit} — ${u.packaging})`"
+                    class="mt-1.5 max-w-md"
+                    @update:model-value="(v) => definirBrouillon(u, 'displayName', String(v))"
+                    @keydown.enter="($event.target as HTMLInputElement).blur()"
+                  />
+                </TableCell>
+
+                <TableCell class="whitespace-nowrap text-sm">{{ u.contenant }}</TableCell>
+                <TableCell class="whitespace-nowrap text-sm">{{ u.packaging }}</TableCell>
+
+                <TableCell class="w-48 pr-8 text-sm">
+                  <div v-if="u.tarifs.length" class="grid w-fit grid-cols-[max-content_max-content] items-baseline gap-x-8">
+                    <template v-for="t in u.tarifs" :key="t.idClientType">
+                      <span class="text-muted-foreground">{{ t.typeClient }}</span>
+                      <span class="justify-self-start text-left font-semibold tabular-nums">{{ prixFr(t.prixHT) }}</span>
+                    </template>
+                  </div>
+                  <p v-if="!u.tarifs.length" class="text-xs text-muted-foreground">Aucun tarif</p>
+                </TableCell>
+
+                <TableCell class="w-48 pl-6">
+                  <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap">
+                    <Switch
+                      :model-value="overrideAffiche(u).visible"
+                      @update:model-value="(v: boolean) => definirBrouillon(u, 'visible', v)"
+                    />
+                    <span
+                      class="flex items-center gap-1 text-xs font-medium"
+                      :class="overrideAffiche(u).visible ? 'text-primary' : 'text-muted-foreground'"
+                    >
+                      <Eye v-if="overrideAffiche(u).visible" class="size-3.5" />
+                      <EyeOff v-else class="size-3.5" />
+                      {{ overrideAffiche(u).visible ? 'Visible' : 'Masqué' }}
+                    </span>
+                  </label>
+                </TableCell>
+
+                <TableCell class="w-40">
+                  <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap">
+                    <Switch
+                      :model-value="overrideAffiche(u).rupture"
+                      @update:model-value="(v: boolean) => definirBrouillon(u, 'rupture', v)"
+                    />
+                    <span
+                      class="flex items-center gap-1 text-xs font-medium"
+                      :class="overrideAffiche(u).rupture ? 'text-destructive' : 'text-muted-foreground'"
+                    >
+                      <PackageX v-if="overrideAffiche(u).rupture" class="size-3.5" />
+                      {{ overrideAffiche(u).rupture ? 'Rupture' : 'En stock' }}
+                    </span>
+                  </label>
+                </TableCell>
+              </TableRow>
+
+              <TableRow v-if="!unitesFiltrees.length">
+                <TableCell colspan="7" class="py-8 text-center text-sm text-muted-foreground">
+                  Aucun produit trouvé.
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
         </template>
       </CardContent>
     </Card>

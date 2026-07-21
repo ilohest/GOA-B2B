@@ -26,6 +26,8 @@ import {
 } from './easybeer.js'
 import {
   allegerClient,
+  cacheClientDoitEtreRafraichi,
+  cacheEstAncien,
   CacheIndisponibleError,
   lireCacheClient,
   lireCatalogue,
@@ -35,9 +37,11 @@ import {
   lireListeClients,
   lireReferentiels,
   lancerSync,
+  lancerRafraichissementCatalogue,
   normaliserEtatCommande,
-  rafraichirCatalogue,
+  rafraichirCacheClientCible,
   remplirCacheClientCible,
+  SYNC_LOCK_TTL_MS,
   syncCommandesClient,
   syncCommandesRecentes,
   typesClientEnCascade,
@@ -89,6 +93,79 @@ app.onError((err, c) => {
   console.error('[server]', err)
   return c.json({ error: err.message || 'Erreur interne' }, 500)
 })
+
+type CachesCatalogue = {
+  catalogue: Awaited<ReturnType<typeof lireCatalogue>>
+  grille: Awaited<ReturnType<typeof lireGrilleTarifaire>>
+  types: Awaited<ReturnType<typeof lireReferentiels>>
+  revalidationEnCours: boolean
+}
+
+/**
+ * Lit le dernier snapshot cohérent disponible. Un cache absent est reconstruit
+ * immédiatement ; un cache simplement ancien est servi sans délai puis rafraîchi
+ * en arrière-plan (stale-while-revalidate, verrouillé et anti-rafale).
+ */
+async function lireCachesCatalogueResilients(
+  db: NonNullable<ReturnType<typeof getDb>>,
+): Promise<CachesCatalogue> {
+  const lire = async (): Promise<Partial<Omit<CachesCatalogue, 'revalidationEnCours'>>> => {
+    const [catalogue, grille, types] = await Promise.all([
+      lireCatalogue(db).catch(() => null),
+      lireGrilleTarifaire(db),
+      lireReferentiels(db).catch(() => null),
+    ])
+    return {
+      ...(catalogue ? { catalogue } : {}),
+      grille,
+      ...(types ? { types } : {}),
+    }
+  }
+
+  let caches = await lire()
+  const incomplet = !caches.catalogue || !caches.types?.length || !caches.grille?.lignes.length
+  if (incomplet) {
+    // Premier démarrage / cache supprimé : attendre une seule tentative permet
+    // d'éviter qu'un client voie un catalogue vide alors qu'Easybeer répond.
+    await lancerRafraichissementCatalogue(db, { automatique: true })
+    caches = await lire()
+  }
+  if (!caches.catalogue || !caches.types?.length || !caches.grille?.lignes.length) {
+    throw new CacheIndisponibleError(
+      'catalogue_cache_incomplet',
+      'Le catalogue est en cours de reconstruction — réessayez dans quelques instants.',
+    )
+  }
+
+  const ageMaxMs = config.cache.catalogueRefreshAgeMinutes * 60_000
+  const ageDurMs = config.cache.prixMaxAgeMinutes * 60_000
+  const expirationDure =
+    cacheEstAncien(caches.catalogue.syncedAt, ageDurMs) || cacheEstAncien(caches.grille.syncedAt, ageDurMs)
+  if (expirationDure) {
+    // Ici le prochain contrôle de commande bloquerait les prix. On attend donc
+    // la tentative de réparation au lieu de compter sur une tâche post-réponse.
+    try {
+      const resultat = await lancerRafraichissementCatalogue(db, { automatique: true })
+      if ('rafraichi' in resultat) caches = await lire()
+    } catch (err) {
+      console.warn(`[sync] réparation catalogue expiré : ${(err as Error).message}`)
+    }
+  }
+
+  // Une revalidation ne doit jamais dégrader le snapshot complet déjà lu.
+  if (!caches.catalogue || !caches.types?.length || !caches.grille?.lignes.length) {
+    throw new CacheIndisponibleError('catalogue_cache_incomplet', 'Le catalogue est en cours de reconstruction.')
+  }
+
+  const revalidationEnCours =
+    cacheEstAncien(caches.catalogue.syncedAt, ageMaxMs) || cacheEstAncien(caches.grille.syncedAt, ageMaxMs)
+  if (revalidationEnCours) {
+    lancerRafraichissementCatalogue(db, { automatique: true }).catch((err) =>
+      console.warn(`[sync] auto-refresh catalogue : ${(err as Error).message}`),
+    )
+  }
+  return { ...(caches as Omit<CachesCatalogue, 'revalidationEnCours'>), revalidationEnCours }
+}
 
 type RemiseCibleeDetail = {
   produit: string | null
@@ -203,11 +280,17 @@ app.get('/api/me', requireAuth, async (c) => {
   // intégré) — le prochain chargement trouvera le cache.
   try {
     const cache = await lireCacheClient(db, user.easybeerIdClient)
+    if (cache.idGrilleTarifaire == null) {
+      remplirCacheClientCible(db, user.easybeerIdClient).catch((err) =>
+        console.warn(`[sync] réparation cache client ${user.easybeerIdClient} : ${(err as Error).message}`),
+      )
+    }
     return c.json({
       user,
       client: cache.client,
       idGrilleTarifaire: cache.idGrilleTarifaire,
       syncedAt: cache.syncedAt,
+      cacheEnPreparation: cache.idGrilleTarifaire == null,
     })
   } catch (e) {
     if (!(e instanceof CacheIndisponibleError)) throw e
@@ -220,19 +303,19 @@ app.get('/api/me', requireAuth, async (c) => {
 
 /**
  * Catalogue CLIENT : produits rendus visibles par GOA (overrides) + prix du
- * client connecté. Tout vient du cache — zéro appel Easybeer.
+ * client connecté. La réponse vient du cache ; une revalidation contrôlée peut
+ * être déclenchée si celui-ci vieillit.
  */
 app.get('/api/catalogue', requireAuth, async (c) => {
   const user = c.get('user')
   const db = getDb()
   if (!db) return c.json({ produits: await listeProduitsAutocomplete() })
 
-  const [{ produits, syncedAt }, overrides, grille, types] = await Promise.all([
-    lireCatalogue(db),
+  const [{ catalogue: catalogueCache, grille, types, revalidationEnCours }, overrides] = await Promise.all([
+    lireCachesCatalogueResilients(db),
     lireOverrides(db),
-    lireGrilleTarifaire(db),
-    lireReferentiels(db).catch(() => []),
   ])
+  const { produits, syncedAt } = catalogueCache
   // Cache client absent → catalogue quand même servi (produits sans prix =
   // « temporairement indisponible » côté client), remplissage en tâche de fond.
   let cacheClient: CacheClientDoc | null = null
@@ -240,6 +323,12 @@ app.get('/api/catalogue', requireAuth, async (c) => {
   if (user.easybeerIdClient != null) {
     try {
       cacheClient = await lireCacheClient(db, user.easybeerIdClient)
+      if (cacheClient.idGrilleTarifaire == null) {
+        cacheEnPreparation = true
+        remplirCacheClientCible(db, user.easybeerIdClient).catch((err) =>
+          console.warn(`[sync] réparation cache client ${user.easybeerIdClient} depuis catalogue : ${(err as Error).message}`),
+        )
+      }
     } catch (e) {
       if (!(e instanceof CacheIndisponibleError)) throw e
       cacheEnPreparation = true
@@ -249,15 +338,60 @@ app.get('/api/catalogue', requireAuth, async (c) => {
   const prixMaxAgeMs = config.cache.prixMaxAgeMinutes * 60_000
   // Prix de base = grille du type du client ; le prix personnalisé (cache client)
   // prime quand il existe. → un produit rendu visible a son prix immédiatement.
-  const { prix: grillePrix } = grillePrixPourClient(grille.lignes, cacheClient?.client.type?.idClientType, types)
-  const produitsClient = catalogueClient(produits, overrides, {
-    prixClient: cacheClient?.prix ?? null,
-    prixUpdatedAt: cacheClient?.prixUpdatedAt ?? null,
-    grillePrix,
-    grilleSyncedAt: grille.syncedAt,
-    maxAgeMs: prixMaxAgeMs,
-    tagsClient: cacheClient?.client.tags,
-  })
+  let { prix: grillePrix } = grillePrixPourClient(grille.lignes, cacheClient?.client.type?.idClientType, types)
+  const unitesMeta = Object.fromEntries(
+    grille.lignes
+      .filter((l) => l.idStockBouteille != null)
+      .map((l) => [
+        l.idStockBouteille!,
+        {
+          produit: l.produit ?? null,
+          contenant: l.contenant ?? null,
+          packaging: l.packaging ?? null,
+        },
+      ]),
+  )
+  const construireCatalogueClient = () =>
+    catalogueClient(produits, overrides, {
+      prixClient: cacheClient?.prix ?? null,
+      prixUpdatedAt: cacheClient?.prixUpdatedAt ?? null,
+      grillePrix,
+      grilleSyncedAt: grille.syncedAt,
+      maxAgeMs: prixMaxAgeMs,
+      tagsClient: cacheClient?.client.tags,
+      unitesMeta,
+    })
+  let produitsClient = construireCatalogueClient()
+  let revalidationDemandee = revalidationEnCours
+
+  // Si le client verrait réellement un article sans prix frais, attendre UNE
+  // réparation ciblée. Cas normal (cache encore valide) : aucune latence ajoutée.
+  if (user.easybeerIdClient != null && cacheClient && produitsClient.some((p) => !p.prixEstFrais)) {
+    revalidationDemandee = true
+    const repare = await rafraichirCacheClientCible(db, user.easybeerIdClient).catch((err) => {
+      console.warn(`[sync] réparation prix expirés client ${user.easybeerIdClient} : ${(err as Error).message}`)
+      return null
+    })
+    if (repare) {
+      cacheClient = repare
+      grillePrix = grillePrixPourClient(grille.lignes, cacheClient.client.type?.idClientType, types).prix
+      produitsClient = construireCatalogueClient()
+      revalidationDemandee = produitsClient.some((p) => !p.prixEstFrais)
+    }
+  } else if (
+    user.easybeerIdClient != null &&
+    cacheClient &&
+    cacheClientDoitEtreRafraichi(
+      cacheClient,
+      produitsClient.map((p) => p.idStockBouteille),
+      config.cache.prixRefreshAgeMinutes * 60_000,
+    )
+  ) {
+    revalidationDemandee = true
+    rafraichirCacheClientCible(db, user.easybeerIdClient).catch((err) =>
+      console.warn(`[sync] auto-refresh prix client ${user.easybeerIdClient} : ${(err as Error).message}`),
+    )
+  }
   const ages = produitsClient
     .map((p) => (p.prixUpdatedAt == null ? null : Date.now() - p.prixUpdatedAt))
     .filter((age): age is number => age != null)
@@ -267,6 +401,7 @@ app.get('/api/catalogue', requireAuth, async (c) => {
     prixMaxAgeMinutes: config.cache.prixMaxAgeMinutes,
     prixPlusAncienAgeMs: ages.length ? Math.max(...ages) : null,
     cacheEnPreparation,
+    revalidationEnCours: revalidationDemandee,
   })
 })
 
@@ -340,11 +475,7 @@ async function lireCommandesLocales(
     parCommande.set(idCommande, {
       idCommande,
       numero: (d.easybeerNumero as number | undefined) ?? null,
-      etat: {
-        code: d.estDevis === false ? 'TRANSMISE' : 'DEVIS',
-        libelle: d.estDevis === false ? 'Transmise à GOA' : 'Devis',
-        couleur: null,
-      },
+      etat: etatAffichage(d.easybeerEtat ?? (d.estDevis === false ? 'ENREGISTREE' : 'DEVIS')),
       totalHT: (d.totalHT as number | undefined) ?? null,
       totalTTC: null,
       dateCreation: createdAt || null,
@@ -371,6 +502,18 @@ async function enregistrerCommandeAvecFallback(input: Parameters<typeof enregist
       return await enregistrerCommande(tentative)
     } catch (premiereErreur) {
       if (premiereErreur instanceof EasybeerBanError) throw premiereErreur
+      // Un timeout/échec réseau peut arriver APRÈS l'enregistrement côté
+      // Easybeer. Ne jamais réémettre automatiquement une création dans ce cas :
+      // le résultat est ambigu et un retry pourrait créer un doublon.
+      if (
+        premiereErreur instanceof TypeError ||
+        (premiereErreur instanceof Error && ['TimeoutError', 'AbortError'].includes(premiereErreur.name))
+      ) {
+        throw new Error(
+          'Réponse Easybeer interrompue : la commande a peut-être été créée. Vérifiez votre historique ou contactez GOA avant de réessayer.',
+          { cause: premiereErreur },
+        )
+      }
       derniereErreur = premiereErreur
       console.warn(`[commande] création avec remises refusée, retry sans remise2 : ${(premiereErreur as Error).message}`)
       try {
@@ -441,12 +584,11 @@ async function resoudreLignes(
   )
   if (!valides.length) return ko('Aucune ligne de commande valide')
 
-  const [{ produits }, overrides, grille, types] = await Promise.all([
-    lireCatalogue(db),
+  const [{ catalogue: catalogueCache, grille, types }, overrides] = await Promise.all([
+    lireCachesCatalogueResilients(db),
     lireOverrides(db),
-    lireGrilleTarifaire(db),
-    lireReferentiels(db).catch(() => []),
   ])
+  const { produits } = catalogueCache
   // Cache client absent (compte tout juste activé) : message actionnable
   // plutôt qu'un 503 — et remplissage lancé pour que le retry aboutisse.
   let cacheClient: CacheClientDoc
@@ -458,6 +600,18 @@ async function resoudreLignes(
     return ko('Votre compte est en cours de préparation — réessayez dans une minute.')
   }
   if (cacheClient.idGrilleTarifaire == null) return ko('Grille tarifaire introuvable pour ce client')
+
+  if (
+    cacheClientDoitEtreRafraichi(
+      cacheClient,
+      valides.map((ligne) => ligne.idStockBouteille),
+      config.cache.prixRefreshAgeMinutes * 60_000,
+    )
+  ) {
+    rafraichirCacheClientCible(db, easybeerIdClient).catch((err) =>
+      console.warn(`[sync] auto-refresh prix avant commande ${easybeerIdClient} : ${(err as Error).message}`),
+    )
+  }
 
   // Prix de base = grille du type du client ; le prix personnalisé prime (même
   // résolution que l'affichage → jamais de blocage sur un produit fraîchement
@@ -548,6 +702,7 @@ async function totauxReelsEasybeer(
   totalHT: number
   totalTTC: number | null
   remiseTotale: number | null
+  etat: unknown | null
   reels: boolean
 }> {
   try {
@@ -557,10 +712,11 @@ async function totauxReelsEasybeer(
       totalHT: totalHT ?? totalHTLocal,
       totalTTC: (detail.totalTTC as number | undefined) ?? null,
       remiseTotale: (detail.remiseTotale as number | undefined) ?? null,
+      etat: detail.etat ?? null,
       reels: totalHT != null,
     }
   } catch {
-    return { totalHT: totalHTLocal, totalTTC: null, remiseTotale: null, reels: false }
+    return { totalHT: totalHTLocal, totalTTC: null, remiseTotale: null, etat: null, reels: false }
   }
 }
 
@@ -596,6 +752,7 @@ app.post('/api/commandes', requireAuth, async (c) => {
 
   // Totaux réels relus d'Easybeer pour l'affichage exact.
   const totaux = await totauxReelsEasybeer(resultat.id!, totalHT)
+  const etatEasybeer = totaux.etat != null ? etatAffichage(totaux.etat) : etatAffichage(config.commandeEstDevis ? 'DEVIS' : 'ENREGISTREE')
 
   // Trace Firestore (suivi/debug — la source de vérité reste Easybeer).
   const orderId = randomUUID()
@@ -605,6 +762,7 @@ app.post('/api/commandes', requireAuth, async (c) => {
     easybeerIdClient: user.easybeerIdClient,
     easybeerIdCommande: resultat.id,
     easybeerNumero: resultat.numero ?? null,
+    easybeerEtat: etatEasybeer,
     estDevis: config.commandeEstDevis,
     totalHT,
     lignes: lignes.map((l) => ({
@@ -620,11 +778,7 @@ app.post('/api/commandes', requireAuth, async (c) => {
   await upsertCommandeClientCache(db, user.easybeerIdClient, {
     idCommande: resultat.id!,
     numero: resultat.numero ?? null,
-    etat: {
-      code: config.commandeEstDevis ? 'DEVIS' : 'TRANSMISE',
-      libelle: config.commandeEstDevis ? 'Devis' : 'Transmise à GOA',
-      couleur: null,
-    },
+    etat: etatEasybeer,
     totalHT: totaux.totalHT,
     totalTTC: totaux.totalTTC,
     dateCreation: Date.now(),
@@ -1284,7 +1438,11 @@ app.get('/api/admin/catalogue', requireAuth, requireAdmin, async (c) => {
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
   if (c.req.query('refresh') === '1') {
     try {
-      await rafraichirCatalogue(db)
+      const resultat = await lancerRafraichissementCatalogue(db)
+      if ('enCours' in resultat) {
+        const data = await catalogueAdmin(db)
+        return c.json({ ...data, enCours: true })
+      }
     } catch (e) {
       if (!(e instanceof EasybeerBanError)) throw e
       // Ban : on renvoie le cache existant + de quoi armer le compte à rebours UI.
@@ -1513,6 +1671,17 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     etat: { code: string }
   }[]
   const produits = (catalogueSnap.data()?.produits ?? []) as unknown[]
+  const meta = metaSnap.data()
+  const dernierRapport = meta?.dernierSync as
+    | { syncedAt?: number; reussi?: boolean; erreurs?: unknown[]; clients?: { erreur?: string }[] }
+    | undefined
+  const ancienRapportReussi =
+    dernierRapport &&
+    dernierRapport.reussi !== false &&
+    !dernierRapport.erreurs?.length &&
+    !dernierRapport.clients?.some((client) => client.erreur)
+      ? (dernierRapport.syncedAt ?? null)
+      : null
 
   const depuis30j = Date.now() - 30 * 24 * 3600 * 1000
   const commandes30j = commandes.filter((cmd) => (cmd.dateCreation ?? 0) >= depuis30j && cmd.etat.code !== 'ANNULEE')
@@ -1535,7 +1704,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     clients: { total: clients.length, avecCompte: statutsComptes.length, actifs: statutsComptes.filter((s) => s.statut === 'active').length },
     commandes30j: { nombre: commandes30j.length, caHT: caHT30j, caTTC: caTTC30j },
     catalogue: { produits: produits.length, visibles, ruptures },
-    dernierSync: metaSnap.data()?.dernierSync?.syncedAt ?? null,
+    dernierSync: (meta?.dernierSyncReussiAt as number | undefined) ?? ancienRapportReussi,
   })
 })
 
@@ -1582,6 +1751,8 @@ app.get('/api/admin/sync/status', requireAuth, requireAdmin, async (c) => {
           startedAtIso: new Date(lockStartedAt).toISOString(),
           ageMs: lockAgeMs,
           ageMinutes: lockAgeMs == null ? null : Math.round(lockAgeMs / 60_000),
+          actif: lockAgeMs != null && lockAgeMs < SYNC_LOCK_TTL_MS,
+          kind: (lockSnap.data()?.kind as string | undefined) ?? null,
         }
       : null,
     dernierSync: metaSnap.data()?.dernierSync ?? null,
@@ -1603,7 +1774,10 @@ async function executerSyncCache() {
   }
 
   const res = await lancerSync(db)
-  if ('enCours' in res) return { status: 409, body: { error: 'Une synchronisation est déjà en cours.' } }
+  // Le déclenchement est idempotent : si un autre processus entretient déjà le
+  // cache, la demande est prise en charge par celui-ci. Un 202 évite de traiter
+  // cette course normale (scheduler + clic admin) comme une erreur côté client.
+  if ('enCours' in res) return { status: 202, body: { enCours: true } }
 
   // Un ban a pu survenir PENDANT la synchro (syncTout le signale sans planter) :
   // on le remonte pour que l'UI affiche le compte à rebours plutôt qu'un faux succès.
@@ -1614,13 +1788,13 @@ async function executerSyncCache() {
       body: { error: `API Easybeer saturée pendant la synchro — réessayez dans ${apres.secondesRestantes} s`, retryAfterSeconds: apres.secondesRestantes },
     }
   }
-  return { status: 200, body: { ok: true, report: res.report } }
+  return { status: 200, body: { ok: res.report.reussi, report: res.report } }
 }
 
 /** Déclenche une synchro complète Easybeer → cache (verrou single-flight). */
 app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
   const res = await executerSyncCache()
-  return c.json(res.body, res.status as 200 | 409 | 501 | 503)
+  return c.json(res.body, res.status as 200 | 202 | 501 | 503)
 })
 
 /**
@@ -1633,7 +1807,7 @@ app.post('/api/scheduled/sync', async (c) => {
   const token = header.startsWith('Bearer ') ? header.slice(7) : ''
   if (token !== config.schedulerSecret) return c.json({ error: 'Non autorisé' }, 401)
   const res = await executerSyncCache()
-  return c.json(res.body, res.status as 200 | 409 | 501 | 503)
+  return c.json(res.body, res.status as 200 | 202 | 501 | 503)
 })
 
 // Synchro périodique optionnelle (SYNC_INTERVAL_MINUTES > 0). En prod, préférer

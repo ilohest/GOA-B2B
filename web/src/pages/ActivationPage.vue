@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { z } from 'zod'
 import { toast } from 'vue-sonner'
+import { EyeIcon, EyeOffIcon } from '@lucide/vue'
 import { api } from '@/lib/api'
 import type { InvitationValidation } from '@/lib/types'
 import { useAuth } from '@/composables/useAuth'
@@ -34,6 +35,8 @@ const email = ref('')
 const form = reactive({ password: '', confirm: '' })
 const fieldErrors = reactive<{ password?: string; confirm?: string }>({})
 const submitting = ref(false)
+const motDePasseVisible = ref(false)
+const confirmationVisible = ref(false)
 
 const MESSAGES: Record<InvitationValidation['etat'], string> = {
   valide: '',
@@ -117,24 +120,50 @@ async function onSubmit() {
         <form v-else class="grid gap-4" novalidate @submit.prevent="onSubmit">
           <div class="grid gap-1.5">
             <Label for="password">Nouveau mot de passe</Label>
-            <Input
-              id="password"
-              v-model="form.password"
-              type="password"
-              autocomplete="new-password"
-              :aria-invalid="Boolean(fieldErrors.password)"
-            />
+            <div class="relative">
+              <Input
+                id="password"
+                v-model="form.password"
+                :type="motDePasseVisible ? 'text' : 'password'"
+                autocomplete="new-password"
+                class="pr-10"
+                :aria-invalid="Boolean(fieldErrors.password)"
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground hover:text-foreground"
+                :aria-label="motDePasseVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'"
+                :aria-pressed="motDePasseVisible"
+                @click="motDePasseVisible = !motDePasseVisible"
+              >
+                <EyeOffIcon v-if="motDePasseVisible" class="size-4" />
+                <EyeIcon v-else class="size-4" />
+              </button>
+            </div>
             <p v-if="fieldErrors.password" class="text-sm text-destructive">{{ fieldErrors.password }}</p>
           </div>
           <div class="grid gap-1.5">
             <Label for="confirm">Confirmez le mot de passe</Label>
-            <Input
-              id="confirm"
-              v-model="form.confirm"
-              type="password"
-              autocomplete="new-password"
-              :aria-invalid="Boolean(fieldErrors.confirm)"
-            />
+            <div class="relative">
+              <Input
+                id="confirm"
+                v-model="form.confirm"
+                :type="confirmationVisible ? 'text' : 'password'"
+                autocomplete="new-password"
+                class="pr-10"
+                :aria-invalid="Boolean(fieldErrors.confirm)"
+              />
+              <button
+                type="button"
+                class="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground hover:text-foreground"
+                :aria-label="confirmationVisible ? 'Masquer la confirmation' : 'Afficher la confirmation'"
+                :aria-pressed="confirmationVisible"
+                @click="confirmationVisible = !confirmationVisible"
+              >
+                <EyeOffIcon v-if="confirmationVisible" class="size-4" />
+                <EyeIcon v-else class="size-4" />
+              </button>
+            </div>
             <p v-if="fieldErrors.confirm" class="text-sm text-destructive">{{ fieldErrors.confirm }}</p>
           </div>
           <Button type="submit" class="w-full" :disabled="submitting">

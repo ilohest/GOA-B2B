@@ -90,6 +90,22 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
     expect(res[1]).toMatchObject({ idStockBouteille: 1, libelle: 'Zeta - 1L', prixHT: 27.3, photoUrl: null })
   })
 
+  it("sans nom personnalisé, sépare le nom du produit de son format", () => {
+    const res = catalogueClient(produits, overrides, {
+      unitesMeta: {
+        1: { produit: 'Zeta', contenant: 'Bouteille - 1L', packaging: 'Unité' },
+        2: { produit: 'Alpha', contenant: 'Bouteille - 0.35L', packaging: 'Carton de 18' },
+      },
+    })
+    expect(res.find((p) => p.idStockBouteille === 1)).toMatchObject({
+      libelle: 'Zeta',
+      libelleEasybeer: 'Zeta - 1L',
+      contenant: 'Bouteille - 1L',
+      packaging: 'Unité',
+    })
+    expect(res.find((p) => p.idStockBouteille === 2)?.libelle).toBe('Mon Alpha')
+  })
+
   it('expose le pas La Poste selon le tag client', () => {
     const res = catalogueClient(produits, overrides, { tagsClient: 'laposte' })
     expect(res.find((p) => p.idStockBouteille === 1)?.pas).toBe(2)

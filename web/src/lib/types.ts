@@ -105,6 +105,7 @@ export interface CatalogueAdminResponse {
   /** Refresh scopé qui a heurté un ban Easybeer : données du cache + compte à rebours. */
   indisponible?: boolean
   retryAfterSeconds?: number
+  enCours?: boolean
 }
 
 export interface ProduitCatalogueClient {
@@ -114,6 +115,8 @@ export interface ProduitCatalogueClient {
   idLot?: number | null
   libelle: string
   libelleEasybeer: string
+  contenant: string | null
+  packaging: string | null
   photoUrl: string | null
   rupture: boolean
   prixHT: number | null
@@ -130,6 +133,8 @@ export interface CatalogueClientResponse {
   prixPlusAncienAgeMs: number | null
   /** Cache client en cours de création (compte tout juste activé) — prix à venir. */
   cacheEnPreparation?: boolean
+  /** Un snapshot valide est affiché pendant sa revalidation en arrière-plan. */
+  revalidationEnCours?: boolean
 }
 
 /** Réponse de création/modification de commande : totaux réels d'Easybeer. */
@@ -146,9 +151,13 @@ export interface CommandeResultat {
 export interface SyncReport {
   produits: number
   typesClient: number
+  listeClients: number
+  commandesRecentes: number
   clients: { idClient: number; nom: string | null; prix: number; erreur?: string }[]
+  erreurs?: string[]
   dureeMs: number
   syncedAt: number
+  reussi: boolean
 }
 
 export interface SyncStatusResponse {
@@ -166,6 +175,8 @@ export interface SyncStatusResponse {
     startedAtIso: string
     ageMs: number | null
     ageMinutes: number | null
+    actif: boolean
+    kind: string | null
   }
   dernierSync: SyncReport | null
   syncIntervalMinutes: number

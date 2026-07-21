@@ -187,4 +187,45 @@ const questionsFrequentes = computed(() =>
 .guide :deep(em) {
   color: var(--muted-foreground);
 }
+.guide :deep(img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.75rem 0 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+.guide :deep(.exemple-remises-images) {
+  display: grid;
+  gap: 1rem;
+  max-width: 75rem;
+  margin: 0.75rem auto 1rem;
+  align-items: start;
+}
+.guide :deep(.exemple-remises-images figure) {
+  min-width: 0;
+  margin: 0;
+}
+.guide :deep(.exemple-remises-images figure:last-child) {
+  width: min(100%, 22rem);
+  justify-self: center;
+}
+.guide :deep(.exemple-remises-images img) {
+  width: 100%;
+  margin: 0;
+}
+.guide :deep(.exemple-remises-images figcaption) {
+  margin-top: 0.4rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  text-align: center;
+}
+@media (min-width: 768px) {
+  .guide :deep(.exemple-remises-images) {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+  .guide :deep(.exemple-remises-images figure:last-child) {
+    width: 100%;
+  }
+}
 </style>

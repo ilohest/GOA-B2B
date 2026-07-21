@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { LayoutDashboard } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 const queryClient = useQueryClient()
 const SYNC_ATTENTION_MS = 30 * 60 * 60 * 1000
+const TOAST_SYNC_ID = 'admin-sync'
 
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'dashboard'],
@@ -24,6 +25,60 @@ const { data, isPending, isError, error } = useQuery({
 const statutSync = useQuery({
   queryKey: ['admin', 'sync-status'],
   queryFn: () => api.get<SyncStatusResponse>('/admin/sync/status'),
+  refetchInterval: 10_000,
+})
+
+type SyncStartResponse = { enCours: true } | { ok: boolean; report: SyncReport }
+
+const syncEnCours = computed(() => statutSync.data.value?.verrou?.actif === true)
+const syncGlobaleEnCours = computed(
+  () => statutSync.data.value?.verrou?.actif === true && statutSync.data.value.verrou.kind === 'sync',
+)
+const declenchementManuel = ref(false)
+let rapportAvantSyncAt: number | null = null
+let dernierRapportNotifieAt: number | null = null
+
+function notifierRapportSync(report: SyncReport) {
+  if (dernierRapportNotifieAt === report.syncedAt) return
+  dernierRapportNotifieAt = report.syncedAt
+
+  const duree = Math.round(report.dureeMs / 1000)
+  if (report.reussi) {
+    toast.success('Synchronisation réussie.', {
+      id: TOAST_SYNC_ID,
+      description: `${report.produits} produit(s), ${report.listeClients} client(s) et ${report.commandesRecentes} commande(s) actualisés (${duree} s).`,
+    })
+    return
+  }
+
+  const nbErreurs = (report.erreurs?.length ?? 0) + report.clients.filter((client) => client.erreur).length
+  toast.warning('Synchronisation partielle.', {
+    id: TOAST_SYNC_ID,
+    description: nbErreurs > 0
+      ? `${nbErreurs} erreur(s) rencontrée(s) — le dernier cache valide est conservé (${duree} s).`
+      : `Certaines données n’ont pas pu être actualisées — le dernier cache valide est conservé (${duree} s).`,
+  })
+}
+
+watch(syncGlobaleEnCours, async (enCours, etaitEnCours) => {
+  if (enCours && !etaitEnCours) {
+    rapportAvantSyncAt = statutSync.data.value?.dernierSync?.syncedAt ?? null
+    toast.loading('Synchronisation Easybeer en cours…', { id: TOAST_SYNC_ID })
+    return
+  }
+  if (!etaitEnCours || enCours) return
+
+  queryClient.invalidateQueries({ queryKey: ['admin', 'dashboard'] })
+  const statutActualise = await statutSync.refetch()
+  const report = statutActualise.data?.dernierSync
+  if (report && report.syncedAt !== rapportAvantSyncAt) {
+    notifierRapportSync(report)
+  } else if (!declenchementManuel.value) {
+    toast.error('Synchronisation interrompue.', {
+      id: TOAST_SYNC_ID,
+      description: 'Aucun nouveau rapport de synchronisation n’a été enregistré.',
+    })
+  }
 })
 
 const syncAncienne = computed(() => {
@@ -32,15 +87,30 @@ const syncAncienne = computed(() => {
 })
 
 const synchro = useMutation({
-  mutationFn: () => api.post<{ ok: boolean; report: SyncReport }>('/admin/sync'),
-  onSuccess: ({ report }) => {
-    toast.success('Synchronisation terminée.', {
-      description: `Les données Easybeer sont à jour (${Math.round(report.dureeMs / 1000)} s).`,
-    })
+  mutationFn: () => api.post<SyncStartResponse>('/admin/sync'),
+  onMutate: () => {
+    declenchementManuel.value = true
+    toast.loading('Synchronisation Easybeer en cours…', { id: TOAST_SYNC_ID })
+  },
+  onSuccess: (resultat) => {
+    declenchementManuel.value = false
+    if ('enCours' in resultat) {
+      toast.info('Une synchronisation est déjà en cours.', {
+        id: TOAST_SYNC_ID,
+        description: 'Les données seront actualisées dès qu’elle sera terminée.',
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'sync-status'] })
+      return
+    }
+    notifierRapportSync(resultat.report)
     queryClient.invalidateQueries()
   },
   onError: (e) => {
-    toast.error((e as Error).message)
+    declenchementManuel.value = false
+    toast.error('Synchronisation impossible.', {
+      id: TOAST_SYNC_ID,
+      description: (e as Error).message,
+    })
     queryClient.invalidateQueries({ queryKey: ['admin', 'sync-status'] })
   },
 })
@@ -54,7 +124,10 @@ const diagnosticSync = computed(() => {
   if (s.banPersiste?.actif) {
     return `Ban persisté jusqu'à ${dateHeureFr(s.banPersiste.until)}.`
   }
-  if (s.verrou && (s.verrou.ageMinutes ?? 0) >= 15) {
+  if (s.verrou?.actif) {
+    return 'Une synchronisation est actuellement en cours.'
+  }
+  if (s.verrou) {
     return `Verrou de synchronisation ancien (${s.verrou.ageMinutes} min).`
   }
   return 'Aucun ban local actif détecté.'
@@ -116,7 +189,7 @@ const stats = computed(() => {
         <BoutonActualiser
           label="Tout synchroniser"
           label-pending="Synchronisation…"
-          :pending="synchro.isPending.value"
+          :pending="synchro.isPending.value || syncEnCours"
           @click="synchro.mutate()"
         />
       </div>

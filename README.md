@@ -43,22 +43,28 @@ Le compte client est lié au client Easybeer de test 588074 (CL000083).
 ## Règles d'or
 
 1. **Lire `EASYBEER.md` avant tout appel à l'API Easybeer** et le mettre à jour à chaque découverte.
-2. Jamais d'appel Easybeer en direct depuis une requête client (rate-limiting) — cache Firestore.
+2. Une réponse client est toujours construite depuis Firestore ; une revalidation
+   Easybeer éventuelle passe par les verrous et cooldowns du cache.
 3. Les identifiants Easybeer ne quittent jamais le serveur.
 
 ## Exploitation du cache Easybeer
 
-- Planifier une synchronisation complète quotidienne hors heures d'usage, par
-  exemple vers **04:00 Europe/Paris** : `POST /api/scheduled/sync` avec
-  `Authorization: Bearer <SCHEDULER_SECRET>` via Cloud Scheduler ou équivalent.
-- Garder `PRIX_CACHE_MAX_AGE_MINUTES` supérieur à 24 h. La valeur par défaut
-  est **2160 minutes** (36 h) : si le job nocturne réussit, les clients ne voient
-  pas de blocage ; si le job échoue plus d'une journée, l'envoi de commande est
-  bloqué plutôt que d'utiliser un prix trop ancien.
+- Le catalogue client fonctionne d'abord **à la demande** : aucun job nocturne
+  n'est requis. À la première visite après expiration du TTL, une revalidation
+  partagée est lancée et tous les autres clients continuent à utiliser le même
+  snapshot valide.
+- La boutique auto-répare le catalogue/grille après **30 min** et les prix du
+  client après **6 h**, avec stale-while-revalidate, verrou distribué et délai
+  anti-rafale. Les seuils sont configurables dans `server/.env.example`.
+- Un Cloud Scheduler quotidien vers `POST /api/scheduled/sync` reste utile comme
+  filet de sécurité pour les listes admin, mais il est optionnel pour le catalogue.
+- Garder `PRIX_CACHE_MAX_AGE_MINUTES` supérieur aux deux seuils proactifs. La
+  valeur par défaut est **2160 minutes** (36 h) : à la limite dure, une réparation
+  est tentée avant de bloquer une commande qui n'a toujours aucun prix frais.
 - Après une modification de prix dans Easybeer en journée, lancer
   **Synchroniser Easybeer** depuis l'admin si le nouveau prix doit être visible
-  immédiatement. Sinon, il sera pris en compte à la prochaine synchronisation
-  nocturne.
+  immédiatement. Sinon, il sera pris en compte à la prochaine revalidation à la
+  demande.
 - Le cache admin des commandes globales charge par défaut les **30 derniers
   jours** (`ADMIN_COMMANDES_CACHE_DAYS=30`) pour limiter le volume utile pendant
   les tests Easybeer.

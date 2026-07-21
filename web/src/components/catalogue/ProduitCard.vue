@@ -9,6 +9,7 @@
 import { ref } from 'vue'
 import type { ProduitCatalogueClient } from '@/lib/types'
 import { prixFr } from '@/lib/format'
+import ProduitFormat from '@/components/catalogue/ProduitFormat.vue'
 import QuantiteStepper from '@/components/catalogue/QuantiteStepper.vue'
 
 defineProps<{
@@ -16,7 +17,10 @@ defineProps<{
   quantite: number
 }>()
 
-const emit = defineEmits<{ changer: [delta: number] }>()
+const emit = defineEmits<{
+  changer: [delta: number]
+  fixer: [quantite: number]
+}>()
 
 // Si l'URL de photo est cassée, on retombe proprement sur le placeholder.
 const imageEnErreur = ref(false)
@@ -67,6 +71,12 @@ const imageEnErreur = ref(false)
         {{ produit.libelle }}
       </h3>
 
+      <ProduitFormat
+        class="min-h-7"
+        :contenant="produit.contenant"
+        :packaging="produit.packaging"
+      />
+
       <!-- Prix + ajout au panier, en bas de carte -->
       <div class="mt-auto grid gap-4">
         <div
@@ -93,6 +103,7 @@ const imageEnErreur = ref(false)
           :pas="produit.pas"
           :libelle="produit.libelle"
           @changer="(delta) => emit('changer', delta)"
+          @fixer="(quantite) => emit('fixer', quantite)"
         />
       </div>
       <p v-if="produit.prixHT == null || !produit.prixEstFrais" class="text-xs text-amber-700">

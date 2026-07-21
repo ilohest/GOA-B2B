@@ -33,6 +33,8 @@ export interface LigneRemiseCiblee {
   idContenant?: number | null
   idLot?: number | null
   libelle?: string
+  contenant?: string | null
+  packaging?: string | null
   quantite: number
   sousTotal: number
 }
@@ -40,6 +42,8 @@ export interface LigneRemiseCiblee {
 export interface DetailRemiseCiblee {
   idStockBouteille: number
   libelle: string
+  contenant?: string | null
+  packaging?: string | null
   remiseLabel: string
   montant: number
 }
@@ -133,6 +137,8 @@ export function estimerRemisesCommande(
     return [{
       idStockBouteille: ligne.idStockBouteille,
       libelle: ligne.libelle ?? 'Produit',
+      contenant: ligne.contenant,
+      packaging: ligne.packaging,
       remiseLabel: libelleRemise(applicable),
       montant: Math.min(montantRemise(ligne.sousTotal, applicable), ligne.sousTotal),
     }]
@@ -187,6 +193,8 @@ export function calculerRemisesCiblees(
     return [{
       idStockBouteille: ligne.idStockBouteille,
       libelle: ligne.libelle ?? 'Produit',
+      contenant: ligne.contenant,
+      packaging: ligne.packaging,
       remiseLabel: meilleureRemise.label,
       montant: Math.min(meilleureRemise.montant, ligne.sousTotal),
     }]

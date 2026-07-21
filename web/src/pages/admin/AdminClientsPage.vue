@@ -277,6 +277,7 @@ const tourneeChoisie = ref<string>("");
 const livraisonChoisie = ref<string>("");
 const minimumSaisi = ref<string | number>("");
 const minimumSaisiNormalise = computed(() => String(minimumSaisi.value).trim());
+const progressionMinimum = ref<{ traites: number; total: number } | null>(null);
 
 const referentiels = useQuery({
   queryKey: ["admin", "tournees"],
@@ -289,22 +290,41 @@ const referentiels = useQuery({
 });
 
 const bulkParams = useMutation({
-  mutationFn: () =>
-    api.post<{ ok: boolean; clients: number; erreurs: string[] }>(
-      "/admin/clients/bulk-params",
-      {
-        idsClients: [...selection],
+  mutationFn: async () => {
+    const idsClients = [...selection];
+    const endpoint = "/admin/clients/bulk-params";
+
+    if (typeParametreChoisi.value !== "minimum") {
+      return api.post<{ ok: boolean; clients: number; erreurs: string[] }>(endpoint, {
+        idsClients,
         ...(typeParametreChoisi.value === "tournee" && tourneeChoisie.value
           ? { idClientTournee: Number(tourneeChoisie.value) }
           : {}),
         ...(typeParametreChoisi.value === "livraison" && livraisonChoisie.value
           ? { typeLivraison: livraisonChoisie.value }
           : {}),
-        ...(typeParametreChoisi.value === "minimum" && minimumSaisiNormalise.value !== ""
-          ? { minimumCommande: Number(minimumSaisi.value) }
-          : {}),
-      },
-    ),
+      });
+    }
+
+    // Easybeer impose une mise à jour fiche par fiche pour le minimum. L'admin
+    // garde une seule sélection/un seul clic ; le navigateur découpe le travail
+    // en requêtes assez courtes pour éviter un timeout serveur.
+    const tailleLot = 30;
+    const erreurs: string[] = [];
+    let traites = 0;
+    progressionMinimum.value = { traites, total: idsClients.length };
+    for (let debut = 0; debut < idsClients.length; debut += tailleLot) {
+      const lot = idsClients.slice(debut, debut + tailleLot);
+      const resultat = await api.post<{ ok: boolean; clients: number; erreurs: string[] }>(endpoint, {
+        idsClients: lot,
+        minimumCommande: Number(minimumSaisi.value),
+      });
+      erreurs.push(...resultat.erreurs);
+      traites += lot.length;
+      progressionMinimum.value = { traites, total: idsClients.length };
+    }
+    return { ok: erreurs.length === 0, clients: traites, erreurs };
+  },
   onSuccess: (res) => {
     if (res.erreurs.length) {
       toast.warning(
@@ -319,20 +339,19 @@ const bulkParams = useMutation({
     tourneeChoisie.value = "";
     livraisonChoisie.value = "";
     minimumSaisi.value = "";
+    progressionMinimum.value = null;
   },
-  onError: (e) => toast.error((e as Error).message),
+  onError: (e) => {
+    progressionMinimum.value = null;
+    toast.error((e as Error).message);
+  },
 });
 
 const bulkParamsValide = computed(
   () => {
     if (typeParametreChoisi.value === "tournee") return Boolean(tourneeChoisie.value);
     if (typeParametreChoisi.value === "livraison") return Boolean(livraisonChoisie.value);
-    return (
-      minimumSaisiNormalise.value !== "" &&
-      Number(minimumSaisi.value) >= 0 &&
-      // Minimum = 2 appels Easybeer par client : lot limité à 30 (limite serveur).
-      selection.size <= 30
-    );
+    return minimumSaisiNormalise.value !== "" && Number(minimumSaisi.value) >= 0;
   },
 );
 
@@ -856,24 +875,25 @@ function ouvrirFiche(client: ClientResume) {
               step="0.01"
               placeholder="Ex. 30"
             />
-            <p
-              v-if="minimumSaisiNormalise !== '' && selection.size > 30"
-              class="text-xs text-destructive"
-            >
-              Le minimum s'écrit fiche par fiche : 30 clients maximum par lot.
+            <p class="text-xs text-muted-foreground">
+              Tous les clients sélectionnés seront traités automatiquement. Pour une
+              grande sélection, l'opération peut prendre plusieurs minutes.
             </p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="secondary" @click="dialogParams = false"
+          <Button variant="secondary" :disabled="bulkParams.isPending.value" @click="dialogParams = false"
             >Annuler</Button
           >
           <Button
             :disabled="!bulkParamsValide || bulkParams.isPending.value"
             @click="bulkParams.mutate()"
           >
-            {{ bulkParams.isPending.value ? "Application…" : "Appliquer" }}
+            <template v-if="progressionMinimum">
+              Application… {{ progressionMinimum.traites }}/{{ progressionMinimum.total }}
+            </template>
+            <template v-else>{{ bulkParams.isPending.value ? "Application…" : "Appliquer" }}</template>
           </Button>
         </DialogFooter>
       </DialogContent>

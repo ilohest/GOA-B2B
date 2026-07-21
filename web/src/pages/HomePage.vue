@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from "vue";
 import { useRouter } from "vue-router";
-import { Loader2, PackageCheck, Store } from "@lucide/vue";
+import { Loader2, PackageCheck, Store, TriangleAlert } from "@lucide/vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
@@ -50,12 +50,20 @@ const catalogue = useQuery({
   // Cache client en préparation (compte tout juste activé) : les prix arrivent
   // en tâche de fond → on re-sonde jusqu'à ce qu'ils soient là.
   refetchInterval: (query) =>
-    query.state.data?.cacheEnPreparation ? 4000 : false,
+    query.state.data?.cacheEnPreparation
+      ? 4000
+      : query.state.data?.revalidationEnCours
+        ? 30000
+        : false,
 });
 
-// Compte fraîchement activé : le cache client (prix) se prépare côté serveur.
+// Compte fraîchement activé ou cache client incomplet : les tarifs se préparent côté serveur.
+const compteSansTarifs = computed(
+  () => data.value?.client != null && data.value.idGrilleTarifaire == null,
+);
 const comptePreparation = computed(
   () =>
+    compteSansTarifs.value ||
     Boolean(data.value?.cacheEnPreparation) ||
     Boolean(catalogue.data.value?.cacheEnPreparation),
 );
@@ -80,6 +88,8 @@ const lignesDetail = computed(() =>
         ? {
             ...l,
             libelle: produit.libelle,
+            contenant: produit.contenant,
+            packaging: produit.packaging,
             photoUrl: produit.photoUrl,
             prixUnitaireHT: produit.prixHT ?? 0,
             pas: produit.pas,
@@ -155,7 +165,9 @@ const barreDepliee = ref(false);
 const queryClient = useQueryClient();
 const dialogOuvert = ref(false);
 const commentaire = ref("");
-const erreurEnvoi = ref<string | null>(null);
+const erreurEnvoi = ref<{ titre: string; message: string; aide?: string } | null>(
+  null,
+);
 const confirmation = ref<{
   numero?: number | null;
   totalHT: number;
@@ -174,8 +186,51 @@ watch(
   { immediate: true },
 );
 
+function erreurCommandeLisible(message: string) {
+  const normalise = message.toLowerCase();
+  if (normalise.includes("grille tarifaire introuvable")) {
+    return {
+      titre: "Nous n'avons pas pu finaliser la commande",
+      message: "",
+    };
+  }
+  if (normalise.includes("compte est en cours de préparation")) {
+    return {
+      titre: "Compte en préparation",
+      message: "Vos tarifs sont encore en cours de chargement.",
+      aide: "Réessayez dans une minute.",
+    };
+  }
+  if (normalise.includes("minimum de commande")) {
+    return {
+      titre: "Minimum de commande non atteint",
+      message,
+    };
+  }
+  return {
+    titre: "Commande non envoyée",
+    message,
+    aide: "Vérifiez votre panier ou contactez GOA si le problème persiste.",
+  };
+}
+
 const envoi = useMutation({
   mutationFn: () => {
+    if (!lignes.value.length) {
+      throw new Error("Votre panier est vide.")
+    }
+    if (lignesDetail.value.length !== lignes.value.length) {
+      throw new Error("Un produit du panier n'est plus disponible au catalogue. Retirez-le puis réessayez.")
+    }
+    if (commandeBloqueeParPrix.value) {
+      throw new Error("Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.")
+    }
+    if (comptePreparation.value) {
+      throw new Error("Votre compte est en cours de préparation.")
+    }
+    if (sousMinimum.value && minimum.value != null) {
+      throw new Error(`Minimum de commande : ${prixFr(minimum.value)} HT.`)
+    }
     const body = { commentaire: commentaire.value, lignes: lignes.value };
     return modification.value
       ? api.put<CommandeResultat>(
@@ -206,8 +261,12 @@ const envoi = useMutation({
     router.push("/commandes");
   },
   onError: (e) => {
-    erreurEnvoi.value = (e as Error).message;
-    toast.error((e as Error).message);
+    const erreur = erreurCommandeLisible((e as Error).message);
+    erreurEnvoi.value = erreur;
+    toast.error(erreur.titre, {
+      description: erreur.message,
+      duration: 7000,
+    });
   },
 });
 
@@ -247,8 +306,9 @@ function supprimerLignePanier(idStockBouteille: number) {
         <div class="grid gap-0.5">
           <p class="font-medium">Votre compte se prépare…</p>
           <p>
-            Vos tarifs sont en cours de chargement. Cette page se met à jour
-            automatiquement dans quelques secondes.
+            Vos tarifs sont en cours de chargement. Patientez quelques instants :
+            la page se met à jour automatiquement. Si rien ne change, rafraîchissez
+            la page.
           </p>
         </div>
       </div>
@@ -335,6 +395,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             :produit="p"
             :quantite="quantites[p.idStockBouteille] ?? 0"
             @changer="(delta) => changer(p.idStockBouteille, delta)"
+            @fixer="(quantite) => fixer(p.idStockBouteille, quantite)"
           />
         </div>
       </section>
@@ -374,7 +435,10 @@ function supprimerLignePanier(idStockBouteille: number) {
               class="mt-2 w-full"
               size="lg"
               :disabled="
-                sousMinimum || commandeBloqueeParPrix || nbCartons === 0
+                sousMinimum ||
+                commandeBloqueeParPrix ||
+                comptePreparation ||
+                nbCartons === 0
               "
               @click="ouvrirRecap"
             >
@@ -454,7 +518,12 @@ function supprimerLignePanier(idStockBouteille: number) {
           </button>
           <Button
             size="lg"
-            :disabled="sousMinimum || commandeBloqueeParPrix || nbCartons === 0"
+            :disabled="
+              sousMinimum ||
+              commandeBloqueeParPrix ||
+              comptePreparation ||
+              nbCartons === 0
+            "
             @click="ouvrirRecap"
           >
             {{ modification ? "Mettre à jour" : "Commander" }}
@@ -529,20 +598,44 @@ function supprimerLignePanier(idStockBouteille: number) {
               rows="3"
             />
           </div>
-          <DialogFooter>
+          <div
+            v-if="commandeBloqueeParPrix || (sousMinimum && minimum != null) || erreurEnvoi"
+            class="grid gap-2"
+          >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
               Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
             </p>
-            <p
-              v-if="erreurEnvoi"
-              class="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive"
-            >
-              {{ erreurEnvoi }}
+            <p v-if="sousMinimum && minimum != null" class="text-xs text-amber-700">
+              Minimum de commande : {{ prixFr(minimum) }} HT.
             </p>
+            <div
+              v-if="erreurEnvoi"
+              class="flex gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-3 text-sm text-destructive"
+              role="alert"
+            >
+              <TriangleAlert class="mt-0.5 size-4 shrink-0" />
+              <div class="min-w-0">
+                <p class="font-semibold">{{ erreurEnvoi.titre }}</p>
+                <p v-if="erreurEnvoi.message" class="mt-1 leading-snug break-words">
+                  {{ erreurEnvoi.message }}
+                </p>
+                <p v-if="erreurEnvoi.aide" class="mt-1 text-xs text-destructive/80">
+                  {{ erreurEnvoi.aide }}
+                </p>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
             <Button
               class="w-full"
               size="lg"
-              :disabled="envoi.isPending.value || commandeBloqueeParPrix"
+              :disabled="
+                envoi.isPending.value ||
+                commandeBloqueeParPrix ||
+                comptePreparation ||
+                sousMinimum ||
+                nbCartons === 0
+              "
               @click="envoi.mutate()"
             >
               {{
