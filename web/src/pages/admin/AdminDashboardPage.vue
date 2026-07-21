@@ -179,7 +179,8 @@ const stats = computed(() => {
       </div>
       <div class="grid justify-items-start gap-2 sm:justify-items-end">
         <div class="flex items-center gap-2">
-          <p v-if="data?.dernierSync" class="text-xs whitespace-nowrap text-muted-foreground">
+          <Skeleton v-if="isPending" class="h-3 w-40" />
+          <p v-else-if="data?.dernierSync" class="text-xs whitespace-nowrap text-muted-foreground">
             À jour : {{ dateHeureFr(data.dernierSync) }}
           </p>
           <p v-else class="text-xs whitespace-nowrap text-muted-foreground">
@@ -195,8 +196,23 @@ const stats = computed(() => {
       </div>
     </div>
 
-    <div v-if="isPending" class="grid gap-4 sm:grid-cols-3">
-      <Skeleton v-for="i in 3" :key="i" class="h-36 w-full" />
+    <div
+      v-if="isPending"
+      class="grid gap-4 sm:grid-cols-3"
+      aria-label="Chargement du tableau de bord"
+      aria-busy="true"
+    >
+      <Card v-for="i in 3" :key="i" class="relative">
+        <Skeleton class="absolute top-3 right-3 size-8 rounded-full" />
+        <CardHeader class="gap-2 pb-2">
+          <Skeleton class="h-3.5 w-28" />
+          <Skeleton class="h-9 w-20" />
+        </CardHeader>
+        <CardContent class="grid gap-3">
+          <Skeleton class="h-4 w-4/5" />
+          <Skeleton class="h-8 w-32 rounded-md" />
+        </CardContent>
+      </Card>
     </div>
 
     <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>

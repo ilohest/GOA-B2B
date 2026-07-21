@@ -122,6 +122,7 @@ export interface ProduitCatalogueClient {
   prixHT: number | null
   prixUpdatedAt: number | null
   prixEstFrais: boolean
+  historique: boolean
   /** Incrément de quantité imposé (1 sauf clients La Poste : 3 ou 2). */
   pas: number
 }
@@ -300,6 +301,16 @@ export interface AdminClientDetail {
     typeLivraisonFav: string | null
     tournee: string | null
     tags: string[] | string | null
+    tarifsPersonnalises: {
+      id: number | null
+      idProduit: number | null
+      idContenant: number | null
+      idLot: number | null
+      produit: string | null
+      contenant: string | null
+      packaging: string | null
+      prixHT: number
+    }[]
   }
   commandes: {
     idCommande: number
@@ -338,6 +349,7 @@ export interface CommandeDetail {
   totalTTC: number | null
   remiseTotale: number | null
   remiseLabel: string | null
+  modeLivraison: string | null
   commentaire: string
   lignes: {
     designation: string
@@ -357,5 +369,5 @@ export interface CommandeEdition {
   etat: string
   modifiable: boolean
   commentaire: string
-  lignes: { idStockBouteille: number | null; quantite: number }[]
+  lignes: { idStockBouteille: number; quantite: number }[]
 }

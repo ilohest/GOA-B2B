@@ -77,6 +77,12 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
     expect(res).toHaveLength(2)
   })
 
+  it('inclut une unité masquée uniquement pour la modification d’une commande', () => {
+    const res = catalogueClient(produits, overrides, { idsInclus: new Set([3]) })
+    expect(res.find((p) => p.idStockBouteille === 3)).toMatchObject({ historique: true })
+    expect(res.find((p) => p.idStockBouteille === 1)).toMatchObject({ historique: false })
+  })
+
   it("applique displayName, photo, rupture, prix du client, et trie par libellé d'affichage", () => {
     const res = catalogueClient(produits, overrides, { prixClient: { '1': 27.3 } })
     expect(res[0]).toMatchObject({

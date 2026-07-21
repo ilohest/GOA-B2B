@@ -22,6 +22,8 @@ export interface LignePanier {
   prixUnitaireHT: number;
   pas?: number;
   quantite: number;
+  historique?: boolean;
+  quantiteMaximum?: number;
   sousTotal: number;
 }
 
@@ -53,15 +55,15 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
 </script>
 
 <template>
-  <div class="grid gap-2">
+  <div class="grid min-w-0 gap-2">
     <p v-if="!lignes.length" class="text-sm text-muted-foreground">
       Votre panier est vide — ajoutez des cartons depuis le catalogue.
     </p>
-    <ul v-else class="grid text-sm">
+    <ul v-else class="grid min-w-0 text-sm">
       <li
         v-for="l in lignes"
         :key="l.idStockBouteille"
-        class="grid gap-3 border-b border-border/60 py-3 first:pt-0"
+        class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
       >
         <div class="flex items-start justify-between gap-3">
           <span class="flex min-w-0 flex-1 items-start gap-2.5">
@@ -94,12 +96,15 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
                 :contenant="l.contenant"
                 :packaging="l.packaging"
               />
+              <Badge v-if="l.historique" variant="secondary" class="mt-1">
+                Hors catalogue
+              </Badge>
               <span class="mt-1 block text-muted-foreground">
                 {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
               </span>
             </span>
           </span>
-          <span class="font-medium tabular-nums">{{
+          <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">{{
             prixFr(l.sousTotal)
           }}</span>
         </div>
@@ -126,6 +131,8 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
               type="button"
               class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               :aria-label="`Ajouter ${l.pas ?? 1} à ${l.libelle}`"
+              :disabled="l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum"
+              :class="l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum ? 'cursor-not-allowed opacity-35' : ''"
               @click="emit('changer', l.idStockBouteille, l.pas ?? 1)"
             >
               {{ (l.pas ?? 1) > 1 ? `+${l.pas}` : "+" }}
@@ -147,19 +154,25 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
         >
           Par {{ l.pas }} cartons
         </div>
+        <p
+          v-if="editable && l.quantiteMaximum != null"
+          class="ml-12 text-xs text-muted-foreground"
+        >
+          Ce produit n'est plus proposé actuellement : sa quantité peut être réduite, mais pas augmentée.
+        </p>
       </li>
       <li
         class="flex items-baseline justify-between gap-3 pt-3"
         :class="aRemise ? 'text-sm' : 'font-semibold'"
       >
         <span>{{ aRemise ? "Sous-total HT" : "Total HT" }}</span>
-        <span class="tabular-nums">{{ prixFr(totalHT) }}</span>
+        <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(totalHT) }}</span>
       </li>
       <template v-if="aRemise">
         <li class="grid gap-1 text-primary">
           <div class="flex items-baseline justify-between gap-3">
             <span class="min-w-0 flex-1">Remise</span>
-            <span class="font-medium tabular-nums">− {{ prixFr(remiseMontant!) }}</span>
+            <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">− {{ prixFr(remiseMontant!) }}</span>
           </div>
           <div
             v-for="detail in remisesDetail"
@@ -177,21 +190,21 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
                 {{ detail.remiseLabel }}
               </Badge>
             </span>
-            <span class="tabular-nums">− {{ prixFr(detail.montant) }}</span>
+            <span class="shrink-0 whitespace-nowrap tabular-nums">− {{ prixFr(detail.montant) }}</span>
           </div>
         </li>
         <li class="flex items-baseline justify-between gap-3 font-semibold">
           <span>Total HT</span>
-          <span class="tabular-nums">{{ prixFr(totalApresRemise) }}</span>
+          <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(totalApresRemise) }}</span>
         </li>
       </template>
       <li class="flex items-baseline justify-between gap-3 text-muted-foreground">
         <span>TVA (5,5 %)</span>
-        <span class="tabular-nums">{{ prixFr(montantTVA) }}</span>
+        <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(montantTVA) }}</span>
       </li>
       <li class="flex items-baseline justify-between gap-3 font-semibold">
         <span>Total TTC</span>
-        <span class="tabular-nums">{{ prixFr(totalTTC) }}</span>
+        <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(totalTTC) }}</span>
       </li>
     </ul>
     <p v-if="sousMinimum && minimum != null" class="text-xs text-destructive">

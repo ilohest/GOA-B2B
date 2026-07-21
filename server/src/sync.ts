@@ -35,6 +35,7 @@ import {
   type DocumentCommandeResume,
   type MatriceConditionnement,
   type ModeleClient,
+  type ModeleClientPrix,
   type ModeleClientType,
   type ProduitAutocomplete,
 } from './easybeer.js'
@@ -86,6 +87,51 @@ export function premiereRemiseType(idClientType: number | undefined, types: Mode
 
 export function remisesCibleesTypes(idClientType: number | undefined, types: ModeleClientType[]) {
   return typesClientEnCascade(idClientType, types).flatMap((type) => type.listeRemises ?? [])
+}
+
+export interface TarifPersonnaliseClient {
+  id: number | null
+  idProduit: number | null
+  idContenant: number | null
+  idLot: number | null
+  produit: string | null
+  contenant: string | null
+  packaging: string | null
+  prixHT: number
+}
+
+/** Tarifs propres à la fiche client Easybeer, distincts des grilles et remises. */
+export function normaliserTarifsPersonnalises(
+  listePrix: ModeleClientPrix[] | null | undefined,
+): TarifPersonnaliseClient[] {
+  return (listePrix ?? [])
+    .flatMap<TarifPersonnaliseClient>((tarif) => {
+      const prixHT = Number(tarif.prixHT)
+      if (!tarif.modeleProduit || !Number.isFinite(prixHT)) return []
+      return [{
+        id: tarif.id ?? null,
+        idProduit: tarif.modeleProduit.idProduit ?? null,
+        idContenant: tarif.modeleContenant?.idContenant ?? null,
+        idLot: tarif.modeleLot?.idLot ?? null,
+        produit:
+          tarif.modeleProduit.nomCommercial?.trim() ||
+          tarif.modeleProduit.nom?.trim() ||
+          tarif.modeleProduit.libelle?.trim() ||
+          null,
+        contenant:
+          tarif.modeleContenant?.libelleAvecContenance?.trim() ||
+          tarif.modeleContenant?.libelle?.trim() ||
+          null,
+        packaging: tarif.modeleLot?.libelle?.trim() || null,
+        prixHT,
+      }]
+    })
+    .sort(
+      (a, b) =>
+        (a.produit ?? '').localeCompare(b.produit ?? '', 'fr') ||
+        (a.contenant ?? '').localeCompare(b.contenant ?? '', 'fr') ||
+        (a.packaging ?? '').localeCompare(b.packaging ?? '', 'fr'),
+    )
 }
 
 /** Fiche client réduite aux champs exploités par la plateforme. */

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import { UserRound } from "@lucide/vue";
+import { Copy, UserRound } from "@lucide/vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
@@ -11,6 +11,7 @@ import { easybeerLien } from "@/lib/easybeer";
 import EtatBadge from "@/components/EtatBadge.vue";
 import CommandeDetailDialog from "@/components/admin/CommandeDetailDialog.vue";
 import EasybeerLink from "@/components/admin/EasybeerLink.vue";
+import ProduitFormat from "@/components/catalogue/ProduitFormat.vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -50,9 +51,13 @@ const invitation = useMutation({
   onError: (e) => toast.error((e as Error).message),
 });
 
-async function copierLien(texte: string) {
-  await navigator.clipboard.writeText(texte);
-  toast.success("Lien copié.");
+async function copierTexte(texte: string, confirmation: string) {
+  try {
+    await navigator.clipboard.writeText(texte);
+    toast.success(confirmation);
+  } catch {
+    toast.error("Impossible de copier dans le presse-papiers.");
+  }
 }
 
 const tags = computed(() => {
@@ -68,10 +73,22 @@ const tags = computed(() => {
 
 /** Paires libellé/valeur affichées telles quelles (— si absent). */
 const infos = computed(() => [
-  { label: "Email", valeur: client.value?.emailPrincipal },
+  {
+    label: "Email",
+    valeur: client.value?.emailPrincipal,
+    confirmationCopie: "Adresse e-mail copiée.",
+  },
   { label: "Téléphone", valeur: client.value?.telephonePrincipal },
-  { label: "Adresse de facturation", valeur: client.value?.adresseFacturation },
-  { label: "Adresse de livraison", valeur: client.value?.adresseLivraison },
+  {
+    label: "Adresse de facturation",
+    valeur: client.value?.adresseFacturation,
+    confirmationCopie: "Adresse de facturation copiée.",
+  },
+  {
+    label: "Adresse de livraison",
+    valeur: client.value?.adresseLivraison,
+    confirmationCopie: "Adresse de livraison copiée.",
+  },
   { label: "Catégorie", valeur: client.value?.categorie },
   { label: "Mode de livraison", valeur: client.value?.typeLivraisonFav },
   { label: "Tournée", valeur: client.value?.tournee },
@@ -85,17 +102,13 @@ const conditions = computed(() => [
         ? `${prixFr(client.value.minimumCommande)} HT`
         : null,
   },
-  {
-    label: "Frais de livraison",
-    valeur:
-      client.value?.fraisLivraisonHT != null
-        ? `${prixFr(client.value.fraisLivraisonHT)} HT`
-        : null,
-  },
 ]);
 
 const remisesCiblees = computed(() => client.value?.remisesCiblees ?? []);
 const remisesType = computed(() => client.value?.remisesType ?? []);
+const tarifsPersonnalises = computed(
+  () => client.value?.tarifsPersonnalises ?? [],
+);
 
 function formatRemise(remise: string | null | undefined) {
   if (!remise) return null;
@@ -173,23 +186,54 @@ function periodeRemiseCiblee(
       aria-busy="true"
     >
       <div class="grid items-start gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <Skeleton class="h-5 w-28" />
-          </CardHeader>
-          <CardContent class="grid gap-3">
-            <div
-              v-for="i in 7"
-              :key="`info-${i}`"
-              class="grid gap-1.5 sm:grid-cols-[12rem_1fr] sm:items-center"
-            >
-              <Skeleton class="h-3.5 w-28" />
-              <Skeleton class="h-4" :class="i % 3 === 0 ? 'w-4/5' : 'w-2/3'" />
-            </div>
-          </CardContent>
-        </Card>
+        <div class="grid content-start gap-4">
+          <Card>
+            <CardHeader>
+              <Skeleton class="h-5 w-28" />
+            </CardHeader>
+            <CardContent class="grid gap-3">
+              <div
+                v-for="i in 7"
+                :key="`info-${i}`"
+                class="grid gap-1.5 sm:grid-cols-[12rem_1fr] sm:items-center"
+              >
+                <Skeleton class="h-3.5 w-28" />
+                <Skeleton class="h-4" :class="i % 3 === 0 ? 'w-4/5' : 'w-2/3'" />
+              </div>
+            </CardContent>
+          </Card>
 
-        <div class="grid gap-4">
+          <Card>
+            <CardHeader>
+              <div class="flex items-center justify-between gap-3">
+                <Skeleton class="h-5 w-40" />
+                <Skeleton class="h-5 w-8 rounded-full" />
+              </div>
+            </CardHeader>
+            <CardContent class="grid gap-3">
+              <Skeleton class="h-3.5 w-4/5" />
+              <div
+                v-for="i in 2"
+                :key="`tarif-${i}`"
+                class="flex items-start justify-between gap-3 rounded-lg border p-3"
+              >
+                <div class="grid flex-1 gap-2">
+                  <Skeleton class="h-4 w-40 max-w-[80%]" />
+                  <div class="flex gap-2">
+                    <Skeleton class="h-6 w-28 rounded-full" />
+                    <Skeleton class="h-6 w-24 rounded-full" />
+                  </div>
+                </div>
+                <div class="grid justify-items-end gap-1">
+                  <Skeleton class="h-4 w-16" />
+                  <Skeleton class="h-3 w-5" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div class="grid content-start gap-4">
           <Card>
             <CardHeader>
               <Skeleton class="h-5 w-44" />
@@ -197,7 +241,7 @@ function periodeRemiseCiblee(
             <CardContent class="grid gap-4">
               <div class="grid gap-3">
                 <div
-                  v-for="i in 2"
+                  v-for="i in 1"
                   :key="`condition-${i}`"
                   class="grid gap-1.5 sm:grid-cols-[12rem_1fr]"
                 >
@@ -261,36 +305,89 @@ function periodeRemiseCiblee(
 
     <template v-else-if="client">
       <div class="grid items-start gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader
-            ><CardTitle class="text-base">Informations</CardTitle></CardHeader
-          >
-          <CardContent>
-            <dl class="grid gap-2 text-sm">
-              <div
-                v-for="i in infos"
-                :key="i.label"
-                class="grid gap-0.5 sm:grid-cols-[12rem_1fr]"
-              >
-                <dt class="text-muted-foreground">{{ i.label }}</dt>
-                <dd>{{ i.valeur || "—" }}</dd>
-              </div>
-              <div
-                v-if="tags.length"
-                class="grid gap-0.5 sm:grid-cols-[12rem_1fr]"
-              >
-                <dt class="text-muted-foreground">Tags</dt>
-                <dd class="flex flex-wrap gap-1">
-                  <Badge v-for="t in tags" :key="t" variant="secondary">{{
-                    t
-                  }}</Badge>
-                </dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
+        <div class="grid content-start gap-4">
+          <Card>
+            <CardHeader
+              ><CardTitle class="text-base">Informations</CardTitle></CardHeader
+            >
+            <CardContent>
+              <dl class="grid gap-2 text-sm">
+                <div
+                  v-for="i in infos"
+                  :key="i.label"
+                  class="grid gap-0.5 sm:grid-cols-[12rem_1fr]"
+                >
+                  <dt class="text-muted-foreground">{{ i.label }}</dt>
+                  <dd class="flex min-w-0 items-start gap-1.5">
+                    <span class="min-w-0 break-words">{{ i.valeur || "—" }}</span>
+                    <Button
+                      v-if="i.valeur && i.confirmationCopie"
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      class="-my-1 size-7 shrink-0 text-muted-foreground"
+                      :aria-label="`Copier ${i.label.toLowerCase()}`"
+                      :title="`Copier ${i.label.toLowerCase()}`"
+                      @click="copierTexte(i.valeur, i.confirmationCopie)"
+                    >
+                      <Copy class="size-3.5" />
+                    </Button>
+                  </dd>
+                </div>
+                <div
+                  v-if="tags.length"
+                  class="grid gap-0.5 sm:grid-cols-[12rem_1fr]"
+                >
+                  <dt class="text-muted-foreground">Tags</dt>
+                  <dd class="flex flex-wrap gap-1">
+                    <Badge v-for="t in tags" :key="t" variant="secondary">{{
+                      t
+                    }}</Badge>
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
 
-        <div class="grid gap-4">
+          <Card>
+            <CardHeader>
+              <div class="flex items-center justify-between gap-3">
+                <CardTitle class="text-base">Tarifs personnalisés</CardTitle>
+                <Badge variant="secondary">{{ tarifsPersonnalises.length }}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent class="grid gap-3">
+              <p class="text-xs leading-relaxed text-muted-foreground">
+                Prix définis spécialement pour ce client dans Easybeer. Ils remplacent
+                le tarif habituel avant l'application des remises.
+              </p>
+              <p v-if="!tarifsPersonnalises.length" class="text-sm text-muted-foreground">
+                Aucun tarif personnalisé pour ce client.
+              </p>
+              <ul v-else class="grid gap-2">
+                <li
+                  v-for="tarif in tarifsPersonnalises"
+                  :key="tarif.id ?? `${tarif.idProduit}-${tarif.idContenant}-${tarif.idLot}`"
+                  class="flex flex-wrap items-start justify-between gap-3 rounded-lg border bg-background p-3"
+                >
+                  <div class="grid min-w-0 gap-1.5">
+                    <p class="text-sm font-medium">{{ tarif.produit || "Produit" }}</p>
+                    <ProduitFormat
+                      :contenant="tarif.contenant"
+                      :packaging="tarif.packaging"
+                    />
+                  </div>
+                  <div class="text-right">
+                    <p class="font-semibold tabular-nums">{{ prixFr(tarif.prixHT) }}</p>
+                    <p class="text-xs text-muted-foreground">HT</p>
+                  </div>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div class="grid content-start gap-4">
           <Card>
             <CardHeader
               ><CardTitle class="text-base"
@@ -317,20 +414,23 @@ function periodeRemiseCiblee(
                 </div>
                 <div class="overflow-hidden rounded-lg border text-sm">
                   <div
-                    class="grid grid-cols-[7rem_1fr_1fr] bg-muted/70 text-xs font-medium text-muted-foreground"
+                    class="hidden grid-cols-[7rem_1fr_1fr] bg-muted/70 text-xs font-medium text-muted-foreground xl:grid"
                   >
                     <div class="border-r px-3 py-2"></div>
                     <div class="border-r px-3 py-2">Client individuel</div>
                     <div class="px-3 py-2">Type de client</div>
                   </div>
 
-                  <div class="grid grid-cols-[7rem_1fr_1fr] border-t">
+                  <div class="grid border-t xl:grid-cols-[7rem_1fr_1fr]">
                     <div
-                      class="border-r bg-muted/35 px-3 py-3 font-medium text-muted-foreground"
+                      class="border-b bg-muted/35 px-3 py-2 font-medium text-muted-foreground xl:border-r xl:border-b-0 xl:py-3"
                     >
                       Commande
                     </div>
-                    <div class="border-r px-3 py-3">
+                    <div class="border-b px-3 py-3 xl:border-r xl:border-b-0">
+                      <p class="mb-2 text-xs font-medium text-muted-foreground xl:hidden">
+                        Client individuel
+                      </p>
                       <Badge
                         v-if="formatRemise(client.remise)"
                         variant="secondary"
@@ -340,6 +440,9 @@ function periodeRemiseCiblee(
                       <span v-else class="text-muted-foreground">—</span>
                     </div>
                     <div class="grid gap-2 px-3 py-3">
+                      <p class="text-xs font-medium text-muted-foreground xl:hidden">
+                        Type de client
+                      </p>
                       <template
                         v-if="
                           remisesType.some((type) => formatRemise(type.remise))
@@ -366,13 +469,16 @@ function periodeRemiseCiblee(
                     </div>
                   </div>
 
-                  <div class="grid grid-cols-[7rem_1fr_1fr] border-t">
+                  <div class="grid border-t xl:grid-cols-[7rem_1fr_1fr]">
                     <div
-                      class="border-r bg-muted/35 px-3 py-3 font-medium text-muted-foreground"
+                      class="border-b bg-muted/35 px-3 py-2 font-medium text-muted-foreground xl:border-r xl:border-b-0 xl:py-3"
                     >
                       Produit
                     </div>
-                    <div class="grid gap-2 border-r px-3 py-3">
+                    <div class="grid gap-2 border-b px-3 py-3 xl:border-r xl:border-b-0">
+                      <p class="text-xs font-medium text-muted-foreground xl:hidden">
+                        Client individuel
+                      </p>
                       <template v-if="remisesCiblees.length">
                         <div
                           v-for="(remise, index) in remisesCiblees"
@@ -417,6 +523,9 @@ function periodeRemiseCiblee(
                       <span v-else class="text-muted-foreground">—</span>
                     </div>
                     <div class="grid gap-2 px-3 py-3">
+                      <p class="text-xs font-medium text-muted-foreground xl:hidden">
+                        Type de client
+                      </p>
                       <template
                         v-if="
                           remisesType.some((type) => type.remisesCiblees.length)
@@ -558,7 +667,7 @@ function periodeRemiseCiblee(
                   size="sm"
                   variant="outline"
                   class="justify-self-start"
-                  @click="copierLien(resultatInvit.lien)"
+                  @click="copierTexte(resultatInvit.lien, 'Lien sécurisé copié.')"
                 >
                   Copier le lien sécurisé
                 </Button>

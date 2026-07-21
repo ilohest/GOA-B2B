@@ -4,9 +4,38 @@ import {
   allegerClient,
   cacheClientDoitEtreRafraichi,
   cacheEstAncien,
+  normaliserTarifsPersonnalises,
   prixEstFrais,
   type CacheClientDoc,
 } from '../src/sync.js'
+
+describe('tarifs personnalisés client', () => {
+  it('extrait les prix produit de la fiche Easybeer sans les confondre avec les remises', () => {
+    expect(
+      normaliserTarifsPersonnalises([
+        {
+          id: 142693,
+          type: 'STOCK_PRODUIT',
+          modeleProduit: { idProduit: 40716, nomCommercial: 'Gingembre - Citron' },
+          modeleContenant: { idContenant: 2654, libelleAvecContenance: 'Bouteille - 1L' },
+          modeleLot: { idLot: 3, libelle: 'Carton de 6' },
+          prixHT: 2,
+        },
+      ]),
+    ).toEqual([
+      {
+        id: 142693,
+        idProduit: 40716,
+        idContenant: 2654,
+        idLot: 3,
+        produit: 'Gingembre - Citron',
+        contenant: 'Bouteille - 1L',
+        packaging: 'Carton de 6',
+        prixHT: 2,
+      },
+    ])
+  })
+})
 
 describe('fraîcheur des prix en cache', () => {
   const cache = {

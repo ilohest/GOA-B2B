@@ -146,6 +146,8 @@ export interface ProduitCatalogueClient {
   prixHT: number | null
   prixUpdatedAt: number | null
   prixEstFrais: boolean
+  /** Unité masquée, exposée uniquement pour modifier une commande qui la contient déjà. */
+  historique: boolean
   /** Incrément de quantité imposé (1 sauf clients La Poste : 3 ou 2). */
   pas: number
 }
@@ -253,6 +255,7 @@ export function catalogueClient(
   overrides: Record<string, CatalogueOverride>,
   options: SourcesPrixClient & {
     tagsClient?: unknown
+    idsInclus?: Set<number>
     unitesMeta?: Record<
       number,
       { produit: string | null; contenant: string | null; packaging: string | null }
@@ -264,9 +267,13 @@ export function catalogueClient(
   const prixMaxAgeMs = options.maxAgeMs ?? Infinity
   const sources: SourcesPrixClient = { ...options, now, maxAgeMs: prixMaxAgeMs }
   return produits
-    .filter((p) => overrides[String(p.idStockBouteille)]?.visible)
+    .filter(
+      (p) =>
+        overrides[String(p.idStockBouteille)]?.visible ||
+        options.idsInclus?.has(p.idStockBouteille),
+    )
     .map((p) => {
-      const o = overrides[String(p.idStockBouteille)]
+      const o = overrides[String(p.idStockBouteille)] ?? OVERRIDE_DEFAUT
       const { prixHT, updatedAt } = resoudrePrixUnite(p.idStockBouteille, sources)
       return {
         idStockBouteille: p.idStockBouteille,
@@ -284,6 +291,7 @@ export function catalogueClient(
         prixHT,
         prixUpdatedAt: updatedAt,
         prixEstFrais: prixHT != null && updatedAt != null && now - updatedAt <= prixMaxAgeMs,
+        historique: !o.visible,
         pas: pasDeCommande(p.libelle, tags),
       }
     })

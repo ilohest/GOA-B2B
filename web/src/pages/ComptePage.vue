@@ -127,9 +127,20 @@ function effacerRetourMotDePasse(champ: keyof typeof erreursMotDePasse.value) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-      <div v-if="isPending" class="grid gap-2">
-        <Skeleton class="h-5 w-2/3" />
-        <Skeleton class="h-4 w-1/2" />
+      <div
+        v-if="isPending"
+        class="grid gap-3"
+        aria-label="Chargement du compte"
+        aria-busy="true"
+      >
+        <div
+          v-for="i in 7"
+          :key="i"
+          class="grid gap-1.5 sm:grid-cols-[14rem_1fr] sm:items-center"
+        >
+          <Skeleton class="h-3.5" :class="i % 2 ? 'w-28' : 'w-36'" />
+          <Skeleton class="h-4" :class="i % 3 ? 'w-48 max-w-full' : 'w-3/4'" />
+        </div>
       </div>
       <p v-else-if="isError" class="text-sm text-destructive">
         Impossible de charger votre compte : {{ (error as Error)?.message }}

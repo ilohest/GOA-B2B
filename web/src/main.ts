@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import App from './App.vue'
 import router from './router'
+import 'vue-sonner/style.css'
 import './style.css'
 
 // Pas de refetch au focus : les données bougent peu et certaines lectures

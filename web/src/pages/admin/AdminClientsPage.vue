@@ -18,7 +18,7 @@ import type {
   InvitationResponse,
   Tournee,
 } from "@/lib/types";
-import { dateHeureFr } from "@/lib/format";
+import { dateHeureFr, prixFr } from "@/lib/format";
 import { easybeerLien } from "@/lib/easybeer";
 import BoutonActualiser from "@/components/admin/BoutonActualiser.vue";
 import EasybeerLink from "@/components/admin/EasybeerLink.vue";
@@ -289,13 +289,41 @@ const referentiels = useQuery({
   enabled: dialogParams,
 });
 
+function confirmationParametreEnCours() {
+  if (typeParametreChoisi.value === "tournee") {
+    const tournee = referentiels.data.value?.tournees.find(
+      (item) => String(item.idClientTournee) === tourneeChoisie.value,
+    );
+    return {
+      titre: "Tournée appliquée",
+      valeur: tournee?.libelle ? `Tournée : ${tournee.libelle}` : "Tournée mise à jour",
+    };
+  }
+  if (typeParametreChoisi.value === "livraison") {
+    const livraison = referentiels.data.value?.typesLivraison.find(
+      (item) => item.code === livraisonChoisie.value,
+    );
+    return {
+      titre: "Mode de livraison appliqué",
+      valeur: livraison?.libelle
+        ? `Mode de livraison : ${livraison.libelle}`
+        : "Mode de livraison mis à jour",
+    };
+  }
+  return {
+    titre: "Minimum de commande appliqué",
+    valeur: `Minimum : ${prixFr(Number(minimumSaisi.value))} HT`,
+  };
+}
+
 const bulkParams = useMutation({
   mutationFn: async () => {
     const idsClients = [...selection];
     const endpoint = "/admin/clients/bulk-params";
+    const confirmation = confirmationParametreEnCours();
 
     if (typeParametreChoisi.value !== "minimum") {
-      return api.post<{ ok: boolean; clients: number; erreurs: string[] }>(endpoint, {
+      const resultat = await api.post<{ ok: boolean; clients: number; erreurs: string[] }>(endpoint, {
         idsClients,
         ...(typeParametreChoisi.value === "tournee" && tourneeChoisie.value
           ? { idClientTournee: Number(tourneeChoisie.value) }
@@ -304,6 +332,7 @@ const bulkParams = useMutation({
           ? { typeLivraison: livraisonChoisie.value }
           : {}),
       });
+      return { ...resultat, confirmation, idsClients };
     }
 
     // Easybeer impose une mise à jour fiche par fiche pour le minimum. L'admin
@@ -323,15 +352,26 @@ const bulkParams = useMutation({
       traites += lot.length;
       progressionMinimum.value = { traites, total: idsClients.length };
     }
-    return { ok: erreurs.length === 0, clients: traites, erreurs };
+    return { ok: erreurs.length === 0, clients: traites, erreurs, confirmation, idsClients };
   },
   onSuccess: (res) => {
+    const clientsTraites = `${res.clients} client${res.clients > 1 ? "s" : ""} traité${res.clients > 1 ? "s" : ""}`;
     if (res.erreurs.length) {
-      toast.warning(
-        `Appliqué avec ${res.erreurs.length} avertissement(s) : ${res.erreurs[0]}`,
-      );
+      toast.warning(`${res.confirmation.titre} avec avertissement`, {
+        description: `${res.confirmation.valeur} · ${clientsTraites}. ${res.erreurs.length} avertissement${res.erreurs.length > 1 ? "s" : ""} : ${res.erreurs[0]}`,
+        duration: 7000,
+      });
     } else {
-      toast.success(`Paramètres appliqués à ${res.clients} client(s).`);
+      toast.success(res.confirmation.titre, {
+        description: `${res.confirmation.valeur} · ${clientsTraites} dans Easybeer.`,
+      });
+    }
+    queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
+    // Une fiche déjà consultée peut rester en mémoire pendant la navigation.
+    // Toutes les fiches touchées sont marquées périmées afin que leur prochaine
+    // ouverture relise immédiatement Easybeer et réaffiche les nouvelles valeurs.
+    for (const idClient of res.idsClients) {
+      queryClient.invalidateQueries({ queryKey: ["admin", "client", idClient] });
     }
     selection.clear();
     dialogParams.value = false;
@@ -357,8 +397,9 @@ const bulkParamsValide = computed(
 
 // --- Table ---
 
-const compteDe = (c: ClientResume) =>
-  c.idClient != null ? data.value?.comptes?.[c.idClient] : undefined;
+function compteDe(c: ClientResume) {
+  return c.idClient != null ? data.value?.comptes?.[c.idClient] : undefined;
+}
 
 function enteteTri(cle: CleTriClient, label: string) {
   const Icone =
@@ -509,7 +550,8 @@ function ouvrirFiche(client: ClientResume) {
           </div>
           <div class="grid justify-items-start gap-2 sm:justify-items-end">
             <div class="flex items-center gap-2">
-              <p v-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
+              <Skeleton v-if="isPending" class="h-3 w-36" />
+              <p v-else-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
                 À jour : {{ dateHeureFr(data.syncedAt) }}
               </p>
               <EasybeerLink
@@ -562,8 +604,53 @@ function ouvrirFiche(client: ClientResume) {
           </Button>
         </div>
 
-        <div v-if="isPending" class="grid gap-2">
-          <Skeleton v-for="i in 6" :key="i" class="h-10 w-full" />
+        <div
+          v-if="isPending"
+          class="grid gap-3"
+          aria-label="Chargement des clients"
+          aria-busy="true"
+        >
+          <div class="grid gap-3 md:hidden">
+            <div v-for="i in 5" :key="i" class="grid gap-3 rounded-xl border p-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="grid flex-1 gap-2">
+                  <Skeleton class="h-4 w-2/3" />
+                  <Skeleton class="h-3 w-24" />
+                </div>
+                <Skeleton class="size-5 rounded" />
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <Skeleton class="h-4 w-4/5" />
+                <Skeleton class="h-4 w-3/4" />
+                <Skeleton class="h-4 w-full" />
+                <Skeleton class="h-5 w-16 rounded-full" />
+              </div>
+            </div>
+          </div>
+          <div class="hidden overflow-hidden rounded-lg border md:block">
+            <div class="grid grid-cols-[2rem_1.2fr_.7fr_1.4fr_.8fr_.6fr] gap-4 bg-muted p-3">
+              <Skeleton v-for="i in 6" :key="`head-${i}`" class="h-4" />
+            </div>
+            <div
+              v-for="ligne in 6"
+              :key="ligne"
+              class="grid grid-cols-[2rem_1.2fr_.7fr_1.4fr_.8fr_.6fr] items-center gap-4 border-t p-3"
+            >
+              <Skeleton class="size-4 rounded" />
+              <Skeleton class="h-4 w-4/5" />
+              <Skeleton class="h-4 w-16" />
+              <Skeleton class="h-4 w-5/6" />
+              <Skeleton class="h-5 w-20 rounded-full" />
+              <Skeleton class="h-7 w-16 rounded-md" />
+            </div>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <Skeleton class="h-4 w-32" />
+            <div class="flex gap-2">
+              <Skeleton class="h-8 w-20 rounded-md" />
+              <Skeleton class="h-8 w-20 rounded-md" />
+            </div>
+          </div>
         </div>
 
         <p v-else-if="isError" class="text-sm text-destructive">

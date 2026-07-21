@@ -34,10 +34,19 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 const router = useRouter();
 const { data, isPending, isError, error } = useMe();
+const { quantites, changer, fixer, vider, modification, nbCartons, lignes } =
+  usePanier();
 
 // L'admin n'a pas d'espace boutique : direction l'administration.
 watchEffect(() => {
@@ -45,8 +54,11 @@ watchEffect(() => {
 });
 
 const catalogue = useQuery({
-  queryKey: ["catalogue"],
-  queryFn: () => api.get<CatalogueClientResponse>("/catalogue"),
+  queryKey: computed(() => ["catalogue", modification.value?.idCommande ?? null]),
+  queryFn: () =>
+    api.get<CatalogueClientResponse>(
+      modification.value ? `/catalogue?commande=${modification.value.idCommande}` : "/catalogue",
+    ),
   // Cache client en préparation (compte tout juste activé) : les prix arrivent
   // en tâche de fond → on re-sonde jusqu'à ce qu'ils soient là.
   refetchInterval: (query) =>
@@ -68,10 +80,50 @@ const comptePreparation = computed(
     Boolean(catalogue.data.value?.cacheEnPreparation),
 );
 
-// --- Panier ---
+// --- Filtres du catalogue ---
 
-const { quantites, changer, fixer, vider, modification, nbCartons, lignes } =
-  usePanier();
+const filtreContenant = ref("tous");
+const filtrePackaging = ref("tous");
+const produitsCatalogue = computed(() =>
+  (catalogue.data.value?.produits ?? []).filter((produit) => !produit.historique),
+);
+const contenantsDisponibles = computed(() =>
+  [
+    ...new Set(
+      produitsCatalogue.value
+        .map((p) => p.contenant)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  ].sort((a, b) => a.localeCompare(b, "fr")),
+);
+const packagingsDisponibles = computed(() =>
+  [
+    ...new Set(
+      produitsCatalogue.value
+        .map((p) => p.packaging)
+        .filter((v): v is string => Boolean(v)),
+    ),
+  ].sort((a, b) => a.localeCompare(b, "fr")),
+);
+const produitsFiltres = computed(() =>
+  produitsCatalogue.value.filter(
+    (p) =>
+      (filtreContenant.value === "tous" ||
+        p.contenant === filtreContenant.value) &&
+      (filtrePackaging.value === "tous" ||
+        p.packaging === filtrePackaging.value),
+  ),
+);
+const filtresCatalogueActifs = computed(
+  () => filtreContenant.value !== "tous" || filtrePackaging.value !== "tous",
+);
+
+function reinitialiserFiltresCatalogue() {
+  filtreContenant.value = "tous";
+  filtrePackaging.value = "tous";
+}
+
+// --- Panier ---
 
 const produitsParId = computed(() => {
   const map = new Map<number, ProduitCatalogueClient>();
@@ -97,7 +149,11 @@ const lignesDetail = computed(() =>
             idContenant: produit.idContenant,
             idLot: produit.idLot,
             produit,
+            historique: produit.historique,
             sousTotal: (produit.prixHT ?? 0) * l.quantite,
+            quantiteMaximum: produit.historique
+              ? modification.value?.quantitesInitiales?.[l.idStockBouteille] ?? l.quantite
+              : undefined,
           }
         : null;
     })
@@ -165,9 +221,11 @@ const barreDepliee = ref(false);
 const queryClient = useQueryClient();
 const dialogOuvert = ref(false);
 const commentaire = ref("");
-const erreurEnvoi = ref<{ titre: string; message: string; aide?: string } | null>(
-  null,
-);
+const erreurEnvoi = ref<{
+  titre: string;
+  message: string;
+  aide?: string;
+} | null>(null);
 const confirmation = ref<{
   numero?: number | null;
   totalHT: number;
@@ -217,19 +275,23 @@ function erreurCommandeLisible(message: string) {
 const envoi = useMutation({
   mutationFn: () => {
     if (!lignes.value.length) {
-      throw new Error("Votre panier est vide.")
+      throw new Error("Votre panier est vide.");
     }
     if (lignesDetail.value.length !== lignes.value.length) {
-      throw new Error("Un produit du panier n'est plus disponible au catalogue. Retirez-le puis réessayez.")
+      throw new Error(
+        "Un produit du panier n'est plus disponible au catalogue. Retirez-le puis réessayez.",
+      );
     }
     if (commandeBloqueeParPrix.value) {
-      throw new Error("Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.")
+      throw new Error(
+        "Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.",
+      );
     }
     if (comptePreparation.value) {
-      throw new Error("Votre compte est en cours de préparation.")
+      throw new Error("Votre compte est en cours de préparation.");
     }
     if (sousMinimum.value && minimum.value != null) {
-      throw new Error(`Minimum de commande : ${prixFr(minimum.value)} HT.`)
+      throw new Error(`Minimum de commande : ${prixFr(minimum.value)} HT.`);
     }
     const body = { commentaire: commentaire.value, lignes: lignes.value };
     return modification.value
@@ -306,9 +368,9 @@ function supprimerLignePanier(idStockBouteille: number) {
         <div class="grid gap-0.5">
           <p class="font-medium">Votre compte se prépare…</p>
           <p>
-            Vos tarifs sont en cours de chargement. Patientez quelques instants :
-            la page se met à jour automatiquement. Si rien ne change, rafraîchissez
-            la page.
+            Vos tarifs sont en cours de chargement. Patientez quelques instants
+            : la page se met à jour automatiquement. Si rien ne change,
+            rafraîchissez la page.
           </p>
         </div>
       </div>
@@ -316,9 +378,9 @@ function supprimerLignePanier(idStockBouteille: number) {
       <!-- Bandeau mode modification -->
       <div
         v-if="modification"
-        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+        class="sticky top-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-background/95 px-4 py-3 shadow-sm backdrop-blur"
       >
-        <p class="text-sm">
+        <p class="min-w-0 flex-1 text-sm">
           <span class="font-semibold text-primary">
             Modification de la commande n°
             {{ modification.numero ?? modification.idCommande }}
@@ -328,9 +390,23 @@ function supprimerLignePanier(idStockBouteille: number) {
             annule et remplace la précédente.
           </span>
         </p>
-        <Button variant="outline" size="sm" @click="annulerModification"
-          >Annuler</Button
-        >
+        <div class="flex shrink-0 items-center gap-2">
+          <Button variant="outline" size="sm" @click="annulerModification">
+            Annuler
+          </Button>
+          <Button
+            size="sm"
+            :disabled="
+              sousMinimum ||
+              commandeBloqueeParPrix ||
+              comptePreparation ||
+              nbCartons === 0
+            "
+            @click="ouvrirRecap"
+          >
+            Mettre à jour
+          </Button>
+        </div>
       </div>
 
       <div
@@ -361,16 +437,60 @@ function supprimerLignePanier(idStockBouteille: number) {
             <Store class="size-5 text-muted-foreground" />
             Nos kombuchas
           </h1>
-          <p v-if="agePrixCatalogue" class="mt-1 text-xs text-muted-foreground">
+          <Skeleton
+            v-if="catalogue.isPending.value || isPending"
+            class="mt-2 h-3 w-44"
+          />
+          <p
+            v-else-if="agePrixCatalogue"
+            class="mt-1 text-xs text-muted-foreground"
+          >
             Tarifs synchronisés il y a {{ agePrixCatalogue }}.
           </p>
         </div>
 
         <div
           v-if="catalogue.isPending.value || isPending"
-          class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+          class="grid gap-5"
+          aria-label="Chargement du catalogue"
+          aria-busy="true"
         >
-          <Skeleton v-for="i in 6" :key="i" class="h-72 w-full rounded-2xl" />
+          <div class="grid gap-3 rounded-xl border bg-muted/20 p-3 sm:flex">
+            <div
+              v-for="i in 2"
+              :key="`filtre-${i}`"
+              class="grid gap-1.5 sm:w-56"
+            >
+              <Skeleton class="h-3 w-24" />
+              <Skeleton class="h-9 w-full rounded-md" />
+            </div>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <article
+              v-for="i in 6"
+              :key="i"
+              class="overflow-hidden rounded-2xl border bg-card"
+            >
+              <Skeleton class="aspect-[4/3] w-full rounded-none" />
+              <div class="grid gap-5 p-5">
+                <Skeleton class="h-5 w-3/4" />
+                <div class="flex gap-2">
+                  <Skeleton class="h-7 w-28 rounded-full" />
+                  <Skeleton class="h-7 w-24 rounded-full" />
+                </div>
+                <div
+                  class="mt-1 flex items-end justify-between rounded-xl bg-muted/20 px-3 py-2.5"
+                >
+                  <div class="grid gap-2">
+                    <Skeleton class="h-3 w-16" />
+                    <Skeleton class="h-7 w-24" />
+                  </div>
+                  <Skeleton class="h-4 w-6" />
+                </div>
+                <Skeleton class="h-10 w-full rounded-md" />
+              </div>
+            </article>
+          </div>
         </div>
 
         <p v-else-if="catalogue.isError.value" class="text-sm text-destructive">
@@ -388,16 +508,97 @@ function supprimerLignePanier(idStockBouteille: number) {
           Le catalogue n'est pas encore disponible — revenez bientôt.
         </p>
 
-        <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <ProduitCard
-            v-for="p in catalogue.data.value.produits"
-            :key="p.idStockBouteille"
-            :produit="p"
-            :quantite="quantites[p.idStockBouteille] ?? 0"
-            @changer="(delta) => changer(p.idStockBouteille, delta)"
-            @fixer="(quantite) => fixer(p.idStockBouteille, quantite)"
-          />
-        </div>
+        <template v-else>
+          <div
+            class="mb-5 grid gap-3 rounded-xl border bg-muted/20 p-3 sm:flex sm:flex-wrap sm:items-end"
+          >
+            <div class="grid gap-1.5 sm:w-56">
+              <Label class="text-xs text-muted-foreground">Contenant</Label>
+              <Select v-model="filtreContenant">
+                <SelectTrigger
+                  class="w-full bg-background"
+                  aria-label="Filtrer par contenant"
+                >
+                  <SelectValue placeholder="Tous les contenants" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tous">Tous les contenants</SelectItem>
+                  <SelectItem
+                    v-for="valeur in contenantsDisponibles"
+                    :key="valeur"
+                    :value="valeur"
+                  >
+                    {{ valeur }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div class="grid gap-1.5 sm:w-56">
+              <Label class="text-xs text-muted-foreground"
+                >Conditionnement</Label
+              >
+              <Select v-model="filtrePackaging">
+                <SelectTrigger
+                  class="w-full bg-background"
+                  aria-label="Filtrer par conditionnement"
+                >
+                  <SelectValue placeholder="Tous les conditionnements" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tous"
+                    >Tous les conditionnements</SelectItem
+                  >
+                  <SelectItem
+                    v-for="valeur in packagingsDisponibles"
+                    :key="valeur"
+                    :value="valeur"
+                  >
+                    {{ valeur }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              v-if="filtresCatalogueActifs"
+              type="button"
+              variant="ghost"
+              class="sm:mb-0"
+              @click="reinitialiserFiltresCatalogue"
+            >
+              Réinitialiser
+            </Button>
+          </div>
+
+          <div
+            v-if="!produitsFiltres.length"
+            class="grid justify-items-start gap-3 rounded-xl border border-dashed p-5"
+          >
+            <p class="text-sm text-muted-foreground">
+              Aucun produit ne correspond à ces filtres.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              @click="reinitialiserFiltresCatalogue"
+            >
+              Afficher tous les produits
+            </Button>
+          </div>
+
+          <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <ProduitCard
+              v-for="p in produitsFiltres"
+              :key="p.idStockBouteille"
+              :produit="p"
+              :quantite="quantites[p.idStockBouteille] ?? 0"
+              @changer="(delta) => changer(p.idStockBouteille, delta)"
+              @fixer="(quantite) => fixer(p.idStockBouteille, quantite)"
+            />
+          </div>
+        </template>
       </section>
     </div>
 
@@ -412,9 +613,7 @@ function supprimerLignePanier(idStockBouteille: number) {
                 : "Votre commande"
             }}
           </CardTitle>
-          <CardDescription v-if="modification">
-            La nouvelle version annule et remplace la précédente.
-          </CardDescription>
+          <CardDescription v-if="modification"> </CardDescription>
         </CardHeader>
         <CardContent>
           <PanierRecap
@@ -599,13 +798,20 @@ function supprimerLignePanier(idStockBouteille: number) {
             />
           </div>
           <div
-            v-if="commandeBloqueeParPrix || (sousMinimum && minimum != null) || erreurEnvoi"
+            v-if="
+              commandeBloqueeParPrix ||
+              (sousMinimum && minimum != null) ||
+              erreurEnvoi
+            "
             class="grid gap-2"
           >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
               Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
             </p>
-            <p v-if="sousMinimum && minimum != null" class="text-xs text-amber-700">
+            <p
+              v-if="sousMinimum && minimum != null"
+              class="text-xs text-amber-700"
+            >
               Minimum de commande : {{ prixFr(minimum) }} HT.
             </p>
             <div
@@ -616,10 +822,16 @@ function supprimerLignePanier(idStockBouteille: number) {
               <TriangleAlert class="mt-0.5 size-4 shrink-0" />
               <div class="min-w-0">
                 <p class="font-semibold">{{ erreurEnvoi.titre }}</p>
-                <p v-if="erreurEnvoi.message" class="mt-1 leading-snug break-words">
+                <p
+                  v-if="erreurEnvoi.message"
+                  class="mt-1 leading-snug break-words"
+                >
                   {{ erreurEnvoi.message }}
                 </p>
-                <p v-if="erreurEnvoi.aide" class="mt-1 text-xs text-destructive/80">
+                <p
+                  v-if="erreurEnvoi.aide"
+                  class="mt-1 text-xs text-destructive/80"
+                >
                   {{ erreurEnvoi.aide }}
                 </p>
               </div>

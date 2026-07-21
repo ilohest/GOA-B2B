@@ -206,7 +206,7 @@ async function onLogout() {
       </div>
     </div>
   </div>
-  <Toaster position="top-center" rich-colors />
+  <Toaster position="bottom-right" rich-colors />
 </template>
 
 <style scoped>

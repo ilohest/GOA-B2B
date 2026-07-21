@@ -83,9 +83,38 @@ watch(
         <DialogDescription v-if="data?.reference">Réf. {{ data.reference }}</DialogDescription>
       </DialogHeader>
 
-      <div v-if="isPending" class="grid gap-2">
-        <Skeleton class="h-24 w-full" />
-        <Skeleton class="h-16 w-full" />
+      <div
+        v-if="isPending"
+        class="grid gap-4"
+        aria-label="Chargement du détail de la commande"
+        aria-busy="true"
+      >
+        <div class="grid gap-3 sm:hidden">
+          <div v-for="i in 2" :key="i" class="grid gap-3 rounded-lg border p-3">
+            <div class="flex justify-between gap-3">
+              <Skeleton class="h-4 w-2/3" />
+              <Skeleton class="h-5 w-16" />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <Skeleton v-for="j in 4" :key="j" class="h-12 rounded-md" />
+            </div>
+          </div>
+        </div>
+        <div class="hidden overflow-hidden rounded-lg border sm:block">
+          <div class="grid grid-cols-6 gap-3 bg-muted p-3">
+            <Skeleton v-for="i in 6" :key="`head-${i}`" class="h-4" />
+          </div>
+          <div v-for="ligne in 3" :key="ligne" class="grid grid-cols-6 gap-3 border-t p-3">
+            <Skeleton class="h-4 w-3/4" />
+            <Skeleton v-for="i in 5" :key="i" class="h-4" />
+          </div>
+        </div>
+        <div class="ml-auto grid w-full max-w-xs gap-2 rounded-lg border p-3">
+          <div v-for="i in 3" :key="i" class="flex justify-between gap-4">
+            <Skeleton class="h-4 w-20" />
+            <Skeleton class="h-4 w-24" />
+          </div>
+        </div>
       </div>
 
       <!-- Ban Easybeer : message doux + réessai, plutôt qu'une erreur rouge -->
@@ -105,6 +134,14 @@ watch(
       </div>
 
       <div v-else-if="data" class="grid gap-4">
+        <dl
+          v-if="data.modeLivraison"
+          class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-lg border bg-muted/40 px-3 py-2 text-sm"
+        >
+          <dt class="text-muted-foreground">Mode de livraison</dt>
+          <dd class="font-medium">{{ data.modeLivraison }}</dd>
+        </dl>
+
         <div class="grid gap-3 sm:hidden">
           <article
             v-for="(l, i) in data.lignes"

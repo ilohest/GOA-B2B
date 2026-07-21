@@ -1,5 +1,53 @@
 import { describe, expect, it } from 'vitest'
-import { filtrerCommandesDepuis, resoudreGrilleRacine, type ModeleClientType } from '../src/easybeer.js'
+import {
+  CODES_TYPE_LIVRAISON,
+  filtrerCommandesDepuis,
+  idStockBouteilleElementCommande,
+  modeLivraisonCommande,
+  resoudreGrilleRacine,
+  type ModeleClientType,
+} from '../src/easybeer.js'
+
+describe('modes de livraison Easybeer', () => {
+  it('expose les cinq choix disponibles dans la fiche client', () => {
+    expect(CODES_TYPE_LIVRAISON).toEqual({
+      ENLEVEMENT: 'Enlèvement par le client',
+      TRANSPORTEUR: 'Livraison par transporteur',
+      SELF: 'Livraison par nos soins',
+      SELF_SERVICE: 'Livraison avec service',
+      POINT_RETRAIT: 'Point de retrait',
+    })
+  })
+
+  it('lit en priorité le mode enregistré sur la commande', () => {
+    expect(
+      modeLivraisonCommande({
+        typeLivraison: { code: 'TRANSPORTEUR', libelle: 'Livraison par transporteur' },
+        client: { typeLivraisonFav: 'Enlèvement par le client' },
+      }),
+    ).toBe('Livraison par transporteur')
+  })
+
+  it('accepte un code seul et les anciennes commandes qui ne portent que le réglage client', () => {
+    expect(modeLivraisonCommande({ typeLivraison: { code: 'SELF' } })).toBe('Livraison par nos soins')
+    expect(modeLivraisonCommande({ client: { typeLivraisonFav: 'Point de retrait' } })).toBe('Point de retrait')
+    expect(modeLivraisonCommande({})).toBeNull()
+  })
+})
+
+describe('lignes de commande Easybeer', () => {
+  it('retrouve l’unité quelle que soit la structure renvoyée par Easybeer', () => {
+    expect(idStockBouteilleElementCommande({ stockBouteille: { idStockBouteille: 101 } })).toBe(101)
+    expect(idStockBouteilleElementCommande({ modeleStockBouteille: { idStockBouteille: 102 } })).toBe(102)
+    expect(idStockBouteilleElementCommande({ stockProduit: { idStockBouteille: 103 } })).toBe(103)
+    expect(idStockBouteilleElementCommande({ stockProduit: { stockBouteille: { idStockBouteille: '104' } } })).toBe(104)
+    expect(idStockBouteilleElementCommande({ idStockBouteille: 105 })).toBe(105)
+  })
+
+  it('refuse une ligne sans identifiant exploitable', () => {
+    expect(idStockBouteilleElementCommande({ stockProduit: {} })).toBeNull()
+  })
+})
 
 describe('resoudreGrilleRacine', () => {
   const types: ModeleClientType[] = [

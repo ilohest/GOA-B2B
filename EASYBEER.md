@@ -155,6 +155,7 @@
     | `minimumCommande` / `minimumCommandeAutorise` (number) | Montant minimum HT | Par client (test : 30,0) |
     | `remise` / `remise2` (string) | Remise spéciale (% ou €) | String car « 10% » ou « 5€ » ; s'applique sur toute la commande |
     | `typeRemise2` (string) | Type de remise | additionnelle / cascade |
+    | `listePrix[]` | Tarifs personnalisés | Prix produit propres à ce client, avec produit, contenant, lot et `prixHT` |
     | `listeRemises[]` (`ModeleClientRemise`) | Remises ciblées | par produit/contenant/lot, `quantite`, `dateDebut/Fin`, `remise`, `type` |
     - ⚠️ L'endpoint `edition` **omet les champs nuls** : `fraisLivraisonHT`/`remise`/`typeRemise2` n'apparaissent
       que s'ils sont renseignés. Les champs **existent** toujours au modèle.
@@ -296,6 +297,12 @@
 - → Suivi « temps réel » possible : la plateforme lit l'état en direct ; GOA fait avancer la commande dans Easybeer.
 - ⚠️ **Parsing** : certaines réponses commande contiennent des **caractères de contrôle** (sauts de ligne dans
   un commentaire) qui cassent un JSON strict → parser en mode tolérant côté serveur.
+- ⚠️ Selon l'origine de la commande, l'identifiant d'une ligne peut se trouver dans
+  `stockBouteille`, `modeleStockBouteille`, `stockProduit` ou directement dans la ligne.
+  Le préremplissage du panier et l'upsert acceptent toutes ces structures.
+- Une unité masquée après la création d'une commande reste exposée uniquement
+  dans le contexte de modification de cette commande. Sa quantité peut être
+  conservée ou réduite, jamais augmentée ; elle demeure absente du catalogue normal.
 
 ---
 
@@ -389,22 +396,22 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
     réelle complète** (edition), **purger récursivement tous les `id*`** (sauf `idClientType`) et les
     sous-entités (`listeAdresseLivraison`, `listeRemises`, `tournee`, `numero`…), changer nom/email →
     **200 `{"id":<idClient>}`** (encore un format de réponse différent : ni `map.id`, ni objet complet).
-  - **Codes type de livraison** — ✅ validés (écriture + relecture) : `TRANSPORTEUR` → « Livraison
-    par transporteur », `ENLEVEMENT` → « Enlèvement par le client », `POINT_RETRAIT` → « Point de
-    retrait / Point relais ». ❌ Éliminés (200 mais rien stocké — échec silencieux) : `NOS_SOINS`,
+  - **Codes type de livraison** — les cinq codes exposés par l'interface Easybeer sont :
+    `ENLEVEMENT` → « Enlèvement par le client », `TRANSPORTEUR` → « Livraison par transporteur »,
+    `SELF` → « Livraison par nos soins », `SELF_SERVICE` → « Livraison avec service » et
+    `POINT_RETRAIT` → « Point de retrait ». `ENLEVEMENT`, `TRANSPORTEUR` et `POINT_RETRAIT` ont
+    été validés par écriture/relecture ; `SELF` et `SELF_SERVICE` ont été confirmés dans le code
+    public de l'interface Easybeer le 2026-07-21. ❌ Éliminés (200 mais rien stocké — échec silencieux) : `NOS_SOINS`,
     `PAR_NOS_SOINS`, `LIVRAISON_NOS_SOINS`?, `LIVREUR`, `DIRECT`, `LIVRAISON`, `LIVRAISON_DIRECTE`,
-    `SERVICE`, `AVEC_SERVICE`, `LIVRAISON_TRANSPORTEUR`. **Restent introuvables : « livraison par
-    nos soins » (mode des tournées GOA !) et « livraison avec service »** → demander à GOA de régler
-    UN client dans l'UI Easybeer sur « livraison par nos soins », puis relire sa fiche pour capter le
-    code exact (plus fiable que de continuer à deviner).
+    `SERVICE`, `AVEC_SERVICE`, `LIVRAISON_TRANSPORTEUR`.
   - **Suppression de client** : ✅ `GET /parametres/client/supprimer/{id}` → 200 `{}`, relecture
     ensuite en 400 (client bien disparu). Nettoyage du banc d'essai TERMINÉ (client fictif 824612 et
     tournée « ZZZ TEST » supprimés, tournées réelles AGEN/LIBOURNE/LIMOGES intactes, ids 5050-5052).
   - **Type de livraison préféré** : `type-livraison/attribuer` accepte `typeLivraisonFavFormulaire:
     ["TRANSPORTEUR"]` → ✅ `typeLivraisonFav` = « Livraison par transporteur ». ⚠️ Le candidat
     `LIVRAISON_TRANSPORTEUR` répond 200 mais ne stocke RIEN dans `typeLivraisonFav` (échec silencieux) —
-    toujours RELIRE après écriture. Codes des 4 autres modes encore à découvrir (probablement `ENLEVEMENT`,
-    `NOS_SOINS`?, `SERVICE`?, `POINT_RETRAIT`? — à tester sur le client fictif).
+    toujours RELIRE après écriture. La plateforme compare désormais la valeur relue au libellé attendu
+    avant de mettre son propre cache à jour.
   - **Minimum de commande** : ✅ relire la fiche complète → modifier `minimumCommande` +
     `minimumCommandeAutorise` → re-`POST client/enregistrer` (upsert, `{"id"}`) → relecture OK (42),
     fiche intacte (nom, type, email).

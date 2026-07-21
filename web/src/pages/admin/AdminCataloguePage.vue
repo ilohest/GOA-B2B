@@ -52,8 +52,8 @@ const actualisation = useMutation({
 })
 
 const recherche = ref('')
-/** Filtres rapides — réservés à la vue MOBILE (le desktop trie par colonnes). */
-const filtreEtat = ref<'tous' | 'visibles' | 'masques' | 'rupture' | 'sans-image'>('tous')
+/** Filtre d'état partagé par les indicateurs de visibilité et de rupture. */
+const filtreEtat = ref<'tous' | 'visibles' | 'rupture'>('tous')
 type BrouillonCatalogue = Partial<Pick<CatalogueOverride, 'displayName' | 'visible' | 'rupture' | 'photoUrl'>>
 const brouillons = ref<Record<number, BrouillonCatalogue>>({})
 
@@ -88,23 +88,13 @@ const unitesFiltrees = computed(() => {
     const correspondEtat =
       filtreEtat.value === 'tous' ||
       (filtreEtat.value === 'visibles' && override.visible) ||
-      (filtreEtat.value === 'masques' && !override.visible) ||
-      (filtreEtat.value === 'rupture' && override.rupture) ||
-      (filtreEtat.value === 'sans-image' && !override.photoUrl)
+      (filtreEtat.value === 'rupture' && override.rupture)
     const correspondColonnes =
       (filtresColonne.value.contenant === 'tous' || u.contenant === filtresColonne.value.contenant) &&
       (filtresColonne.value.packaging === 'tous' || u.packaging === filtresColonne.value.packaging)
     return correspondRecherche && correspondEtat && correspondColonnes
   })
 })
-
-const filtresEtat = computed(() => [
-  { cle: 'tous' as const, label: 'Tous' },
-  { cle: 'visibles' as const, label: 'Visibles' },
-  { cle: 'masques' as const, label: 'Masqués' },
-  { cle: 'rupture' as const, label: 'Rupture' },
-  { cle: 'sans-image' as const, label: 'Sans image' },
-])
 
 function basculerFiltreEtat(cle: typeof filtreEtat.value) {
   filtreEtat.value = filtreEtat.value === cle ? 'tous' : cle
@@ -315,7 +305,8 @@ async function retirerPhoto(idStockBouteille: number) {
           </div>
           <div class="grid justify-items-start gap-2 sm:justify-items-end">
             <div class="flex items-center gap-2">
-              <p v-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
+              <Skeleton v-if="isPending" class="h-3 w-36" />
+              <p v-else-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
                 À jour : {{ dateHeureFr(data.syncedAt) }}
               </p>
               <EasybeerLink
@@ -338,24 +329,57 @@ async function retirerPhoto(idStockBouteille: number) {
             <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input v-model="recherche" placeholder="Rechercher (produit, contenant, packaging)…" class="pl-9" />
           </div>
-          <!-- Filtres rapides : MOBILE uniquement (sur desktop on trie par colonnes). -->
-          <div class="flex gap-2 overflow-x-auto pb-1 md:hidden">
-            <Button
-              v-for="filtre in filtresEtat"
-              :key="filtre.cle"
-              type="button"
-              size="sm"
-              :variant="filtreEtat === filtre.cle ? 'default' : 'outline'"
-              class="shrink-0"
-              @click="filtreEtat = filtre.cle"
-            >
-              {{ filtre.label }}
-            </Button>
-          </div>
         </div>
 
-        <div v-if="isPending" class="grid gap-2">
-          <Skeleton v-for="i in 6" :key="i" class="h-24 w-full" />
+        <div
+          v-if="isPending"
+          class="grid gap-3"
+          aria-label="Chargement du catalogue administrateur"
+          aria-busy="true"
+        >
+          <div class="flex flex-wrap gap-2">
+            <Skeleton class="h-7 w-36 rounded-md" />
+            <Skeleton class="h-7 w-32 rounded-md" />
+            <Skeleton class="h-7 w-44 rounded-md" />
+          </div>
+          <div class="grid gap-3 md:hidden">
+            <div v-for="i in 5" :key="i" class="grid gap-3 rounded-xl border p-3">
+              <div class="flex items-start gap-3">
+                <Skeleton class="size-16 shrink-0 rounded-lg" />
+                <div class="grid flex-1 gap-2">
+                  <Skeleton class="h-4 w-3/4" />
+                  <div class="flex gap-2">
+                    <Skeleton class="h-6 w-28 rounded-full" />
+                    <Skeleton class="h-6 w-24 rounded-full" />
+                  </div>
+                </div>
+              </div>
+              <div class="flex justify-between gap-3">
+                <Skeleton class="h-8 w-32 rounded-md" />
+                <Skeleton class="h-8 w-20 rounded-md" />
+              </div>
+            </div>
+          </div>
+          <div class="hidden overflow-hidden rounded-lg border md:block">
+            <div class="grid grid-cols-[4rem_1.2fr_1fr_1fr_.8fr_.7fr] gap-4 bg-muted p-3">
+              <Skeleton v-for="i in 6" :key="`head-${i}`" class="h-4" />
+            </div>
+            <div
+              v-for="ligne in 6"
+              :key="ligne"
+              class="grid grid-cols-[4rem_1.2fr_1fr_1fr_.8fr_.7fr] items-center gap-4 border-t p-3"
+            >
+              <Skeleton class="size-12 rounded-md" />
+              <Skeleton class="h-4 w-4/5" />
+              <Skeleton class="h-4 w-3/4" />
+              <Skeleton class="h-4 w-3/4" />
+              <Skeleton class="h-4 w-20" />
+              <div class="flex gap-2">
+                <Skeleton class="h-6 w-14 rounded-full" />
+                <Skeleton class="h-6 w-14 rounded-full" />
+              </div>
+            </div>
+          </div>
         </div>
         <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
         <p v-else-if="!data?.unites.length" class="py-8 text-center text-sm text-muted-foreground">

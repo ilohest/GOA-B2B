@@ -16,8 +16,10 @@ import {
   attribuerTypeLivraison,
   majMinimumClient,
   CODES_TYPE_LIVRAISON,
+  modeLivraisonCommande,
   enregistrerCommande,
   modifierCommande,
+  idStockBouteilleElementCommande,
   detailCommande,
   telechargerDocument,
   listeDocumentsFacturesRecentes,
@@ -39,6 +41,7 @@ import {
   lancerSync,
   lancerRafraichissementCatalogue,
   normaliserEtatCommande,
+  normaliserTarifsPersonnalises,
   rafraichirCacheClientCible,
   remplirCacheClientCible,
   SYNC_LOCK_TTL_MS,
@@ -311,6 +314,18 @@ app.get('/api/catalogue', requireAuth, async (c) => {
   const db = getDb()
   if (!db) return c.json({ produits: await listeProduitsAutocomplete() })
 
+  const idsCommande = new Set<number>()
+  const idCommandeModification = Number(c.req.query('commande'))
+  if (Number.isFinite(idCommandeModification)) {
+    if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+    const commande = await chargerCommandeClient(idCommandeModification, user.easybeerIdClient)
+    if (!commande) return c.json({ error: 'Commande introuvable' }, 404)
+    for (const element of (commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []) {
+      const id = idStockBouteilleElementCommande(element)
+      if (id != null) idsCommande.add(id)
+    }
+  }
+
   const [{ catalogue: catalogueCache, grille, types, revalidationEnCours }, overrides] = await Promise.all([
     lireCachesCatalogueResilients(db),
     lireOverrides(db),
@@ -360,6 +375,7 @@ app.get('/api/catalogue', requireAuth, async (c) => {
       maxAgeMs: prixMaxAgeMs,
       tagsClient: cacheClient?.client.tags,
       unitesMeta,
+      idsInclus: idsCommande,
     })
   let produitsClient = construireCatalogueClient()
   let revalidationDemandee = revalidationEnCours
@@ -383,7 +399,7 @@ app.get('/api/catalogue', requireAuth, async (c) => {
     cacheClient &&
     cacheClientDoitEtreRafraichi(
       cacheClient,
-      produitsClient.map((p) => p.idStockBouteille),
+      produitsClient.filter((p) => !p.historique).map((p) => p.idStockBouteille),
       config.cache.prixRefreshAgeMinutes * 60_000,
     )
   ) {
@@ -566,6 +582,7 @@ async function resoudreLignes(
   db: NonNullable<ReturnType<typeof getDb>>,
   easybeerIdClient: number,
   lignesInput: { idStockBouteille: number; quantite: number }[],
+  quantitesOriginales: Map<number, number> | null = null,
 ): Promise<
   | { ok: false; erreur: string }
   | {
@@ -629,8 +646,15 @@ async function resoudreLignes(
   for (const l of valides) {
     const produit = parId.get(l.idStockBouteille)
     const override = overrides[String(l.idStockBouteille)]
-    if (!produit || !override?.visible) return ko(`Produit ${l.idStockBouteille} indisponible au catalogue`)
-    if (override.rupture) return ko(`« ${override.displayName || produit.libelle} » est en rupture`)
+    const quantiteOriginale = quantitesOriginales?.get(l.idStockBouteille)
+    const ligneHistorique = quantiteOriginale != null
+    if (!produit || (!override?.visible && !ligneHistorique)) {
+      return ko(`Produit ${l.idStockBouteille} indisponible au catalogue`)
+    }
+    if ((!override?.visible || override.rupture) && ligneHistorique && l.quantite > quantiteOriginale) {
+      return ko(`La quantité de « ${override?.displayName || produit.libelle} » ne peut pas être augmentée`)
+    }
+    if (override?.rupture && !ligneHistorique) return ko(`« ${override.displayName || produit.libelle} » est en rupture`)
     const { prixHT, updatedAt } = resoudrePrixUnite(l.idStockBouteille, {
       prixClient: cacheClient.prix,
       prixUpdatedAt: cacheClient.prixUpdatedAt,
@@ -928,8 +952,7 @@ function construireDetailCommande(
       .map(formaterLibelleRemise)
       .filter((libelle): libelle is string => Boolean(libelle))
     const remiseLabel = [...new Set(libellesRemise)].join(' + ') || null
-    const stockBouteille = sousObjet(e, ['stockBouteille', 'modeleStockBouteille', 'stockProduit'])
-    const idStockBouteille = nombreDepuis(stockBouteille, ['idStockBouteille']) ?? nombreDepuis(e, ['idStockBouteille'])
+    const idStockBouteille = idStockBouteilleElementCommande(e)
     const remiseLocale = idStockBouteille != null ? remisesLocalesParStock.get(idStockBouteille) : null
     const tvaLigne =
       (e.totalTVA as number | undefined) ??
@@ -963,6 +986,7 @@ function construireDetailCommande(
     totalTTC: commande.totalTTC ?? null,
     remiseTotale: commande.remiseTotale ?? remisesLocales?.globaleMontant ?? null,
     remiseLabel: remisesLocales?.globaleLabel ?? null,
+    modeLivraison: modeLivraisonCommande(commande),
     commentaire: (commande.commentaire as string) || '',
     lignes,
     documents,
@@ -1019,17 +1043,24 @@ app.get('/api/commandes/:id/edition', requireAuth, async (c) => {
   if (!commande) return c.json({ error: 'Commande introuvable' }, 404)
 
   const etat = codeEtat(commande.etat)
-  const lignes = ((commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []).map((e) => ({
-    idStockBouteille: (e.stockBouteille as { idStockBouteille?: number })?.idStockBouteille ?? null,
-    quantite: e.quantite as number,
+  const elements = (commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []
+  const lignes = elements.map((element) => ({
+    idStockBouteille: idStockBouteilleElementCommande(element),
+    quantite: nombreDepuis(element, ['quantite']) ?? 0,
   }))
+  if (!lignes.length || lignes.some((ligne) => ligne.idStockBouteille == null)) {
+    return c.json(
+      { error: "Cette commande contient un produit qu'Easybeer ne permet pas d'identifier. Elle ne peut pas être modifiée depuis la plateforme." },
+      422,
+    )
+  }
   return c.json({
     idCommande,
     numero: commande.numero ?? null,
     etat,
     modifiable: !ETATS_NON_MODIFIABLES.has(etat),
     commentaire: (commande.commentaire as string) ?? '',
-    lignes,
+    lignes: lignes as { idStockBouteille: number; quantite: number }[],
   })
 })
 
@@ -1054,8 +1085,14 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
   const parse = parserBody(CommandeBodySchema, await c.req.json().catch(() => null))
   if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
   const body = parse.data
+  const quantitesOriginales = new Map<number, number>()
+  for (const element of (commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []) {
+    const id = idStockBouteilleElementCommande(element)
+    const quantite = nombreDepuis(element, ['quantite'])
+    if (id != null && quantite != null) quantitesOriginales.set(id, quantite)
+  }
 
-  const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes)
+  const resolution = await resoudreLignes(db, user.easybeerIdClient, body.lignes, quantitesOriginales)
   if (!resolution.ok) return c.json({ error: resolution.erreur }, 400)
   const { lignes, totalHT, remisesEstimees } = resolution
 
@@ -1347,6 +1384,7 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
       typeLivraisonFav: client.typeLivraisonFav || null,
       tournee: client.tournee?.libelle ?? null,
       tags: client.tags ?? null,
+      tarifsPersonnalises: normaliserTarifsPersonnalises(client.listePrix),
     },
     commandes,
     comptes,
@@ -1380,6 +1418,8 @@ app.post('/api/admin/clients/bulk-params', requireAuth, requireAdmin, async (c) 
   }
 
   const erreurs: string[] = []
+  const idsMinimumMisAJour = new Set<number>()
+  let typeLivraisonVerifie = typeLivraison == null
 
   if (idClientTournee != null) {
     await attribuerTournee(idClientTournee, idsClients)
@@ -1389,8 +1429,12 @@ app.post('/api/admin/clients/bulk-params', requireAuth, requireAdmin, async (c) 
     await attribuerTypeLivraison(typeLivraison, idsClients)
     // Relecture de contrôle sur le premier client (échec silencieux documenté).
     const controle = await getClient(idsClients[0])
-    if (!controle?.typeLivraisonFav) {
-      erreurs.push('Mode de livraison : la relecture de contrôle est vide — vérifier dans Easybeer')
+    const libelleAttendu = CODES_TYPE_LIVRAISON[typeLivraison]
+    typeLivraisonVerifie = controle?.typeLivraisonFav === libelleAttendu
+    if (!typeLivraisonVerifie) {
+      erreurs.push(
+        `Mode de livraison : Easybeer n'a pas enregistré « ${libelleAttendu} » — vérifier la fiche client`,
+      )
     }
   }
 
@@ -1398,27 +1442,37 @@ app.post('/api/admin/clients/bulk-params', requireAuth, requireAdmin, async (c) 
     for (const idClient of idsClients) {
       try {
         await majMinimumClient(idClient, minimumCommande)
+        idsMinimumMisAJour.add(idClient)
       } catch (e) {
         erreurs.push(`minimum client ${idClient} : ${(e as Error).message}`)
       }
     }
   }
 
-  // Rafraîchit le cache des clients à compte concernés (minimum affiché côté boutique).
+  // Répercute immédiatement les valeurs confirmées dans les caches déjà créés.
+  // Un document absent n'est pas créé partiellement : il sera rempli avec la
+  // fiche et les prix complets lors de la prochaine consultation de la boutique.
+  // Surtout, un minimum en échec ne doit jamais être écrit dans le cache.
   const db = getDb()
   if (db && (minimumCommande != null || typeLivraison != null)) {
     for (const idClient of idsClients) {
-      const ref = db.doc(`cacheClients/${idClient}`)
-      if ((await ref.get()).exists) {
-        await ref.set(
-          {
-            client: {
-              ...(minimumCommande != null ? { minimumCommande } : {}),
-              ...(typeLivraison != null ? { typeLivraisonFav: CODES_TYPE_LIVRAISON[typeLivraison] } : {}),
-            },
-          },
-          { merge: true },
-        )
+      const clientMaj = {
+        ...(minimumCommande != null && idsMinimumMisAJour.has(idClient) ? { minimumCommande } : {}),
+        ...(typeLivraison != null && typeLivraisonVerifie
+          ? { typeLivraisonFav: CODES_TYPE_LIVRAISON[typeLivraison] }
+          : {}),
+      }
+      if (Object.keys(clientMaj).length === 0) continue
+
+      try {
+        const ref = db.doc(`cacheClients/${idClient}`)
+        if ((await ref.get()).exists) {
+          await ref.set({ client: clientMaj }, { merge: true })
+        }
+      } catch (e) {
+        // L'écriture Easybeer a déjà réussi : ne pas faire échouer toute la
+        // requête (et risquer de rejouer la mutation), mais rendre l'incident visible.
+        erreurs.push(`cache client ${idClient} : ${(e as Error).message}`)
       }
     }
   }

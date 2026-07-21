@@ -1,4 +1,4 @@
-<!-- guide-version: 1.27 -->
+<!-- guide-version: 1.44 -->
 <!-- guide-updated-at: 2026-07-21 -->
 
 # Guide administrateur — plateforme de commande GOA
@@ -43,10 +43,10 @@ la dernière version connue des produits, des prix et des clients.
   consulte la boutique, au plus tard après **6 heures**.
 - Une mise à jour automatique quotidienne peut être ajoutée par sécurité, mais
   elle n'est pas nécessaire pour que le catalogue client fonctionne.
-- Le bouton **« Actualiser depuis Easybeer »** permet de demander immédiatement
+- Le bouton **« Tout synchroniser »** du tableau de bord permet de demander immédiatement
   une mise à jour complète si vous venez de faire un changement important.
 
-### Quand cliquer sur « Actualiser depuis Easybeer » ?
+### Quand cliquer sur « Tout synchroniser » ?
 
 Utilisez-le seulement dans ces cas :
 
@@ -59,6 +59,11 @@ Utilisez-le seulement dans ces cas :
 Évitez de cliquer plusieurs fois : Easybeer limite le nombre de demandes. La
 plateforme empêche les mises à jour en double et affiche un compte à rebours si
 Easybeer est momentanément saturé.
+
+Vous pouvez changer de page pendant la synchronisation : elle continue côté
+serveur. En revenant sur le tableau de bord, son état et le résultat enregistré
+sont de nouveau affichés. Il n'est donc pas nécessaire de laisser cette page
+ouverte.
 
 ### Ce qui se met à jour autrement
 
@@ -80,6 +85,9 @@ Easybeer est momentanément saturé.
 
 Les pages Clients, Commandes et Catalogue affichent leur date de dernière mise à
 jour. Leurs boutons servent à actualiser uniquement la page concernée.
+
+Pendant le chargement d'une page, des aperçus gris reprennent la forme du contenu
+à venir. Ils disparaissent automatiquement dès que les informations sont prêtes.
 
 **Sécurité sur les prix** : la plateforme utilise d'abord le tarif négocié du
 client, puis le tarif de sa catégorie si nécessaire. Si elle ne peut confirmer
@@ -107,6 +115,12 @@ Pour chaque unité vous pouvez :
 
 La **visibilité s'applique à l'unité** (un conditionnement) : tous ses tarifs
 suivent. Le client ne voit que **le prix de son type** (voir §5).
+
+Dans la boutique, le client peut filtrer les produits par **contenant** et par
+**conditionnement**. Les deux filtres peuvent être utilisés en même temps.
+
+Dans le catalogue administrateur, la recherche et les filtres placés au-dessus
+de la liste sont identiques sur mobile et sur ordinateur.
 
 > **La rupture est gérée ICI, pas par le stock Easybeer.** Un produit en stock
 > chez Easybeer peut être masqué/en rupture dans l'app, et inversement : c'est
@@ -215,7 +229,14 @@ clients de ce type.
 
 - La liste **Clients** est mise à jour depuis Easybeer. La date de dernière mise
   à jour est affichée sur la page. Cliquez sur un client pour voir sa fiche
-  (conditions commerciales, historique, comptes plateforme).
+  (conditions commerciales, tarifs personnalisés, historique, comptes
+  plateforme). Les **tarifs personnalisés** sont les prix définis spécialement
+  pour ce client dans Easybeer ; ils sont affichés séparément des remises.
+  La fiche affiche le minimum de commande, mais pas les frais de livraison.
+  Les boutons placés à côté de l'e-mail et des adresses permettent de les copier
+  directement dans le presse-papiers.
+  Sur mobile et tablette, les remises sont présentées verticalement pour que le
+  détail du client individuel et de son type reste entièrement lisible.
 - **Inviter un client** : depuis la liste (bouton « Inviter » / « Inviter la
   sélection ») ou depuis sa fiche. Un **email** « créez votre mot de passe » lui
   est envoyé automatiquement ; un **lien** est copiable si besoin.
@@ -226,8 +247,18 @@ clients de ce type.
 - **Paramètres en masse** : sélectionnez plusieurs clients, puis appliquez-leur
   en une seule action une **tournée**, un **mode de livraison** ou un **minimum de
   commande**. Les modifications sont enregistrées directement dans Easybeer.
+  Les cinq modes proposés dans Easybeer sont disponibles : enlèvement par le
+  client, livraison par transporteur, livraison par nos soins, livraison avec
+  service et point de retrait.
   Pour un minimum de commande, une grande sélection peut prendre plusieurs
-  minutes ; la progression est affichée à l'écran.
+  minutes ; la progression est affichée à l'écran. Une confirmation indique
+  ensuite le réglage appliqué et le nombre de clients traités. Les fiches des
+  clients concernés et les informations utilisées par leur boutique sont mises
+  à jour dans la foulée : il n'est pas nécessaire d'attendre la prochaine
+  synchronisation pour voir le nouveau réglage.
+
+Après une action d'administration, une notification apparaît en bas à droite de
+l'écran pour confirmer sa réussite ou signaler un problème.
 
 ## 8. Transport et livraison
 
@@ -235,12 +266,12 @@ Deux modes de livraison :
 
 - **Palette / frigo (par défaut)** : le mode normal, aucune contrainte de
   colisage. La plateforme ne facture pas de frais de livraison.
-- **La Poste J+1** (petits clients type CHR) : colisage contraint → la commande
+- **La Poste J+1** : colisage contraint → la commande
   doit être un **multiple de 3 cartons de 35 cl** ou **2 cartons de 1 L**. La
   plateforme impose automatiquement ce multiple au panier.
 
 La contrainte de colisage se gère avec un **tag `laposte`** sur la fiche client
-Easybeer : un client tagué `laposte` subit la règle des multiples ; **sans ce
+Easybeer (onglet « Général »): un client tagué `laposte` subit la règle des multiples ; **sans ce
 tag, il est en mode palette** (par défaut). Le champ “mode de livraison” Easybeer
 peut être renseigné depuis l'admin, mais la règle de multiples de cartons côté
 boutique dépend bien du tag `laposte`. Rien à choisir par commande.
@@ -249,6 +280,8 @@ boutique dépend bien du tag `laposte`. Rien à choisir par commande.
 
 - La page **Commandes** affiche les commandes récentes des 30 derniers jours.
   Cliquez une commande pour voir son détail (lignes, totaux, documents).
+- Le détail affiche également le **mode de livraison enregistré pour cette
+  commande**. Le client retrouve la même information dans son historique.
 - Les boutons **« Ouvrir dans Easybeer »** renvoient directement vers la fiche
   correspondante dans Easybeer (commande, client, grille tarifaire).
 - Une commande passée sur la plateforme est **poussée dans Easybeer** ; c'est là
@@ -258,13 +291,21 @@ boutique dépend bien du tag `laposte`. Rien à choisir par commande.
 - **Modification client** : une commande reste modifiable tant qu'elle n'est pas
   `LIVREE` ou `ANNULEE`. Un client peut donc encore modifier une commande **déjà
   en préparation**. Avant de préparer ou d'expédier une commande, vérifiez que
-  vous consultez bien sa dernière version dans Easybeer.
+  vous consultez bien sa dernière version dans Easybeer. Le bouton de
+  modification recharge automatiquement dans le panier les produits et les
+  quantités de la commande. Pendant les ajustements, le bandeau de modification
+  reste visible et permet à tout moment d'annuler ou de passer à la confirmation
+  avec le bouton **« Mettre à jour »**.
+- **Cas limite — produit retiré du catalogue** : si un produit a été masqué
+  depuis la commande initiale, le client le retrouve tout de même dans son panier
+  avec la mention **« Hors catalogue »**. Il peut conserver la quantité déjà
+  commandée, la réduire ou retirer le produit, mais il ne peut pas en ajouter.
 
 ## 10. Questions fréquentes
 
 **J'ai changé un prix dans Easybeer, le client voit encore l'ancien.**
 → La mise à jour automatique peut prendre jusqu'à 30 minutes. Si le changement
-doit être visible immédiatement, cliquez **« Actualiser depuis Easybeer »** sur
+doit être visible immédiatement, cliquez **« Tout synchroniser »** sur
 le tableau de bord.
 
 **Je rends un produit visible : son prix apparaît-il tout de suite ?**
@@ -285,7 +326,7 @@ fiche **type de client** si elle concerne tous les clients de ce type. Ne
 remplissez pas **Remise 2** : Easybeer peut l'afficher mais ne l'applique pas
 correctement au total de commande.
 
-**Faut-il cliquer tous les jours sur « Actualiser depuis Easybeer » ?**
+**Faut-il cliquer tous les jours sur « Tout synchroniser » ?**
 → Non. La boutique vérifie et met à jour ses informations automatiquement. Le
 bouton manuel sert seulement en cas de changement urgent ou si le tableau de
 bord signale des informations trop anciennes.

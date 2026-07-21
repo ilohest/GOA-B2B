@@ -1,7 +1,12 @@
 import { computed, ref, watch } from 'vue'
 
 const CLE_STOCKAGE = 'goa-panier-v1'
-type ModificationPanier = { idCommande: number; numero: number | null; commentaire: string }
+type ModificationPanier = {
+  idCommande: number
+  numero: number | null
+  commentaire: string
+  quantitesInitiales: Record<number, number>
+}
 type PanierStocke = {
   quantites?: Record<string, number>
   modification?: ModificationPanier | null
@@ -80,16 +85,19 @@ export function usePanier() {
     idCommande: number
     numero: number | null
     commentaire: string
-    lignes: { idStockBouteille: number | null; quantite: number }[]
+    lignes: { idStockBouteille: number; quantite: number }[]
   }) => {
     quantites.value = {}
     for (const l of commande.lignes) {
-      if (l.idStockBouteille != null && l.quantite > 0) quantites.value[l.idStockBouteille] = l.quantite
+      if (l.quantite > 0) quantites.value[l.idStockBouteille] = l.quantite
     }
     modification.value = {
       idCommande: commande.idCommande,
       numero: commande.numero,
       commentaire: commande.commentaire,
+      quantitesInitiales: Object.fromEntries(
+        commande.lignes.map((ligne) => [ligne.idStockBouteille, ligne.quantite]),
+      ),
     }
   }
 

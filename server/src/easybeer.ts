@@ -164,6 +164,28 @@ export interface ModeleClientTournee {
   minimumCommande?: number
 }
 
+export interface ModeleClientPrix {
+  id?: number
+  type?: string
+  modeleProduit?: {
+    idProduit?: number
+    nom?: string
+    nomCommercial?: string
+    libelle?: string
+  } | null
+  modeleContenant?: {
+    idContenant?: number
+    libelle?: string
+    libelleAvecContenance?: string
+  } | null
+  modeleLot?: {
+    idLot?: number
+    libelle?: string
+  } | null
+  prixHT?: number
+  idClient?: number
+}
+
 export interface ModeleClientType {
   idClientType?: number
   libelle?: string
@@ -196,6 +218,8 @@ export interface ModeleClient {
   typeLivraisonFav?: string
   tags?: string[] | string
   tournee?: { idClientTournee?: number; libelle?: string; minimumCommande?: number } | null
+  /** Tarifs définis spécialement sur la fiche de ce client, hors remises. */
+  listePrix?: ModeleClientPrix[]
   listeRemises?: Record<string, unknown>[]
   adresseLivraisonDefaut?: ModeleAdresse & { complete?: string }
 }
@@ -216,6 +240,26 @@ export interface ProduitAutocomplete {
   idContenant?: number
   idLot?: number
   tauxTVA?: ModeleTauxTVA
+}
+
+/**
+ * Easybeer n'utilise pas toujours la même propriété pour identifier l'unité
+ * d'une ligne de commande (commande web, manuelle ou ancienne).
+ */
+export function idStockBouteilleElementCommande(element: Record<string, unknown>): number | null {
+  const stockProduit = element.stockProduit as Record<string, unknown> | undefined
+  const candidats = [
+    element.idStockBouteille,
+    (element.stockBouteille as Record<string, unknown> | undefined)?.idStockBouteille,
+    (element.modeleStockBouteille as Record<string, unknown> | undefined)?.idStockBouteille,
+    stockProduit?.idStockBouteille,
+    (stockProduit?.stockBouteille as Record<string, unknown> | undefined)?.idStockBouteille,
+  ]
+  for (const candidat of candidats) {
+    const id = typeof candidat === 'string' ? Number(candidat) : candidat
+    if (typeof id === 'number' && Number.isFinite(id) && id > 0) return id
+  }
+  return null
 }
 
 export interface PaginationParams {
@@ -283,14 +327,46 @@ export async function attribuerTournee(idClientTournee: number, idsClients: numb
 }
 
 /**
- * Codes du « type de livraison préféré » VALIDÉS par écriture+relecture sur
- * client fictif (2026-07-09). ⚠️ Un code inconnu répond 200 mais ne stocke
- * RIEN (échec silencieux) → toujours relire après écriture.
+ * Codes du « type de livraison préféré » exposés par l'interface Easybeer.
+ * ⚠️ Un code inconnu répond 200 mais ne stocke RIEN (échec silencieux) :
+ * toujours comparer la valeur relue après écriture.
  */
 export const CODES_TYPE_LIVRAISON: Record<string, string> = {
-  TRANSPORTEUR: 'Livraison par transporteur',
   ENLEVEMENT: 'Enlèvement par le client',
-  POINT_RETRAIT: 'Point de retrait / Point relais',
+  TRANSPORTEUR: 'Livraison par transporteur',
+  SELF: 'Livraison par nos soins',
+  SELF_SERVICE: 'Livraison avec service',
+  POINT_RETRAIT: 'Point de retrait',
+}
+
+function libelleTypeLivraison(valeur: unknown): string | null {
+  if (typeof valeur === 'string' && valeur.trim()) {
+    const texte = valeur.trim()
+    return CODES_TYPE_LIVRAISON[texte] ?? texte
+  }
+  if (!valeur || typeof valeur !== 'object') return null
+  const livraison = valeur as { code?: unknown; libelle?: unknown }
+  if (typeof livraison.libelle === 'string' && livraison.libelle.trim()) return livraison.libelle.trim()
+  if (typeof livraison.code === 'string' && livraison.code.trim()) {
+    const code = livraison.code.trim()
+    return CODES_TYPE_LIVRAISON[code] ?? code
+  }
+  return null
+}
+
+/**
+ * Mode associé à la commande. Le champ historique de la commande prime ; les
+ * replis couvrent les anciennes structures renvoyées par Easybeer.
+ */
+export function modeLivraisonCommande(commande: Record<string, unknown>): string | null {
+  const client = commande.client && typeof commande.client === 'object'
+    ? commande.client as Record<string, unknown>
+    : null
+  return (
+    libelleTypeLivraison(commande.typeLivraison) ??
+    libelleTypeLivraison(commande.typeLivraisonFav) ??
+    libelleTypeLivraison(client?.typeLivraisonFav)
+  )
 }
 
 /** POST /parametres/client/type-livraison/attribuer — bulk, échec silencieux possible. */
@@ -551,7 +627,7 @@ export async function modifierCommande(input: {
 
   const existants = (commande.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []
   const parIdStock = new Map(
-    existants.map((e) => [(e.stockBouteille as { idStockBouteille?: number })?.idStockBouteille, e]),
+    existants.map((e) => [idStockBouteilleElementCommande(e), e]),
   )
 
   commande.elementsBouteilles = input.lignes.map((l) => {

@@ -186,6 +186,12 @@ async function modifier(commande: CommandeResume) {
       toast.error("Cette commande ne peut plus être modifiée.");
       return;
     }
+    if (!edition.lignes.length || edition.lignes.some((ligne) => ligne.idStockBouteille == null)) {
+      toast.error("Cette commande ne peut pas être chargée dans le panier.", {
+        description: "Un produit de la commande n'est plus identifiable dans Easybeer.",
+      });
+      return;
+    }
     chargerCommande(edition);
     toast.info("Commande chargée dans le panier — ajustez puis validez.");
     router.push("/");
@@ -207,8 +213,29 @@ async function modifier(commande: CommandeResume) {
       <CardDescription> </CardDescription>
     </CardHeader>
     <CardContent>
-      <div v-if="isPending" class="grid gap-2">
-        <Skeleton v-for="i in 4" :key="i" class="h-14 w-full" />
+      <div
+        v-if="isPending"
+        class="divide-y"
+        aria-label="Chargement des commandes"
+        aria-busy="true"
+      >
+        <div
+          v-for="i in 4"
+          :key="i"
+          class="flex flex-wrap items-center justify-between gap-3 py-5 first:pt-0"
+        >
+          <div class="grid gap-2">
+            <div class="flex items-center gap-2">
+              <Skeleton class="h-4 w-32" />
+              <Skeleton class="h-5 w-20 rounded-full" />
+            </div>
+            <Skeleton class="h-3 w-24" />
+          </div>
+          <div class="flex items-center gap-3">
+            <Skeleton class="h-4 w-20" />
+            <Skeleton class="h-8 w-20 rounded-md" />
+          </div>
+        </div>
       </div>
 
       <p v-else-if="isError" class="text-sm text-destructive">
@@ -298,10 +325,28 @@ async function modifier(commande: CommandeResume) {
               v-if="data?.source !== 'local' && detailOuvert === cmd.idCommande"
               class="mt-3 rounded-lg bg-muted/50 p-3"
             >
-              <Skeleton
+              <div
                 v-if="details[cmd.idCommande] === 'chargement'"
-                class="h-16 w-full"
-              />
+                class="grid gap-2"
+                aria-label="Chargement du détail de la commande"
+                aria-busy="true"
+              >
+                <div class="hidden grid-cols-[1fr_3rem_7rem_5rem_5rem_6rem] gap-3 md:grid">
+                  <Skeleton v-for="i in 6" :key="`entete-${i}`" class="h-4" />
+                </div>
+                <div
+                  v-for="ligne in 2"
+                  :key="ligne"
+                  class="grid gap-2 rounded-md border bg-background p-3 md:grid-cols-[1fr_3rem_7rem_5rem_5rem_6rem] md:items-center md:border-0 md:p-2"
+                >
+                  <Skeleton class="h-4 w-3/4" />
+                  <Skeleton v-for="i in 5" :key="i" class="h-4 w-full" />
+                </div>
+                <div class="ml-auto grid w-44 gap-2 pt-2">
+                  <Skeleton class="h-4 w-full" />
+                  <Skeleton class="h-5 w-full" />
+                </div>
+              </div>
               <p
                 v-else-if="details[cmd.idCommande] === 'erreur'"
                 class="text-sm text-destructive"
@@ -309,6 +354,15 @@ async function modifier(commande: CommandeResume) {
                 Impossible de charger le détail.
               </p>
               <template v-else-if="typeof details[cmd.idCommande] === 'object'">
+                <dl
+                  v-if="(details[cmd.idCommande] as CommandeDetail).modeLivraison"
+                  class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-lg border bg-background px-3 py-2 text-sm"
+                >
+                  <dt class="text-muted-foreground">Mode de livraison</dt>
+                  <dd class="font-medium">
+                    {{ (details[cmd.idCommande] as CommandeDetail).modeLivraison }}
+                  </dd>
+                </dl>
                 <div class="overflow-hidden rounded-lg border bg-background">
                   <Table>
                     <TableHeader class="[&_tr]:bg-muted">

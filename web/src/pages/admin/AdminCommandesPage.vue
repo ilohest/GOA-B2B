@@ -170,7 +170,8 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
           </div>
           <div class="grid justify-items-start gap-2 sm:justify-items-end">
             <div class="flex items-center gap-2">
-              <p v-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
+              <Skeleton v-if="isPending" class="h-3 w-36" />
+              <p v-else-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
                 À jour : {{ dateHeureFr(data.syncedAt) }}
             </p>
             <EasybeerLink
@@ -188,8 +189,46 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
       </div>
     </CardHeader>
     <CardContent class="grid gap-4">
-      <div v-if="isPending" class="grid gap-2">
-        <Skeleton v-for="i in 6" :key="i" class="h-10 w-full" />
+      <div
+        v-if="isPending"
+        class="grid gap-3"
+        aria-label="Chargement des commandes"
+        aria-busy="true"
+      >
+        <div class="grid gap-3 md:hidden">
+          <div v-for="i in 5" :key="i" class="grid gap-3 rounded-xl border p-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="grid gap-2">
+                <Skeleton class="h-4 w-32" />
+                <Skeleton class="h-5 w-20 rounded-full" />
+              </div>
+              <Skeleton class="h-5 w-20" />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <Skeleton class="h-4 w-4/5" />
+              <Skeleton class="h-4 w-3/4" />
+              <Skeleton class="h-4 w-2/3" />
+              <Skeleton class="h-4 w-20" />
+            </div>
+          </div>
+        </div>
+        <div class="hidden overflow-hidden rounded-lg border md:block">
+          <div class="grid grid-cols-[.8fr_1.2fr_.8fr_.8fr_.8fr_.7fr] gap-4 bg-muted p-3">
+            <Skeleton v-for="i in 6" :key="`head-${i}`" class="h-4" />
+          </div>
+          <div
+            v-for="ligne in 6"
+            :key="ligne"
+            class="grid grid-cols-[.8fr_1.2fr_.8fr_.8fr_.8fr_.7fr] items-center gap-4 border-t p-3"
+          >
+            <Skeleton class="h-4 w-20" />
+            <Skeleton class="h-4 w-4/5" />
+            <Skeleton class="h-5 w-20 rounded-full" />
+            <Skeleton class="h-4 w-20" />
+            <Skeleton class="h-4 w-16" />
+            <Skeleton class="h-7 w-16 rounded-md" />
+          </div>
+        </div>
       </div>
 
       <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>

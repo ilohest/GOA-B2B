@@ -105,9 +105,17 @@ async function onSubmit() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div v-if="state === 'checking'" class="grid gap-3">
-          <Skeleton class="h-9 w-full" />
-          <Skeleton class="h-9 w-full" />
+        <div
+          v-if="state === 'checking'"
+          class="grid gap-4"
+          aria-label="Vérification de l'invitation"
+          aria-busy="true"
+        >
+          <div v-for="i in 2" :key="i" class="grid gap-1.5">
+            <Skeleton class="h-3.5 w-36" />
+            <Skeleton class="h-9 w-full rounded-md" />
+          </div>
+          <Skeleton class="h-10 w-full rounded-md" />
         </div>
 
         <div v-else-if="state === 'invalid'" class="grid gap-4 text-center">
