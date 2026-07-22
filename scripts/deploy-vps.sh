@@ -65,6 +65,18 @@ if ! ssh "$VPS_HOST" "test -f '$APP_DIR/shared/emulator-data/firebase-export-met
   rsync -az emulator-data/ "$VPS_HOST:$APP_DIR/shared/emulator-data/"
 fi
 
+if ssh "$VPS_HOST" "pm2 describe goa-kombucha-emulators >/dev/null 2>&1"; then
+  echo "Snapshot à chaud des émulateurs avant redémarrage"
+  ssh "$VPS_HOST" "set -e
+    cd '$APP_DIR'
+    snapshot_dir=\$(mktemp -d '$APP_DIR/shared/emulator-data-next.XXXXXX')
+    ./firebase-runtime/node_modules/.bin/firebase emulators:export \"\$snapshot_dir\" \
+      --project demo-goa-kombucha --force
+    backup_dir='$APP_DIR/shared/emulator-data-before-deploy-'\$(date -u +%Y%m%dT%H%M%SZ)
+    mv '$APP_DIR/shared/emulator-data' \"\$backup_dir\"
+    mv \"\$snapshot_dir\" '$APP_DIR/shared/emulator-data'"
+fi
+
 echo "Installation et configuration distante"
 ssh "$VPS_HOST" "set -e
   if ! command -v java >/dev/null 2>&1; then
