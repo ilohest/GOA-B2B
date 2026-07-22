@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ClipboardList } from "@lucide/vue";
+import { ClipboardList, RotateCcw } from "@lucide/vue";
 import { useQuery } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
@@ -14,6 +14,7 @@ import type {
 import { dateFr, prixFr } from "@/lib/format";
 import EtatBadge from "@/components/EtatBadge.vue";
 import { usePanier } from "@/composables/usePanier";
+import RecommanderDialog from "@/components/catalogue/RecommanderDialog.vue";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -42,7 +43,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 const router = useRouter();
-const { chargerCommande } = usePanier();
+const { chargerCommande, modification } = usePanier();
 
 const { data, isPending, isError, error, refetch } = useQuery({
   queryKey: ["commandes"],
@@ -72,6 +73,26 @@ onMounted(() => {
     confirmation.value = null;
   }
 });
+
+// --- Recommander (reprise d'une commande passée dans une nouvelle) ---
+
+const recommandeOuvert = ref(false);
+const commandeARecommander = ref<CommandeResume | null>(null);
+// Une modification en cours arme un upsert Easybeer : mélanger les deux modes
+// ferait écraser la commande éditée par une reprise d'historique.
+const recommandeBloquee = computed(() => modification.value != null);
+
+function recommander(commande: CommandeResume) {
+  if (recommandeBloquee.value) {
+    toast.info(
+      `Vous modifiez la commande n° ${modification.value?.numero ?? modification.value?.idCommande}.`,
+      { description: "Validez ou annulez cette modification avant d'en recommander une autre." },
+    );
+    return;
+  }
+  commandeARecommander.value = commande;
+  recommandeOuvert.value = true;
+}
 
 // --- Détail dépliable (lignes + documents) ---
 
@@ -302,6 +323,21 @@ async function modifier(commande: CommandeResume) {
                   }}
                 </span>
                 <Button
+                  v-if="data?.source !== 'local'"
+                  variant="outline"
+                  size="sm"
+                  :disabled="recommandeBloquee"
+                  :title="
+                    recommandeBloquee
+                      ? 'Terminez la modification en cours pour recommander'
+                      : 'Remettre cette commande dans le panier'
+                  "
+                  @click.stop="recommander(cmd)"
+                >
+                  <RotateCcw class="size-4" />
+                  Recommander
+                </Button>
+                <Button
                   v-if="cmd.modifiable"
                   variant="outline"
                   size="sm"
@@ -507,6 +543,11 @@ async function modifier(commande: CommandeResume) {
       </template>
     </CardContent>
   </Card>
+
+  <RecommanderDialog
+    v-model:open="recommandeOuvert"
+    :commande="commandeARecommander"
+  />
 
   <Dialog v-model:open="confirmationOuverte">
     <DialogContent class="sm:max-w-md">

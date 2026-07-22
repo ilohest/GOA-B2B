@@ -50,6 +50,7 @@ import {
   typesClientEnCascade,
   type CacheClientDoc,
   type CommandeClientCache,
+  type SyncReport,
 } from './sync.js'
 import {
   ActivationBodySchema,
@@ -1047,8 +1048,15 @@ app.get('/api/commandes/:id/edition', requireAuth, async (c) => {
   const lignes = elements.map((element) => ({
     idStockBouteille: idStockBouteilleElementCommande(element),
     quantite: nombreDepuis(element, ['quantite']) ?? 0,
+    designation:
+      ((element.stockProduit as { libelle?: string } | undefined)?.libelle as string) ??
+      ((element.designation as string) || 'Produit'),
   }))
-  if (!lignes.length || lignes.some((ligne) => ligne.idStockBouteille == null)) {
+  // Le flux « recommander » compose une NOUVELLE commande : une ligne non
+  // identifiable y est simplement écartée (le front l'affiche), alors qu'une
+  // modification en place doit être refusée en bloc.
+  const tolerant = c.req.query('pour') === 'recommande'
+  if (!lignes.length || (!tolerant && lignes.some((ligne) => ligne.idStockBouteille == null))) {
     return c.json(
       { error: "Cette commande contient un produit qu'Easybeer ne permet pas d'identifier. Elle ne peut pas être modifiée depuis la plateforme." },
       422,
@@ -1060,7 +1068,7 @@ app.get('/api/commandes/:id/edition', requireAuth, async (c) => {
     etat,
     modifiable: !ETATS_NON_MODIFIABLES.has(etat),
     commentaire: (commande.commentaire as string) ?? '',
-    lignes: lignes as { idStockBouteille: number; quantite: number }[],
+    lignes,
   })
 })
 
@@ -1726,16 +1734,19 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
   }[]
   const produits = (catalogueSnap.data()?.produits ?? []) as unknown[]
   const meta = metaSnap.data()
-  const dernierRapport = meta?.dernierSync as
-    | { syncedAt?: number; reussi?: boolean; erreurs?: unknown[]; clients?: { erreur?: string }[] }
-    | undefined
-  const ancienRapportReussi =
+  // Les rapports antérieurs à l'ajout du champ `reussi` restent lisibles :
+  // on recalcule leur état à partir des erreurs enregistrées.
+  const dernierRapport = meta?.dernierSync as (Omit<SyncReport, 'reussi'> & { reussi?: boolean }) | undefined
+  const dernierRapportReussi = Boolean(
     dernierRapport &&
-    dernierRapport.reussi !== false &&
-    !dernierRapport.erreurs?.length &&
-    !dernierRapport.clients?.some((client) => client.erreur)
-      ? (dernierRapport.syncedAt ?? null)
-      : null
+      dernierRapport.reussi !== false &&
+      !dernierRapport.erreurs?.length &&
+      !dernierRapport.clients?.some((client) => client.erreur),
+  )
+  const dernierRapportNormalise: SyncReport | null = dernierRapport
+    ? { ...dernierRapport, reussi: dernierRapportReussi }
+    : null
+  const ancienRapportReussi = dernierRapportReussi ? (dernierRapport?.syncedAt ?? null) : null
 
   const depuis30j = Date.now() - 30 * 24 * 3600 * 1000
   const commandes30j = commandes.filter((cmd) => (cmd.dateCreation ?? 0) >= depuis30j && cmd.etat.code !== 'ANNULEE')
@@ -1759,6 +1770,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     commandes30j: { nombre: commandes30j.length, caHT: caHT30j, caTTC: caTTC30j },
     catalogue: { produits: produits.length, visibles, ruptures },
     dernierSync: (meta?.dernierSyncReussiAt as number | undefined) ?? ancienRapportReussi,
+    dernierRapportSync: dernierRapportNormalise,
   })
 })
 
@@ -1847,8 +1859,30 @@ async function executerSyncCache() {
 
 /** Déclenche une synchro complète Easybeer → cache (verrou single-flight). */
 app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
-  const res = await executerSyncCache()
-  return c.json(res.body, res.status as 200 | 202 | 501 | 503)
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const ban = etatBanEasybeer()
+  if (ban.banni) {
+    return c.json(
+      {
+        error: `API Easybeer saturée — réessayez dans ${ban.secondesRestantes} s`,
+        retryAfterSeconds: ban.secondesRestantes,
+      },
+      503,
+    )
+  }
+
+  // Une synchro complète prend couramment plusieurs minutes (prix de chaque
+  // client à cadence limitée). La laisser vivre après la réponse évite les
+  // timeouts du proxy HTTP ; le dashboard suit le verrou et le rapport final.
+  void executerSyncCache()
+    .then((res) => {
+      if (res.status >= 500) console.warn('[sync] tâche admin terminée en erreur :', res.body)
+    })
+    .catch((e) => console.error('[sync] échec de la tâche admin :', (e as Error).message))
+
+  return c.json({ demarree: true }, 202)
 })
 
 /**

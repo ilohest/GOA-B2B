@@ -71,7 +71,10 @@ export interface AdminDashboardResponse {
   clients: { total: number; avecCompte: number; actifs: number }
   commandes30j: { nombre: number; caHT: number; caTTC: number }
   catalogue: { produits: number; visibles: number; ruptures: number }
+  /** Horodatage de la dernière synchronisation entièrement réussie. */
   dernierSync: number | null
+  /** Dernière tentative, y compris lorsqu'elle est partielle. */
+  dernierRapportSync: SyncReport | null
 }
 
 export interface CatalogueOverride {
@@ -369,5 +372,14 @@ export interface CommandeEdition {
   etat: string
   modifiable: boolean
   commentaire: string
-  lignes: { idStockBouteille: number; quantite: number }[]
+  lignes: { idStockBouteille: number; quantite: number; designation: string }[]
+}
+
+/**
+ * Même charge utile que {@link CommandeEdition}, servie par `?pour=recommande` :
+ * les lignes qu'Easybeer ne sait plus identifier sont conservées (idStockBouteille
+ * nul) pour que le récap puisse les afficher comme écartées.
+ */
+export interface CommandeRecommande extends Omit<CommandeEdition, 'lignes'> {
+  lignes: { idStockBouteille: number | null; quantite: number; designation: string }[]
 }

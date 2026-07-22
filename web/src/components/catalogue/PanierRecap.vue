@@ -3,8 +3,9 @@
  * Récapitulatif du panier — réutilisé par la colonne droite (desktop),
  * le volet dépliable de la barre mobile et le dialog de confirmation.
  */
-import { computed } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { Trash2 } from "@lucide/vue";
+import { useResizeObserver } from "@vueuse/core";
 import { prixFr } from "@/lib/format";
 import type { DetailRemiseCiblee } from "@/lib/remises";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,8 @@ const props = defineProps<{
   /** Détail de la remise estimée, ligne par ligne. */
   remisesDetail?: DetailRemiseCiblee[];
   editable?: boolean;
+  /** Contraint la liste à l'espace disponible et active son scroll interne. */
+  defilementContraint?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -48,71 +51,134 @@ const emit = defineEmits<{
 }>();
 
 const aRemise = computed(() => (props.remiseMontant ?? 0) > 0);
+const remisesParProduit = computed(
+  () =>
+    new Map(
+      (props.remisesDetail ?? []).map((detail) => [
+        detail.idStockBouteille,
+        detail,
+      ]),
+    ),
+);
+const remisePour = (idStockBouteille: number) =>
+  remisesParProduit.value.get(idStockBouteille);
 const totalApresRemise = computed(() => props.totalHT - (props.remiseMontant ?? 0));
 const tauxTVA = 0.055;
 const montantTVA = computed(() => totalApresRemise.value * tauxTVA);
 const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
+
+const listeProduits = ref<HTMLElement | null>(null);
+const listeDeborde = ref(false);
+const listeEnBas = ref(true);
+
+function mesurerScrollProduits() {
+  const liste = listeProduits.value;
+  if (!liste) {
+    listeDeborde.value = false;
+    listeEnBas.value = true;
+    return;
+  }
+  listeDeborde.value = liste.scrollHeight > liste.clientHeight + 2;
+  listeEnBas.value =
+    liste.scrollTop + liste.clientHeight >= liste.scrollHeight - 2;
+}
+
+useResizeObserver(listeProduits, mesurerScrollProduits);
+watch(
+  () => [props.lignes.length, props.totalHT, props.remiseMontant],
+  async () => {
+    await nextTick();
+    mesurerScrollProduits();
+  },
+);
+onMounted(async () => {
+  await nextTick();
+  mesurerScrollProduits();
+});
 </script>
 
 <template>
-  <div class="grid min-w-0 gap-2">
+  <div
+    class="flex min-h-0 min-w-0 flex-col gap-2"
+    :class="defilementContraint ? 'overflow-hidden' : ''"
+  >
     <p v-if="!lignes.length" class="text-sm text-muted-foreground">
       Votre panier est vide — ajoutez des cartons depuis le catalogue.
     </p>
-    <ul v-else class="grid min-w-0 text-sm">
-      <li
-        v-for="l in lignes"
-        :key="l.idStockBouteille"
-        class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
+    <div
+      v-else
+      class="relative min-w-0"
+      :class="
+        defilementContraint
+          ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+          : ''
+      "
+    >
+      <ul
+        ref="listeProduits"
+        class="grid min-w-0 pr-1 text-sm"
+        :class="
+          defilementContraint
+            ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain'
+            : ''
+        "
+        @scroll="mesurerScrollProduits"
       >
-        <div class="flex items-start justify-between gap-3">
-          <span class="flex min-w-0 flex-1 items-start gap-2.5">
-            <span
-              class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border bg-muted/50"
-            >
-              <img
-                v-if="l.photoUrl"
-                :src="l.photoUrl"
-                :alt="l.libelle"
-                class="size-full object-cover"
-                loading="lazy"
-              />
-              <span
-                v-else
-                class="grid size-full place-items-center bg-gradient-to-br from-brand-50 to-muted"
-                aria-hidden="true"
-              >
-                <img
-                  src="/brand/goa-rond.png"
-                  alt=""
-                  class="size-7 rounded-full opacity-30"
-                />
-              </span>
-            </span>
-            <span class="min-w-0">
-              <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
-              <ProduitFormat
-                class="mt-1"
-                :contenant="l.contenant"
-                :packaging="l.packaging"
-              />
-              <Badge v-if="l.historique" variant="secondary" class="mt-1">
-                Hors catalogue
-              </Badge>
-              <span class="mt-1 block text-muted-foreground">
-                {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
-              </span>
+        <li
+          v-for="l in lignes"
+          :key="l.idStockBouteille"
+          class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
+        >
+          <div class="flex items-start justify-between gap-3">
+          <span class="min-w-0 flex-1">
+            <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
+            <ProduitFormat
+              class="mt-1"
+              :contenant="l.contenant"
+              :packaging="l.packaging"
+            />
+            <Badge v-if="l.historique" variant="secondary" class="mt-1">
+              Hors catalogue
+            </Badge>
+            <span class="mt-1 block text-muted-foreground">
+              {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
             </span>
           </span>
-          <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">{{
-            prixFr(l.sousTotal)
-          }}</span>
+          <span
+            class="grid shrink-0 justify-items-end gap-0.5 whitespace-nowrap tabular-nums"
+          >
+            <template v-if="remisePour(l.idStockBouteille)">
+              <span class="text-xs text-muted-foreground line-through">
+                {{ prixFr(l.sousTotal) }}
+              </span>
+              <span class="font-semibold text-primary">
+                {{
+                  prixFr(
+                    l.sousTotal - remisePour(l.idStockBouteille)!.montant,
+                  )
+                }}
+              </span>
+            </template>
+            <span v-else class="font-medium">{{ prixFr(l.sousTotal) }}</span>
+          </span>
         </div>
 
         <div
-          v-if="editable"
-          class="ml-12 flex items-center justify-between gap-2"
+          v-if="remisePour(l.idStockBouteille)"
+          class="flex items-center justify-between gap-3 rounded-md bg-primary/5 px-2.5 py-2 text-xs text-primary"
         >
+          <Badge
+            variant="secondary"
+            class="border border-primary/15 bg-background text-primary"
+          >
+            Remise {{ remisePour(l.idStockBouteille)!.remiseLabel }}
+          </Badge>
+          <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">
+            − {{ prixFr(remisePour(l.idStockBouteille)!.montant) }}
+          </span>
+        </div>
+
+        <div v-if="editable" class="flex items-center justify-between gap-2">
           <div
             class="inline-grid h-8 grid-cols-[2rem_2.5rem_2rem] items-center rounded-full border bg-background"
           >
@@ -150,48 +216,49 @@ const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
 
         <div
           v-if="editable && (l.pas ?? 1) > 1"
-          class="ml-12 text-xs text-muted-foreground"
+          class="text-xs text-muted-foreground"
         >
           Par {{ l.pas }} cartons
         </div>
         <p
           v-if="editable && l.quantiteMaximum != null"
-          class="ml-12 text-xs text-muted-foreground"
+          class="text-xs text-muted-foreground"
         >
           Ce produit n'est plus proposé actuellement : sa quantité peut être réduite, mais pas augmentée.
-        </p>
-      </li>
+          </p>
+        </li>
+      </ul>
+      <div
+        v-if="defilementContraint && listeDeborde && !listeEnBas"
+        class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-background via-background/95 to-transparent px-2 pt-8 pb-1"
+        aria-hidden="true"
+      >
+        <span
+          class="rounded-full border bg-background px-2.5 py-1 text-[0.68rem] font-medium text-muted-foreground shadow-sm"
+        >
+          Faites défiler pour voir les autres produits ↓
+        </span>
+      </div>
+    </div>
+    <ul
+      v-if="lignes.length"
+      class="relative z-10 grid shrink-0 gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-sm"
+    >
       <li
         class="flex items-baseline justify-between gap-3 pt-3"
         :class="aRemise ? 'text-sm' : 'font-semibold'"
       >
         <span>{{ aRemise ? "Sous-total HT" : "Total HT" }}</span>
-        <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(totalHT) }}</span>
+        <span class="shrink-0 whitespace-nowrap tabular-nums">{{
+          prixFr(totalHT)
+        }}</span>
       </li>
       <template v-if="aRemise">
-        <li class="grid gap-1 text-primary">
-          <div class="flex items-baseline justify-between gap-3">
-            <span class="min-w-0 flex-1">Remise</span>
-            <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">− {{ prixFr(remiseMontant!) }}</span>
-          </div>
-          <div
-            v-for="detail in remisesDetail"
-            :key="detail.idStockBouteille"
-            class="ml-3 flex items-baseline justify-between gap-3 text-xs text-muted-foreground"
+        <li class="flex items-baseline justify-between gap-3 text-primary">
+          <span class="min-w-0 flex-1">Total des remises</span>
+          <span class="shrink-0 whitespace-nowrap font-medium tabular-nums"
+            >− {{ prixFr(remiseMontant!) }}</span
           >
-            <span class="min-w-0 flex-1">
-              <span class="line-clamp-1">{{ detail.libelle }}</span>
-              <ProduitFormat
-                class="mt-1"
-                :contenant="detail.contenant"
-                :packaging="detail.packaging"
-              />
-              <Badge variant="secondary" class="mt-1 text-primary">
-                {{ detail.remiseLabel }}
-              </Badge>
-            </span>
-            <span class="shrink-0 whitespace-nowrap tabular-nums">− {{ prixFr(detail.montant) }}</span>
-          </div>
         </li>
         <li class="flex items-baseline justify-between gap-3 font-semibold">
           <span>Total HT</span>

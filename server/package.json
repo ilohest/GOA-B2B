@@ -7,6 +7,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "seed": "tsx scripts/seed-dev.ts",
+    "seed:export-catalogue": "tsx scripts/export-emulator-catalogue.ts",
+    "seed:sync-photos": "node scripts/sync-catalogue-photos.mjs",
     "test": "vitest run",
     "build": "tsc",
     "start": "node dist/index.js",

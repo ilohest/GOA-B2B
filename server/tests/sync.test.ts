@@ -4,10 +4,26 @@ import {
   allegerClient,
   cacheClientDoitEtreRafraichi,
   cacheEstAncien,
+  doitSynchroniserClientEasybeer,
   normaliserTarifsPersonnalises,
   prixEstFrais,
   type CacheClientDoc,
 } from '../src/sync.js'
+
+describe('sélection des comptes pour la synchro Easybeer', () => {
+  it('synchronise par défaut un compte lié à un client Easybeer réel', () => {
+    expect(doitSynchroniserClientEasybeer({ easybeerIdClient: 588074 })).toBe(true)
+  })
+
+  it('ignore un compte explicitement marqué comme fictif', () => {
+    expect(doitSynchroniserClientEasybeer({ easybeerIdClient: 900001, syncEasybeer: false })).toBe(false)
+  })
+
+  it('ignore les identifiants absents ou invalides', () => {
+    expect(doitSynchroniserClientEasybeer({})).toBe(false)
+    expect(doitSynchroniserClientEasybeer({ easybeerIdClient: '588074' })).toBe(false)
+  })
+})
 
 describe('tarifs personnalisés client', () => {
   it('extrait les prix produit de la fiche Easybeer sans les confondre avec les remises', () => {

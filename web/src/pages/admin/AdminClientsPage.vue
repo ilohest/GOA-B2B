@@ -11,6 +11,7 @@ import {
 } from "@tanstack/vue-table";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
+import { copierDansPressePapiers } from "@/lib/clipboard";
 import type {
   AdminClientsResponse,
   ClientResume,
@@ -233,8 +234,11 @@ function envoyerInvitation() {
 }
 
 async function copier(texte: string) {
-  await navigator.clipboard.writeText(texte);
-  toast.success("Lien copié — envoyez-le au client.");
+  if (await copierDansPressePapiers(texte)) {
+    toast.success("Lien copié — envoyez-le au client.");
+    return;
+  }
+  toast.error("Impossible de copier dans le presse-papiers.");
 }
 
 // --- Invitations en masse ---

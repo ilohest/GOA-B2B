@@ -47,12 +47,12 @@ const pluriel = (n: number) => (n > 1 ? `${n} cartons` : 'un carton')
 <template>
   <div class="flex flex-col items-stretch gap-1.5">
     <div
-      class="grid h-12 grid-cols-[3.25rem_1fr_3.25rem] items-center rounded-full border bg-background shadow-xs transition-colors"
+      class="grid h-10 grid-cols-[2.75rem_1fr_2.75rem] items-center rounded-full border bg-background shadow-xs transition-colors"
       :class="quantite > 0 ? 'border-primary/40' : ''"
     >
       <button
         type="button"
-        class="grid h-12 place-items-center rounded-full text-base font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+        class="grid h-10 place-items-center rounded-full text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
         :disabled="quantite === 0"
         :aria-label="`Retirer ${pluriel(props.pas)} de ${props.libelle}`"
         @click="emit('changer', -props.pas)"
@@ -65,7 +65,7 @@ const pluriel = (n: number) => (n > 1 ? `${n} cartons` : 'un carton')
         inputmode="numeric"
         min="0"
         :step="props.pas"
-        class="h-10 w-full appearance-none border-0 bg-transparent px-1 text-center text-lg font-semibold tabular-nums outline-none focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-ring/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        class="h-9 w-full appearance-none border-0 bg-transparent px-1 text-center text-base font-semibold tabular-nums outline-none focus-visible:rounded-md focus-visible:ring-2 focus-visible:ring-ring/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         :class="quantite > 0 ? 'text-primary' : ''"
         :aria-label="`Quantité de ${props.libelle}`"
         @blur="validerSaisie"
@@ -74,7 +74,7 @@ const pluriel = (n: number) => (n > 1 ? `${n} cartons` : 'un carton')
       />
       <button
         type="button"
-        class="grid h-12 place-items-center rounded-full text-base font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        class="grid h-10 place-items-center rounded-full text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         :aria-label="`Ajouter ${pluriel(props.pas)} de ${props.libelle}`"
         @click="emit('changer', props.pas)"
       >

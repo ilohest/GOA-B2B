@@ -8,7 +8,8 @@
  *
  * Crée / met à jour :
  *  - Auth : client-remise@goa.local (mot de passe goa-dev-123)
- *  - users/{uid} : role client, easybeerIdClient = ID_FICTIF
+ *  - users/{uid} : role client, easybeerIdClient = ID_FICTIF,
+ *    syncEasybeer = false (le client n'existe pas dans Easybeer)
  *  - cacheClients/{ID_FICTIF} : fiche clonée + remise 12% + remise2 5% additionnelle
  *  - cache/clientsListe : entrée ajoutée (visible dans l'admin)
  *
@@ -81,7 +82,10 @@ const uid = await auth
 await db
   .collection('users')
   .doc(uid)
-  .set({ email: EMAIL, role: 'client', status: 'active', easybeerIdClient: ID_FICTIF }, { merge: true })
+  .set(
+    { email: EMAIL, role: 'client', status: 'active', easybeerIdClient: ID_FICTIF, syncEasybeer: false },
+    { merge: true },
+  )
 
 // 3) Ajout à la liste clients (écran admin).
 const listeRef = db.doc('cache/clientsListe')

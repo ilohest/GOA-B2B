@@ -875,9 +875,16 @@ export async function rafraichirCacheClientCible(db: Firestore, idClient: number
 }
 
 /** Ids des clients Easybeer liés à au moins un compte plateforme. */
+export function doitSynchroniserClientEasybeer(data: {
+  easybeerIdClient?: unknown
+  syncEasybeer?: unknown
+}): data is { easybeerIdClient: number; syncEasybeer?: unknown } {
+  return typeof data.easybeerIdClient === 'number' && Number.isFinite(data.easybeerIdClient) && data.syncEasybeer !== false
+}
+
 async function idsClientsAvecCompte(db: Firestore): Promise<number[]> {
   const snap = await db.collection('users').where('easybeerIdClient', '!=', null).get()
-  return [...new Set(snap.docs.map((d) => d.data().easybeerIdClient as number))]
+  return [...new Set(snap.docs.map((d) => d.data()).filter(doitSynchroniserClientEasybeer).map((d) => d.easybeerIdClient))]
 }
 
 /**

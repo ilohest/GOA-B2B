@@ -5,6 +5,7 @@
     "dev:emulators": "firebase emulators:start --project demo-goa-kombucha --import=./emulator-data --export-on-exit=./emulator-data",
     "dev:server": "npm --prefix server run dev",
     "dev:web": "npm --prefix web run dev",
+    "deploy:vps": "./scripts/deploy-vps.sh",
     "seed": "npm --prefix server run seed",
     "typecheck": "npm --prefix server run typecheck && npm --prefix web run typecheck",
     "test": "npm --prefix server run test"

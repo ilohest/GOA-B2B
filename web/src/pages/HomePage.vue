@@ -1,21 +1,31 @@
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from "vue";
 import { useRouter } from "vue-router";
-import { Loader2, PackageCheck, Store, TriangleAlert } from "@lucide/vue";
+import {
+  Loader2,
+  PackageCheck,
+  RotateCcw,
+  Store,
+  TriangleAlert,
+} from "@lucide/vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMediaQuery, useScrollLock } from "@vueuse/core";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
 import type {
   CatalogueClientResponse,
   CommandeResultat,
+  CommandeResume,
+  CommandesClientResponse,
   ProduitCatalogueClient,
 } from "@/lib/types";
-import { prixFr } from "@/lib/format";
+import { dateFr, prixFr } from "@/lib/format";
 import { estimerRemisesCommande } from "@/lib/remises";
 import { useMe } from "@/composables/useMe";
 import { usePanier } from "@/composables/usePanier";
 import ProduitCard from "@/components/catalogue/ProduitCard.vue";
 import PanierRecap from "@/components/catalogue/PanierRecap.vue";
+import RecommanderDialog from "@/components/catalogue/RecommanderDialog.vue";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -45,8 +56,15 @@ import { Textarea } from "@/components/ui/textarea";
 
 const router = useRouter();
 const { data, isPending, isError, error } = useMe();
-const { quantites, changer, fixer, vider, modification, nbCartons, lignes } =
-  usePanier();
+const {
+  quantites,
+  changer,
+  fixer,
+  vider,
+  modification,
+  nbCartons,
+  lignes,
+} = usePanier();
 
 // L'admin n'a pas d'espace boutique : direction l'administration.
 watchEffect(() => {
@@ -80,10 +98,45 @@ const comptePreparation = computed(
     Boolean(catalogue.data.value?.cacheEnPreparation),
 );
 
+// --- Reprise de la dernière commande ---
+
+// Même clé que « Mes commandes » : l'historique est mutualisé entre les deux pages.
+const commandes = useQuery({
+  queryKey: ["commandes"],
+  queryFn: () => api.get<CommandesClientResponse>("/commandes"),
+  enabled: computed(() => data.value?.user.role === "client"),
+});
+
+const derniereCommande = computed<CommandeResume | null>(() => {
+  const liste = commandes.data.value?.commandes ?? [];
+  if (!liste.length || commandes.data.value?.source === "local") return null;
+  return liste.reduce((recente, cmd) =>
+    (cmd.dateCreation ?? 0) > (recente.dateCreation ?? 0) ? cmd : recente,
+  );
+});
+
+const recommandeOuvert = ref(false);
+// Le raccourci ne s'affiche que sur un panier vierge : dès qu'une quantité est
+// saisie, ou en pleine modification de commande, il disparaît.
+const rappelDerniereCommande = computed(
+  () =>
+    derniereCommande.value != null &&
+    nbCartons.value === 0 &&
+    modification.value == null &&
+    !comptePreparation.value,
+);
+
 // --- Filtres du catalogue ---
 
 const filtreContenant = ref("tous");
 const filtrePackaging = ref("tous");
+const rechercheProduit = ref("");
+const normaliserRecherche = (valeur: string) =>
+  valeur
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("fr")
+    .trim();
 const produitsCatalogue = computed(() =>
   (catalogue.data.value?.produits ?? []).filter((produit) => !produit.historique),
 );
@@ -108,6 +161,10 @@ const packagingsDisponibles = computed(() =>
 const produitsFiltres = computed(() =>
   produitsCatalogue.value.filter(
     (p) =>
+      (!normaliserRecherche(rechercheProduit.value) ||
+        normaliserRecherche(
+          `${p.libelle} ${p.contenant ?? ""} ${p.packaging ?? ""}`,
+        ).includes(normaliserRecherche(rechercheProduit.value))) &&
       (filtreContenant.value === "tous" ||
         p.contenant === filtreContenant.value) &&
       (filtrePackaging.value === "tous" ||
@@ -115,10 +172,14 @@ const produitsFiltres = computed(() =>
   ),
 );
 const filtresCatalogueActifs = computed(
-  () => filtreContenant.value !== "tous" || filtrePackaging.value !== "tous",
+  () =>
+    Boolean(rechercheProduit.value.trim()) ||
+    filtreContenant.value !== "tous" ||
+    filtrePackaging.value !== "tous",
 );
 
 function reinitialiserFiltresCatalogue() {
+  rechercheProduit.value = "";
   filtreContenant.value = "tous";
   filtrePackaging.value = "tous";
 }
@@ -215,6 +276,13 @@ const agePrixCatalogue = computed(() => {
 
 /** Volet détail de la barre mobile. */
 const barreDepliee = ref(false);
+const affichageMobile = useMediaQuery("(max-width: 1023px)");
+const scrollPageVerrouille = useScrollLock(() =>
+  typeof document === "undefined" ? null : document.body,
+);
+watchEffect(() => {
+  scrollPageVerrouille.value = barreDepliee.value && affichageMobile.value;
+});
 
 // --- Envoi de la commande ---
 
@@ -435,7 +503,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             class="flex items-center gap-2 text-2xl font-semibold tracking-tight"
           >
             <Store class="size-5 text-muted-foreground" />
-            Nos kombuchas
+            Produits
           </h1>
           <Skeleton
             v-if="catalogue.isPending.value || isPending"
@@ -465,29 +533,28 @@ function supprimerLignePanier(idStockBouteille: number) {
               <Skeleton class="h-9 w-full rounded-md" />
             </div>
           </div>
-          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             <article
               v-for="i in 6"
               :key="i"
-              class="overflow-hidden rounded-2xl border bg-card"
+              class="overflow-hidden rounded-lg border bg-card"
             >
-              <Skeleton class="aspect-[4/3] w-full rounded-none" />
-              <div class="grid gap-5 p-5">
-                <Skeleton class="h-5 w-3/4" />
-                <div class="flex gap-2">
-                  <Skeleton class="h-7 w-28 rounded-full" />
-                  <Skeleton class="h-7 w-24 rounded-full" />
-                </div>
-                <div
-                  class="mt-1 flex items-end justify-between rounded-xl bg-muted/20 px-3 py-2.5"
-                >
-                  <div class="grid gap-2">
-                    <Skeleton class="h-3 w-16" />
-                    <Skeleton class="h-7 w-24" />
+              <div class="flex gap-3 p-3">
+                <Skeleton class="size-16 shrink-0 rounded-md" />
+                <div class="grid flex-1 content-start gap-2">
+                  <Skeleton class="h-4 w-3/4" />
+                  <div class="flex gap-1.5">
+                    <Skeleton class="h-6 w-16 rounded-full" />
+                    <Skeleton class="h-6 w-20 rounded-full" />
                   </div>
-                  <Skeleton class="h-4 w-6" />
                 </div>
-                <Skeleton class="h-10 w-full rounded-md" />
+              </div>
+              <div class="grid gap-2 border-t p-3">
+                <div class="flex items-center justify-between">
+                  <Skeleton class="h-3 w-20" />
+                  <Skeleton class="h-5 w-16" />
+                </div>
+                <Skeleton class="h-10 w-full rounded-full" />
               </div>
             </article>
           </div>
@@ -512,6 +579,19 @@ function supprimerLignePanier(idStockBouteille: number) {
           <div
             class="mb-5 grid gap-3 rounded-xl border bg-muted/20 p-3 sm:flex sm:flex-wrap sm:items-end"
           >
+            <div class="grid gap-1.5 sm:min-w-64 sm:flex-1">
+              <Label for="recherche-produit" class="text-xs text-muted-foreground">
+                Rechercher un produit
+              </Label>
+              <Input
+                id="recherche-produit"
+                v-model="rechercheProduit"
+                type="search"
+                class="bg-background"
+                placeholder="Nom, format ou conditionnement"
+              />
+            </div>
+
             <div class="grid gap-1.5 sm:w-56">
               <Label class="text-xs text-muted-foreground">Contenant</Label>
               <Select v-model="filtreContenant">
@@ -588,7 +668,10 @@ function supprimerLignePanier(idStockBouteille: number) {
             </Button>
           </div>
 
-          <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div
+            v-else
+            class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+          >
             <ProduitCard
               v-for="p in produitsFiltres"
               :key="p.idStockBouteille"
@@ -602,10 +685,50 @@ function supprimerLignePanier(idStockBouteille: number) {
       </section>
     </div>
 
-    <!-- Colonne récap (desktop) -->
-    <aside class="sticky top-16 hidden lg:block">
-      <Card>
-        <CardHeader>
+    <!-- Colonne récap. Le raccourci « recommander » y vit aussi, au-dessus du
+         panier ; sur mobile la colonne remonte en tête (le panier, lui, reste
+         la barre fixe du bas). -->
+    <aside
+      class="order-first content-start gap-4 lg:fixed lg:top-[4.5rem] lg:right-4 lg:z-10 lg:flex lg:max-h-[calc(100dvh-5.5rem)] lg:w-80 lg:flex-col"
+      :class="rappelDerniereCommande ? 'grid' : 'hidden'"
+    >
+      <!-- Raccourci : reprendre la dernière commande (panier vierge seulement) -->
+      <div
+        v-if="rappelDerniereCommande && derniereCommande"
+        class="grid gap-3 rounded-xl border bg-muted/30 px-4 py-3 text-sm"
+      >
+        <div class="flex min-w-0 items-start gap-3">
+          <span
+            class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-muted-foreground shadow-xs"
+          >
+            <RotateCcw class="size-4" />
+          </span>
+          <p class="grid min-w-0 gap-0.5">
+            <span class="font-medium text-foreground">
+              Votre dernière commande
+            </span>
+            <span class="text-muted-foreground">
+              {{ dateFr(derniereCommande.dateCreation) }}
+              <template v-if="derniereCommande.totalTTC != null">
+                · {{ prixFr(derniereCommande.totalTTC) }} TTC
+              </template>
+            </span>
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          class="w-full"
+          @click="recommandeOuvert = true"
+        >
+          Recommander
+        </Button>
+      </div>
+
+      <Card
+        class="hidden min-h-0 flex-[0_1_auto] flex-col overflow-hidden lg:flex"
+      >
+        <CardHeader class="shrink-0">
           <CardTitle class="text-lg">
             {{
               modification
@@ -615,14 +738,16 @@ function supprimerLignePanier(idStockBouteille: number) {
           </CardTitle>
           <CardDescription v-if="modification"> </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent class="flex min-h-0 flex-1 flex-col">
           <PanierRecap
+            class="min-h-0 flex-1"
             :lignes="lignesDetail"
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
             :remise-montant="remiseMontant"
             :remises-detail="remisesDetail"
+            defilement-contraint
             editable
             @changer="changer"
             @supprimer="supprimerLignePanier"
@@ -662,21 +787,32 @@ function supprimerLignePanier(idStockBouteille: number) {
       class="fixed inset-x-0 bottom-0 z-20 px-4 pb-4 lg:hidden"
     >
       <div
-        class="mx-auto w-full max-w-5xl rounded-xl border bg-background shadow-lg"
+        class="mx-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-xl border bg-background shadow-lg"
       >
-        <div v-if="barreDepliee" class="border-b p-4">
+        <div
+          v-if="barreDepliee"
+          class="flex min-h-0 flex-1 flex-col border-b p-4"
+        >
+          <div class="mb-3 flex shrink-0 items-baseline justify-between gap-3">
+            <h2 class="font-semibold">Votre commande</h2>
+            <span class="text-xs text-muted-foreground">
+              {{ nbCartons }} carton{{ nbCartons > 1 ? "s" : "" }}
+            </span>
+          </div>
           <p v-if="modification" class="mb-2 text-xs font-medium text-primary">
             Modification de la commande n°
             {{ modification.numero ?? modification.idCommande }} — la nouvelle
             version annule et remplace la précédente.
           </p>
           <PanierRecap
+            class="min-h-0 flex-1"
             :lignes="lignesDetail"
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
             :remise-montant="remiseMontant"
             :remises-detail="remisesDetail"
+            defilement-contraint
             editable
             @changer="changer"
             @supprimer="supprimerLignePanier"
@@ -693,7 +829,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             </button>
           </PanierRecap>
         </div>
-        <div class="flex items-center justify-between gap-3 p-3">
+        <div class="flex shrink-0 items-center justify-between gap-3 p-3">
           <button
             class="min-w-0 flex-1 text-left"
             :aria-expanded="barreDepliee"
@@ -733,7 +869,9 @@ function supprimerLignePanier(idStockBouteille: number) {
 
     <!-- Confirmation -->
     <Dialog v-model:open="dialogOuvert">
-      <DialogContent class="sm:max-w-md">
+      <DialogContent
+        class="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-md"
+      >
         <template v-if="envoi.isPending.value">
           <div class="grid justify-items-center gap-4 py-8 text-center">
             <span
@@ -761,7 +899,7 @@ function supprimerLignePanier(idStockBouteille: number) {
         </template>
 
         <template v-else-if="!confirmation">
-          <DialogHeader>
+          <DialogHeader class="shrink-0">
             <DialogTitle>
               {{
                 modification
@@ -778,17 +916,16 @@ function supprimerLignePanier(idStockBouteille: number) {
             </DialogDescription>
           </DialogHeader>
           <PanierRecap
+            class="min-h-0 flex-1"
             :lignes="lignesDetail"
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
             :remise-montant="remiseMontant"
             :remises-detail="remisesDetail"
-            editable
-            @changer="changer"
-            @supprimer="supprimerLignePanier"
+            defilement-contraint
           />
-          <div class="grid gap-1.5">
+          <div class="grid shrink-0 gap-1.5">
             <Label for="commentaire">Commentaire (facultatif)</Label>
             <Textarea
               id="commentaire"
@@ -803,7 +940,7 @@ function supprimerLignePanier(idStockBouteille: number) {
               (sousMinimum && minimum != null) ||
               erreurEnvoi
             "
-            class="grid gap-2"
+            class="grid shrink-0 gap-2"
           >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
               Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
@@ -837,7 +974,7 @@ function supprimerLignePanier(idStockBouteille: number) {
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter class="shrink-0">
             <Button
               class="w-full"
               size="lg"
@@ -903,5 +1040,11 @@ function supprimerLignePanier(idStockBouteille: number) {
         </template>
       </DialogContent>
     </Dialog>
+
+    <RecommanderDialog
+      v-model:open="recommandeOuvert"
+      :commande="derniereCommande"
+      sur-catalogue
+    />
   </div>
 </template>

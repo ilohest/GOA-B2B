@@ -101,6 +101,25 @@ export function usePanier() {
     }
   }
 
+  /**
+   * Reprend une commande passée dans une NOUVELLE commande (« recommander ») :
+   * contrairement à `chargerCommande`, aucun mode modification n'est armé.
+   * Les quantités reçues sont déjà alignées sur le pas de commande (cf.
+   * `reconcilierCommande`), et le panier existant l'est aussi via le stepper :
+   * leur somme reste donc valide en mode « ajouter ».
+   */
+  const appliquerCommande = (
+    lignesCommande: { idStockBouteille: number; quantite: number }[],
+    mode: 'remplacer' | 'ajouter' = 'remplacer',
+  ) => {
+    modification.value = null
+    if (mode === 'remplacer') quantites.value = {}
+    for (const l of lignesCommande) {
+      if (l.quantite <= 0) continue
+      quantites.value[l.idStockBouteille] = (quantites.value[l.idStockBouteille] ?? 0) + l.quantite
+    }
+  }
+
   const nbCartons = computed(() =>
     Object.values(quantites.value).reduce((somme, q) => somme + q, 0),
   )
@@ -112,5 +131,15 @@ export function usePanier() {
     })),
   )
 
-  return { quantites, changer, fixer, vider, chargerCommande, modification, nbCartons, lignes }
+  return {
+    quantites,
+    changer,
+    fixer,
+    vider,
+    chargerCommande,
+    appliquerCommande,
+    modification,
+    nbCartons,
+    lignes,
+  }
 }

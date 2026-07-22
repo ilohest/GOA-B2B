@@ -1,0 +1,2703 @@
+{
+  "version": 1,
+  "exportedAt": "2026-07-22T07:53:12.070Z",
+  "devEasybeerIdClient": 588074,
+  "cache": {
+    "catalogue": {
+      "produits": [
+        {
+          "idStockBouteille": 133747,
+          "icone": "icon icon-bouteille",
+          "libelle": "Cola - Chaï - 0.0° - Bouteille - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 991,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 40720,
+          "idContenant": 2655,
+          "idLot": 1,
+          "quantite": 991
+        },
+        {
+          "idStockBouteille": 131390,
+          "icone": "icon icon-bouteille",
+          "libelle": "Cola - Chaï - 0.0° - Bouteille - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 8,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 40720,
+          "idContenant": 2654,
+          "idLot": 1,
+          "quantite": 18
+        },
+        {
+          "idStockBouteille": 134612,
+          "icone": "icon icon-keykeg",
+          "libelle": "Cola - Chaï - 0.0° - Fût - 20L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 48,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": true,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 40720,
+          "idContenant": 3145,
+          "idLot": 1,
+          "quantite": 48
+        },
+        {
+          "idStockBouteille": 150176,
+          "icone": "icon icon-carton",
+          "libelle": "Cola - Chaï - 0.0° - Carton de 6 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 372,
+          "seuilHaut": 30,
+          "seuilBas": 90,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 40720,
+          "idContenant": 2654,
+          "idLot": 3,
+          "quantite": 379
+        },
+        {
+          "idStockBouteille": 131388,
+          "icone": "icon icon-carton",
+          "libelle": "Cola - Chaï - 0.0° - Carton de 9 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 201,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 40720,
+          "idContenant": 2654,
+          "idLot": 6,
+          "quantite": 202
+        },
+        {
+          "idStockBouteille": 165533,
+          "icone": "icon icon-carton",
+          "libelle": "Cola - Chaï - 0.0° - Carton de 12 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 61,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 40720,
+          "idContenant": 2655,
+          "idLot": 4,
+          "quantite": 66
+        },
+        {
+          "idStockBouteille": 133238,
+          "icone": "icon icon-carton",
+          "libelle": "Cola - Chaï - 0.0° - Carton de 18 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 114,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 40720,
+          "idContenant": 2655,
+          "idLot": 13,
+          "quantite": 127
+        },
+        {
+          "idStockBouteille": 108770,
+          "icone": "icon icon-bouteille",
+          "libelle": "Framboise - Hibiscus - 0.0° - Bouteille - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 7,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 40718,
+          "idContenant": 2655,
+          "idLot": 1,
+          "quantite": 7
+        },
+        {
+          "idStockBouteille": 107559,
+          "icone": "icon icon-bouteille",
+          "libelle": "Framboise - Hibiscus - 0.0° - Bouteille - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 1,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 40718,
+          "idContenant": 2654,
+          "idLot": 1,
+          "quantite": 9
+        },
+        {
+          "idStockBouteille": 123545,
+          "icone": "icon icon-keykeg",
+          "libelle": "Framboise - Hibiscus - 0.0° - Fût - 20L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 44,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": true,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 40718,
+          "idContenant": 3145,
+          "idLot": 1,
+          "quantite": 51
+        },
+        {
+          "idStockBouteille": 150179,
+          "icone": "icon icon-carton",
+          "libelle": "Framboise - Hibiscus - 0.0° - Carton de 6 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 77,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 40718,
+          "idContenant": 2654,
+          "idLot": 3,
+          "quantite": 86
+        },
+        {
+          "idStockBouteille": 107165,
+          "icone": "icon icon-carton",
+          "libelle": "Framboise - Hibiscus - 0.0° - Carton de 9 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 223,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 40718,
+          "idContenant": 2654,
+          "idLot": 6,
+          "quantite": 223
+        },
+        {
+          "idStockBouteille": 165534,
+          "icone": "icon icon-carton",
+          "libelle": "Framboise - Hibiscus - 0.0° - Carton de 12 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 275,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 40718,
+          "idContenant": 2655,
+          "idLot": 4,
+          "quantite": 298
+        },
+        {
+          "idStockBouteille": 116441,
+          "icone": "icon icon-carton",
+          "libelle": "Framboise - Hibiscus - 0.0° - Carton de 18 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 15,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 40718,
+          "idContenant": 2655,
+          "idLot": 13,
+          "quantite": 15
+        },
+        {
+          "idStockBouteille": 110597,
+          "icone": "icon icon-bouteille",
+          "libelle": "Gingembre - Citron - 0.0° - Bouteille - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 0,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "compte": {
+              "journal": {}
+            },
+            "type": {}
+          },
+          "estUnitaire": true,
+          "idProduit": 40716,
+          "idContenant": 2655,
+          "idLot": 1,
+          "quantite": 0
+        },
+        {
+          "idStockBouteille": 107560,
+          "icone": "icon icon-bouteille",
+          "libelle": "Gingembre - Citron - 0.0° - Bouteille - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 1,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "compte": {
+              "journal": {}
+            },
+            "type": {}
+          },
+          "estUnitaire": true,
+          "idProduit": 40716,
+          "idContenant": 2654,
+          "idLot": 1,
+          "quantite": 11
+        },
+        {
+          "idStockBouteille": 123546,
+          "icone": "icon icon-keykeg",
+          "libelle": "Gingembre - Citron - 0.0° - Fût - 20L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 43,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": true,
+          "tauxTVA": {
+            "compte": {
+              "journal": {}
+            },
+            "type": {}
+          },
+          "estUnitaire": true,
+          "idProduit": 40716,
+          "idContenant": 3145,
+          "idLot": 1,
+          "quantite": 49
+        },
+        {
+          "idStockBouteille": 150183,
+          "icone": "icon icon-carton",
+          "libelle": "Gingembre - Citron - 0.0° - Carton de 6 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 96,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "compte": {
+              "journal": {}
+            },
+            "type": {}
+          },
+          "estUnitaire": false,
+          "idProduit": 40716,
+          "idContenant": 2654,
+          "idLot": 3,
+          "quantite": 108
+        },
+        {
+          "idStockBouteille": 107166,
+          "icone": "icon icon-carton",
+          "libelle": "9GC - Gingembre - Citron - 0.0° - Carton de 9 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 187,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "compte": {
+              "journal": {}
+            },
+            "type": {}
+          },
+          "estUnitaire": false,
+          "idProduit": 40716,
+          "idContenant": 2654,
+          "idLot": 6,
+          "quantite": 187
+        },
+        {
+          "idStockBouteille": 165535,
+          "icone": "icon icon-carton",
+          "libelle": "Gingembre - Citron - 0.0° - Carton de 12 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 252,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "compte": {
+              "journal": {}
+            },
+            "type": {}
+          },
+          "estUnitaire": false,
+          "idProduit": 40716,
+          "idContenant": 2655,
+          "idLot": 4,
+          "quantite": 271
+        },
+        {
+          "idStockBouteille": 116442,
+          "icone": "icon icon-carton",
+          "libelle": "Gingembre - Citron - 0.0° - Carton de 18 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 24,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "compte": {
+              "journal": {}
+            },
+            "type": {}
+          },
+          "estUnitaire": false,
+          "idProduit": 40716,
+          "idContenant": 2655,
+          "idLot": 13,
+          "quantite": 29
+        },
+        {
+          "idStockBouteille": 114576,
+          "icone": "icon icon-bouteille",
+          "libelle": "Mangue - Vanille - 0.0° - Bouteille - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 1,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 42133,
+          "idContenant": 2655,
+          "idLot": 1,
+          "quantite": 1
+        },
+        {
+          "idStockBouteille": 114575,
+          "icone": "icon icon-bouteille",
+          "libelle": "Mangue - Vanille - 0.0° - Bouteille - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 7,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 42133,
+          "idContenant": 2654,
+          "idLot": 1,
+          "quantite": 13
+        },
+        {
+          "idStockBouteille": 123548,
+          "icone": "icon icon-keykeg",
+          "libelle": "Mangue - Vanille - 0.0° - Fût - 20L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 100,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": true,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 42133,
+          "idContenant": 3145,
+          "idLot": 1,
+          "quantite": 100
+        },
+        {
+          "idStockBouteille": 150181,
+          "icone": "icon icon-carton",
+          "libelle": "Mangue - Vanille - 0.0° - Carton de 6 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 298,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 42133,
+          "idContenant": 2654,
+          "idLot": 3,
+          "quantite": 304
+        },
+        {
+          "idStockBouteille": 110756,
+          "icone": "icon icon-carton",
+          "libelle": "Mangue - Vanille - 0.0° - Carton de 9 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 210,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 42133,
+          "idContenant": 2654,
+          "idLot": 6,
+          "quantite": 210
+        },
+        {
+          "idStockBouteille": 165239,
+          "icone": "icon icon-carton",
+          "libelle": "Mangue - Vanille - 0.0° - Carton de 12 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 310,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 42133,
+          "idContenant": 2655,
+          "idLot": 4,
+          "quantite": 318
+        },
+        {
+          "idStockBouteille": 116444,
+          "icone": "icon icon-carton",
+          "libelle": "Mangue - Vanille - 0.0° - Carton de 18 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 138,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 42133,
+          "idContenant": 2655,
+          "idLot": 13,
+          "quantite": 138
+        },
+        {
+          "idStockBouteille": 118964,
+          "icone": "icon icon-bouteille",
+          "libelle": "Orange Sanguine - 0.0° - Bouteille - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 2,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 43350,
+          "idContenant": 2655,
+          "idLot": 1,
+          "quantite": 2
+        },
+        {
+          "idStockBouteille": 118965,
+          "icone": "icon icon-bouteille",
+          "libelle": "Orange Sanguine - 0.0° - Bouteille - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 45,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 43350,
+          "idContenant": 2654,
+          "idLot": 1,
+          "quantite": 48
+        },
+        {
+          "idStockBouteille": 123549,
+          "icone": "icon icon-keykeg",
+          "libelle": "Orange Sanguine - 0.0° - Fût - 20L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 100,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": true,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 43350,
+          "idContenant": 3145,
+          "idLot": 1,
+          "quantite": 100
+        },
+        {
+          "idStockBouteille": 150182,
+          "icone": "icon icon-carton",
+          "libelle": "Orange Sanguine - 0.0° - Carton de 6 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 190,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 43350,
+          "idContenant": 2654,
+          "idLot": 3,
+          "quantite": 196
+        },
+        {
+          "idStockBouteille": 118962,
+          "icone": "icon icon-carton",
+          "libelle": "Orange Sanguine - 0.0° - Carton de 9 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 253,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 43350,
+          "idContenant": 2654,
+          "idLot": 6,
+          "quantite": 253
+        },
+        {
+          "idStockBouteille": 165536,
+          "icone": "icon icon-carton",
+          "libelle": "Orange Sanguine - 0.0° - Carton de 12 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 142,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 43350,
+          "idContenant": 2655,
+          "idLot": 4,
+          "quantite": 153
+        },
+        {
+          "idStockBouteille": 118963,
+          "icone": "icon icon-carton",
+          "libelle": "Orange Sanguine - 0.0° - Carton de 18 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 12,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 43350,
+          "idContenant": 2655,
+          "idLot": 13,
+          "quantite": 12
+        },
+        {
+          "idStockBouteille": 157873,
+          "icone": "icon icon-bouteille",
+          "libelle": "Pomme - Sureau - 0.0° - Bouteille - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 8,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 56510,
+          "idContenant": 2655,
+          "idLot": 1,
+          "quantite": 8
+        },
+        {
+          "idStockBouteille": 157874,
+          "icone": "icon icon-bouteille",
+          "libelle": "Pomme - Sureau - 0.0° - Bouteille - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 0,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 56510,
+          "idContenant": 2654,
+          "idLot": 1,
+          "quantite": 4
+        },
+        {
+          "idStockBouteille": 159909,
+          "icone": "icon icon-keykeg",
+          "libelle": "Pomme - Sureau - 0.0° - Fût - 20L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 50,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": true,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": true,
+          "idProduit": 56510,
+          "idContenant": 3145,
+          "idLot": 1,
+          "quantite": 50
+        },
+        {
+          "idStockBouteille": 157872,
+          "icone": "icon icon-carton",
+          "libelle": "Pomme - Sureau - 0.0° - Carton de 6 Bouteilles - 1L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 397,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 56510,
+          "idContenant": 2654,
+          "idLot": 3,
+          "quantite": 408
+        },
+        {
+          "idStockBouteille": 165537,
+          "icone": "icon icon-carton",
+          "libelle": "Pomme - Sureau - 0.0° - Carton de 12 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 55,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 56510,
+          "idContenant": 2655,
+          "idLot": 4,
+          "quantite": 60
+        },
+        {
+          "idStockBouteille": 157871,
+          "icone": "icon icon-carton",
+          "libelle": "Pomme - Sureau - 0.0° - Carton de 18 Bouteilles - 0.35L",
+          "entrepot": "Brasserie de GOA",
+          "quantiteDisponible": 407,
+          "seuilHaut": 30,
+          "seuilBas": 10,
+          "dejaAcquitte": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "estUnitaire": false,
+          "idProduit": 56510,
+          "idContenant": 2655,
+          "idLot": 13,
+          "quantite": 409
+        }
+      ],
+      "syncedAt": 1784705266745
+    },
+    "referentiels": {
+      "typesClient": [
+        {
+          "idClientType": 20776,
+          "libelle": "CHR",
+          "couleur": "#e03232",
+          "libelleParent": "client PRO",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": [],
+          "idParent": 17849
+        },
+        {
+          "idClientType": 21503,
+          "libelle": "Camping",
+          "couleur": "#4fd065",
+          "libelleParent": "client PRO",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": [],
+          "idParent": 17849
+        },
+        {
+          "idClientType": 20735,
+          "libelle": "Distributeur",
+          "libelleParent": "client PRO",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "compte": {
+            "idPlanComptable": 59122,
+            "idBrasserie": 1951,
+            "numero": "CCLIENTS",
+            "libelle": "CLIENTS",
+            "libelleComplet": "CCLIENTS - CLIENTS",
+            "typeTiers": "CLIENTS",
+            "journal": {
+              "code": "VENTES",
+              "abreviation": "VE",
+              "libelle": "Ventes"
+            }
+          },
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": [],
+          "idParent": 17849
+        },
+        {
+          "idClientType": 21504,
+          "libelle": "Festival",
+          "couleur": "#a43a3a",
+          "libelleParent": "client PRO",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": [],
+          "idParent": 17849
+        },
+        {
+          "idClientType": 20680,
+          "libelle": "GMS",
+          "libelleParent": "client PRO",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": [],
+          "idParent": 17849
+        },
+        {
+          "idClientType": 16938,
+          "libelle": "N/A",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": []
+        },
+        {
+          "idClientType": 21505,
+          "libelle": "Particulier",
+          "couleur": "#298b9a",
+          "libelleParent": "client PRO",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": [],
+          "idParent": 17849
+        },
+        {
+          "idClientType": 16966,
+          "libelle": "Particulier (livraison)",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": []
+        },
+        {
+          "idClientType": 17849,
+          "libelle": "client PRO",
+          "droitSuspendu": true,
+          "horsUE": false,
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [],
+          "listeParticipations": [],
+          "compte": {
+            "idPlanComptable": 74,
+            "numero": "411000",
+            "libelle": "Clients",
+            "libelleComplet": "411000 - Clients",
+            "typeTiers": "CLIENTS",
+            "journal": {}
+          },
+          "delaiPaiementFacture": 30,
+          "typeDelaiPaiementFacture": {
+            "code": "A_LIVRAISON",
+            "libelle": "A livraison"
+          },
+          "modesPaiement": [
+            "ESPECE",
+            "CHEQUE",
+            "CARTE_BLEUE",
+            "VIREMENT",
+            "PRELEVEMENT"
+          ]
+        },
+        {
+          "idClientType": 23556,
+          "libelle": "type test",
+          "libelleParent": "client PRO",
+          "droitSuspendu": false,
+          "horsUE": false,
+          "remise": "11%",
+          "tauxTVA": {
+            "idTauxTVA": 13087,
+            "libelle": "TVA collectée - 5.5%",
+            "compte": {
+              "idPlanComptable": 109,
+              "numero": "445712",
+              "libelle": "TVA collectée 5.5%",
+              "libelleComplet": "445712 - TVA collectée 5.5%",
+              "journal": {}
+            },
+            "taux": 5.5,
+            "type": {
+              "code": "COLLECTEE",
+              "libelle": "Collectée"
+            }
+          },
+          "listeRemises": [
+            {
+              "idClientTypeRemise": 2671,
+              "type": "STOCK_PRODUIT",
+              "modeleProduit": {
+                "idProduit": 40720,
+                "nom": "Cola - Chaï",
+                "nomCommercial": "Cola - Chaï",
+                "degreAlcool": 0,
+                "tavDouane": 0,
+                "brassageAFacon": false,
+                "couleur": {
+                  "code": "AUCUNE",
+                  "libelle": "Aucune"
+                },
+                "couleurAffichage": "#d99f7c",
+                "description": "\n                                            ",
+                "compte": {
+                  "journal": {}
+                },
+                "compteUE": {
+                  "journal": {}
+                },
+                "compteHorsUE": {
+                  "journal": {}
+                },
+                "compteRetour": {
+                  "journal": {}
+                },
+                "categorieFiscale": {
+                  "code": "BOISSON_FERMENTEE",
+                  "libelle": "Boisson fermentée autre que le vin et la bière"
+                },
+                "supprime": false,
+                "tauxTVA": {
+                  "compte": {
+                    "journal": {}
+                  },
+                  "type": {}
+                },
+                "libelle": "Cola - Chaï - 0.0°"
+              },
+              "modeleContenant": {
+                "idContenant": 2655,
+                "nom": "Bouteille",
+                "nomPluriel": "Bouteilles",
+                "contenance": 0.35,
+                "type": "BOUTEILLE",
+                "libelleAvecContenance": "Bouteille - 0.35L",
+                "estBouteille": true,
+                "estFutRecyclable": false,
+                "estCanette": false,
+                "estFut": false,
+                "estVrac": false,
+                "poidsUnitaire": 0.15,
+                "brasserie": {
+                  "idBrasserie": 1951,
+                  "nom": "LA BRASSERIE DE GOA",
+                  "authentificationBoxtal": {
+                    "identifiant": null,
+                    "motDePasse": null
+                  },
+                  "relancePreventiveIdsTypes": [],
+                  "relanceClientIdsTypes": [],
+                  "relanceCommercialeIdsTypes": [],
+                  "contactsAvisPrelevementClient": []
+                },
+                "libelle": "Bouteille - 0.35L"
+              },
+              "modeleLot": {
+                "idLot": 13,
+                "libelle": "Carton de 18",
+                "quantite": 18
+              },
+              "modeleStockAutre": {
+                "type": {},
+                "entrepot": {
+                  "faitGenerateur": {
+                    "calculAcciseSurVente": false
+                  }
+                },
+                "compte": {
+                  "journal": {}
+                },
+                "compteUE": {
+                  "journal": {}
+                },
+                "compteHorsUE": {
+                  "journal": {}
+                },
+                "tauxTVA": {
+                  "compte": {
+                    "journal": {}
+                  },
+                  "type": {}
+                },
+                "tauxTVAAchat": {
+                  "compte": {
+                    "journal": {}
+                  },
+                  "type": {}
+                },
+                "pointVente": {
+                  "decompterStock": true,
+                  "grilleTarifaire": {
+                    "tauxTVA": {
+                      "compte": {
+                        "journal": {}
+                      },
+                      "type": {}
+                    },
+                    "listeRemises": [],
+                    "listeParticipations": [],
+                    "typeDelaiPaiementFacture": {},
+                    "modesPaiement": []
+                  },
+                  "client": {
+                    "adresse": {
+                      "ligne1": "",
+                      "ligne2": "",
+                      "ligne3": "",
+                      "ligne4": ""
+                    },
+                    "type": {
+                      "tauxTVA": {
+                        "compte": {
+                          "journal": {}
+                        },
+                        "type": {}
+                      },
+                      "listeRemises": [],
+                      "listeParticipations": [],
+                      "typeDelaiPaiementFacture": {},
+                      "modesPaiement": []
+                    },
+                    "avoirsDisponibles": [],
+                    "listePrix": [],
+                    "listeRemises": [],
+                    "listeExceptionsAccesPro": [],
+                    "listeReferencesExternes": [],
+                    "listeParticipations": [],
+                    "listeAdresseLivraison": [],
+                    "contacts": [],
+                    "actif": true,
+                    "supprime": false,
+                    "coordonneesBancaires": {
+                      "compte": {
+                        "journal": {}
+                      },
+                      "journal": {},
+                      "modeleComptePaiementCB": {
+                        "journal": {}
+                      },
+                      "modeleComptePaiementCheque": {
+                        "journal": {}
+                      },
+                      "modeleComptePaiementVirement": {
+                        "journal": {}
+                      },
+                      "modeleComptePaiementPrelevement": {
+                        "journal": {}
+                      },
+                      "modeleComptePaiementPaypal": {
+                        "journal": {}
+                      },
+                      "modeleComptePaiementLCR": {
+                        "journal": {}
+                      },
+                      "modeleComptePaiementFactoring": {
+                        "journal": {}
+                      }
+                    },
+                    "typeDelaiPaiementFactureFormulaire": {},
+                    "modesPaiementFormulaire": [],
+                    "typeLivraisonFavFormulaire": [],
+                    "mediaFavFormulaire": [],
+                    "modeReceptionDocumentFavFormulaire": [],
+                    "compte": {
+                      "journal": {}
+                    },
+                    "compteAuxiliaire": {
+                      "journal": {}
+                    },
+                    "typeDelaiPaiementFacture": {},
+                    "modesPaiement": "",
+                    "typeLivraisonFav": "",
+                    "mediaFav": "",
+                    "etat": {},
+                    "etatContact": {}
+                  },
+                  "journal": {}
+                },
+                "modesLivraison": [],
+                "creationAutomatique": false,
+                "elements": []
+              },
+              "quantite": 10,
+              "remise": "20%"
+            }
+          ],
+          "listeParticipations": [],
+          "typeDelaiPaiementFacture": {},
+          "modesPaiement": [],
+          "idParent": 17849
+        }
+      ],
+      "syncedAt": 1784705267591
+    },
+    "grilleTarifaire": {
+      "lignes": [
+        {
+          "idStockBouteille": 165533,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 18.72,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 133238,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 28.08,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150176,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 21.84,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165534,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 18.72,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 116441,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 28.08,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150179,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 21.84,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165535,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 18.72,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 116442,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 28.08,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150183,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 21.84,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165239,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 18.72,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": null,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 20,
+          "packaging": "Pack de 12",
+          "quantite": 12,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 18.72,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 116444,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 28.08,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150181,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 21.84,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165536,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 18.72,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 118963,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 28.08,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150182,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 21.84,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165537,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 18.72,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 157871,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 28.08,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 157872,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 20735,
+          "typeClient": "Distributeur",
+          "prixHT": 21.84,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 133747,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 1.95,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165533,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 23.4,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 133238,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 35.1,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 131390,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 4.55,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150176,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 27.3,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 134612,
+          "idProduit": 40720,
+          "produit": "Cola - Chaï - 0.0°",
+          "idContenant": 3145,
+          "contenant": "Fût - 20L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 79,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 108770,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 1.95,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165534,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 23.4,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 116441,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 35.1,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 107559,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 4.55,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150179,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 27.3,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 123545,
+          "idProduit": 40718,
+          "produit": "Framboise - Hibiscus - 0.0°",
+          "idContenant": 3145,
+          "contenant": "Fût - 20L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 79,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 110597,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 1.95,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165535,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 23.4,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 116442,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 35.1,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 107560,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 4.55,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150183,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 27.3,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 123546,
+          "idProduit": 40716,
+          "produit": "Gingembre - Citron - 0.0°",
+          "idContenant": 3145,
+          "contenant": "Fût - 20L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 79,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 114576,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 1.95,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165239,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 23.4,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 116444,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 35.1,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 114575,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 4.55,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150181,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 27.3,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 123548,
+          "idProduit": 42133,
+          "produit": "Mangue - Vanille - 0.0°",
+          "idContenant": 3145,
+          "contenant": "Fût - 20L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 79,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 118964,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 1.95,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165536,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 23.4,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 118963,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 35.1,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 118965,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 4.55,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 150182,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 27.3,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 123549,
+          "idProduit": 43350,
+          "produit": "Orange Sanguine - 0.0°",
+          "idContenant": 3145,
+          "contenant": "Fût - 20L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 79,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 157873,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 1.95,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 165537,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 4,
+          "packaging": "Carton de 12",
+          "quantite": 12,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 23.4,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 157871,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 2655,
+          "contenant": "Bouteille - 0.35L",
+          "idLot": 13,
+          "packaging": "Carton de 18",
+          "quantite": 18,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 35.1,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 157874,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 4.55,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 157872,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 2654,
+          "contenant": "Bouteille - 1L",
+          "idLot": 3,
+          "packaging": "Carton de 6",
+          "quantite": 6,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 27.3,
+          "horsDroits": true
+        },
+        {
+          "idStockBouteille": 159909,
+          "idProduit": 56510,
+          "produit": "Pomme - Sureau - 0.0°",
+          "idContenant": 3145,
+          "contenant": "Fût - 20L",
+          "idLot": 1,
+          "packaging": "Unité",
+          "quantite": 1,
+          "idClientType": 17849,
+          "typeClient": "client PRO",
+          "prixHT": 79,
+          "horsDroits": true
+        }
+      ],
+      "syncedAt": 1784705278613
+    }
+  },
+  "overrides": {
+    "107559": {
+      "displayName": ""
+    },
+    "107560": {
+      "displayName": ""
+    },
+    "110597": {
+      "displayName": ""
+    },
+    "116441": {
+      "visible": false,
+      "displayName": "Kombucha Framboise - Hibiscus",
+      "photoUrl": "/api/photos/produits/116441?v=seed",
+      "rupture": true
+    },
+    "116442": {
+      "visible": false,
+      "displayName": "Kombucha Gingembre - Citron",
+      "photoUrl": "/api/photos/produits/116442?v=seed",
+      "rupture": false
+    },
+    "116444": {
+      "visible": false,
+      "displayName": "Kombucha Mangue - Vanille",
+      "photoUrl": "/api/photos/produits/116444?v=seed",
+      "rupture": false
+    },
+    "118963": {
+      "visible": false,
+      "displayName": "Kombucha Orange sanguine",
+      "photoUrl": "/api/photos/produits/118963?v=seed",
+      "rupture": false
+    },
+    "123545": {
+      "displayName": ""
+    },
+    "131390": {
+      "visible": false,
+      "displayName": "",
+      "photoUrl": "",
+      "rupture": false
+    },
+    "133238": {
+      "visible": false,
+      "displayName": "Kombucha Cola - Chaï",
+      "photoUrl": "/api/photos/produits/133238?v=seed",
+      "rupture": false
+    },
+    "150176": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/150176?v=seed",
+      "rupture": false
+    },
+    "150179": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/150179?v=seed",
+      "rupture": false
+    },
+    "150181": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/150181?v=seed",
+      "rupture": false
+    },
+    "150182": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/150182?v=seed",
+      "rupture": false
+    },
+    "150183": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/150183?v=seed",
+      "rupture": true
+    },
+    "157871": {
+      "visible": false,
+      "displayName": "Kombucha Pomme - Sureau",
+      "photoUrl": "/api/photos/produits/157871?v=seed",
+      "rupture": false
+    },
+    "157872": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/157872?v=seed",
+      "rupture": false
+    },
+    "165239": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/165239?v=seed",
+      "rupture": false
+    },
+    "165533": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/165533?v=seed",
+      "rupture": false
+    },
+    "165534": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/165534?v=seed",
+      "rupture": false
+    },
+    "165535": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/165535?v=seed",
+      "rupture": false
+    },
+    "165536": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/165536?v=seed",
+      "rupture": true
+    },
+    "165537": {
+      "visible": true,
+      "displayName": "",
+      "photoUrl": "/api/photos/produits/165537?v=seed",
+      "rupture": false
+    }
+  },
+  "clientCache": {
+    "client": {
+      "idClient": 588074,
+      "nom": "Client test local",
+      "raisonSociale": "Compte de démonstration",
+      "numero": "DEV-LOCAL",
+      "emailPrincipal": "client@goa.local",
+      "type": {
+        "idClientType": 20680,
+        "libelle": "GMS"
+      },
+      "minimumCommande": 30,
+      "fraisLivraisonHT": null,
+      "remise": null,
+      "remise2": "",
+      "typeRemise2": null,
+      "remisesCiblees": [],
+      "typeLivraisonFav": "",
+      "tags": [
+        "laposte"
+      ]
+    },
+    "idGrilleTarifaire": 17849,
+    "prix": {
+      "150176": 27.3,
+      "150179": 27.3,
+      "150181": 27.3,
+      "150182": 27.3,
+      "150183": 27.3,
+      "157872": 27.3,
+      "165239": 23.4,
+      "165533": 23.4,
+      "165534": 23.4,
+      "165535": 23.4,
+      "165536": 23.4,
+      "165537": 23.4
+    },
+    "prixUpdatedAt": {
+      "150176": 1784705324027,
+      "150179": 1784705326037,
+      "150181": 1784705330032,
+      "150182": 1784705332148,
+      "150183": 1784705328028,
+      "157872": 1784705334048,
+      "165239": 1784705331043,
+      "165533": 1784705325022,
+      "165534": 1784705327054,
+      "165535": 1784705329042,
+      "165536": 1784705333031,
+      "165537": 1784705335046
+    },
+    "syncedAt": 1784705335046
+  },
+  "photoAssets": {
+    "116441": "97fc9b382e9464a4.png",
+    "116442": "b9050da5b4411bff.png",
+    "116444": "0bffa8803f9135c9.png",
+    "118963": "43a62fc02dadc1e5.png",
+    "133238": "2212027c55a8f93d.png",
+    "150176": "2212027c55a8f93d.png",
+    "150179": "97fc9b382e9464a4.png",
+    "150181": "0bffa8803f9135c9.png",
+    "150182": "43a62fc02dadc1e5.png",
+    "150183": "b9050da5b4411bff.png",
+    "157871": "772deaad78570ea9.png",
+    "157872": "772deaad78570ea9.png",
+    "165239": "0bffa8803f9135c9.png",
+    "165533": "2212027c55a8f93d.png",
+    "165534": "97fc9b382e9464a4.png",
+    "165535": "b9050da5b4411bff.png",
+    "165536": "43a62fc02dadc1e5.png",
+    "165537": "772deaad78570ea9.png"
+  }
+}

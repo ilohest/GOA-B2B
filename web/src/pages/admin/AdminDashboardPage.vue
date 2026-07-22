@@ -28,7 +28,7 @@ const statutSync = useQuery({
   refetchInterval: 10_000,
 })
 
-type SyncStartResponse = { enCours: true } | { ok: boolean; report: SyncReport }
+type SyncStartResponse = { demarree: true } | { enCours: true } | { ok: boolean; report: SyncReport }
 
 const syncEnCours = computed(() => statutSync.data.value?.verrou?.actif === true)
 const syncGlobaleEnCours = computed(
@@ -86,6 +86,11 @@ const syncAncienne = computed(() => {
   return !dernierSync || Date.now() - dernierSync > SYNC_ATTENTION_MS
 })
 
+const derniereTentativePartielle = computed(() => {
+  const rapport = data.value?.dernierRapportSync
+  return rapport && !rapport.reussi ? rapport : null
+})
+
 const synchro = useMutation({
   mutationFn: () => api.post<SyncStartResponse>('/admin/sync'),
   onMutate: () => {
@@ -94,6 +99,11 @@ const synchro = useMutation({
   },
   onSuccess: (resultat) => {
     declenchementManuel.value = false
+    if ('demarree' in resultat) {
+      toast.loading('Synchronisation Easybeer en cours…', { id: TOAST_SYNC_ID })
+      statutSync.refetch()
+      return
+    }
     if ('enCours' in resultat) {
       toast.info('Une synchronisation est déjà en cours.', {
         id: TOAST_SYNC_ID,
@@ -129,6 +139,13 @@ const diagnosticSync = computed(() => {
   }
   if (s.verrou) {
     return `Verrou de synchronisation ancien (${s.verrou.ageMinutes} min).`
+  }
+  const rapport = s.dernierSync
+  if (rapport && !rapport.reussi) {
+    const premiereErreur = rapport.erreurs?.[0] ?? rapport.clients.find((client) => client.erreur)?.erreur
+    return premiereErreur
+      ? `Dernière tentative partielle : ${premiereErreur}`
+      : 'La dernière tentative de synchronisation était partielle.'
   }
   return 'Aucun ban local actif détecté.'
 })
@@ -180,6 +197,12 @@ const stats = computed(() => {
       <div class="grid justify-items-start gap-2 sm:justify-items-end">
         <div class="flex items-center gap-2">
           <Skeleton v-if="isPending" class="h-3 w-40" />
+          <p
+            v-else-if="derniereTentativePartielle"
+            class="text-xs text-amber-700 sm:whitespace-nowrap"
+          >
+            Dernière tentative : {{ dateHeureFr(derniereTentativePartielle.syncedAt) }} · partielle
+          </p>
           <p v-else-if="data?.dernierSync" class="text-xs whitespace-nowrap text-muted-foreground">
             À jour : {{ dateHeureFr(data.dernierSync) }}
           </p>

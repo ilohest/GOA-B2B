@@ -5,6 +5,7 @@ import { Copy, UserRound } from "@lucide/vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
+import { copierDansPressePapiers } from "@/lib/clipboard";
 import type { AdminClientDetail, InvitationResponse } from "@/lib/types";
 import { dateFr, prixFr } from "@/lib/format";
 import { easybeerLien } from "@/lib/easybeer";
@@ -52,12 +53,11 @@ const invitation = useMutation({
 });
 
 async function copierTexte(texte: string, confirmation: string) {
-  try {
-    await navigator.clipboard.writeText(texte);
+  if (await copierDansPressePapiers(texte)) {
     toast.success(confirmation);
-  } catch {
-    toast.error("Impossible de copier dans le presse-papiers.");
+    return;
   }
+  toast.error("Impossible de copier dans le presse-papiers.");
 }
 
 const tags = computed(() => {

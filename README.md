@@ -30,7 +30,56 @@ npm run dev:web         # front Vite sur http://localhost:5173
 Comptes de test (émulateur) : `admin@goa.local` / `client@goa.local`, mot de passe `goa-dev-123`.
 Le compte client est lié au client Easybeer de test 588074 (CL000083).
 
+Le seed charge aussi un instantané versionné du catalogue de développement :
+produits, tarifs, visibilité, noms personnalisés, ruptures et photos. Un nouveau
+clone retrouve ainsi le même catalogue sans lancer une synchronisation Easybeer.
+
+Pour remplacer cet instantané par l'état actuellement affiché dans les
+émulateurs, laissez-les démarrés puis lancez :
+
+```bash
+npm --prefix server run seed:export-catalogue
+```
+
+Les fichiers produits dans `server/fixtures/` doivent ensuite être commités.
+
 ⚠️ Le backend écoute sur **8788** (8787 déjà pris sur le poste de dev par un autre projet).
+
+## Mise en ligne sur le VPS
+
+La préproduction est publiée sur `http://82.112.255.95` dans
+`/var/www/html/isaure/goa-kombucha`. Elle utilise les émulateurs Firebase du
+VPS. Le script de mise en ligne configure `COMMANDE_EST_DEVIS=false` : les
+validations créent de vraies commandes Easybeer fermes.
+
+Prérequis locaux : accès SSH au VPS, `npm`, `rsync`, `curl` et un fichier
+`server/.env` complet. Le VPS doit disposer de Node.js 22+, PM2, Apache et
+Java 21 (`openjdk-21-jre-headless`).
+
+Pour vérifier, construire et redéployer l'ensemble de l'application :
+
+```bash
+npm run deploy:vps
+```
+
+Le script conserve les données Firebase distantes entre deux déploiements,
+redémarre les processus PM2, vérifie la configuration Apache puis teste la page
+publique et l'API. Ses paramètres peuvent être remplacés sans modifier le
+fichier :
+
+```bash
+VPS_HOST=root@82.112.255.95 \
+APP_DIR=/var/www/html/isaure/goa-kombucha \
+PUBLIC_URL=http://82.112.255.95 \
+AUTH_EMULATOR_URL=http://82.112.255.95:9099 \
+npm run deploy:vps
+```
+
+L'aide intégrée récapitule ces options :
+
+```bash
+npm run deploy:vps -- --help
+```
 
 ## À faire en fin de développement
 
