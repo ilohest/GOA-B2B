@@ -1,0 +1,8 @@
+[Unit]
+Description=Renouvellement du certificat IP GOA Kombucha
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/certbot-ip/bin/certbot renew --cert-name 82.112.255.95 --quiet --deploy-hook "/usr/bin/systemctl reload apache2"

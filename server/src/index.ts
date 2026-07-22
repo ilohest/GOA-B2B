@@ -1947,7 +1947,7 @@ if (config.syncIntervalMinutes > 0) {
   }
 }
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
+serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
   console.log(`[server] GOA Kombucha backend sur http://localhost:${info.port}`)
   if (config.authDisabled) console.log('[server] ⚠️  AUTH_DISABLED=true (dev) — auth court-circuitée.')
 })

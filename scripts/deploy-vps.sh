@@ -3,8 +3,8 @@ set -euo pipefail
 
 VPS_HOST="${VPS_HOST:-root@82.112.255.95}"
 APP_DIR="${APP_DIR:-/var/www/html/isaure/goa-kombucha}"
-PUBLIC_URL="${PUBLIC_URL:-http://82.112.255.95}"
-AUTH_EMULATOR_URL="${AUTH_EMULATOR_URL:-http://82.112.255.95:9099}"
+PUBLIC_URL="${PUBLIC_URL:-https://82.112.255.95}"
+AUTH_EMULATOR_URL="${AUTH_EMULATOR_URL:-https://82.112.255.95}"
 
 cd "$(dirname "$0")/.."
 
@@ -18,8 +18,8 @@ Usage :
 Variables optionnelles :
   VPS_HOST            Cible SSH (défaut : root@82.112.255.95)
   APP_DIR             Dossier distant (défaut : /var/www/html/isaure/goa-kombucha)
-  PUBLIC_URL          URL publique (défaut : http://82.112.255.95)
-  AUTH_EMULATOR_URL   URL publique de Firebase Auth (défaut : http://82.112.255.95:9099)
+  PUBLIC_URL          URL publique (défaut : https://82.112.255.95)
+  AUTH_EMULATOR_URL   URL publique de Firebase Auth (défaut : https://82.112.255.95)
 
 Le script vérifie et construit le projet, synchronise les fichiers, redémarre
 PM2, recharge Apache puis teste la page et /api/health. Il configure
@@ -58,6 +58,7 @@ rsync -az server/package.json server/package-lock.json server/.env "$VPS_HOST:$A
 rsync -az firebase.json firestore.rules storage.rules "$VPS_HOST:$APP_DIR/"
 rsync -az deploy/firebase.vps.json "$VPS_HOST:$APP_DIR/"
 rsync -az deploy/goa-kombucha-ip.conf "$VPS_HOST:$APP_DIR/deploy/"
+rsync -az deploy/goa-ip-certbot.service deploy/goa-ip-certbot.timer "$VPS_HOST:$APP_DIR/deploy/"
 
 if ! ssh "$VPS_HOST" "test -f '$APP_DIR/shared/emulator-data/firebase-export-metadata.json'"; then
   echo "Initialisation des données des émulateurs"
@@ -98,6 +99,7 @@ ssh "$VPS_HOST" "set -e
       --import shared/emulator-data --export-on-exit shared/emulator-data
   fi
 
+  export SERVER_HOST=127.0.0.1
   if pm2 describe goa-kombucha-api >/dev/null 2>&1; then
     pm2 restart goa-kombucha-api --update-env
   else
@@ -106,8 +108,12 @@ ssh "$VPS_HOST" "set -e
   fi
   pm2 save
 
-  a2enmod proxy proxy_http rewrite >/dev/null
+  a2enmod proxy proxy_http rewrite ssl headers >/dev/null
   cp '$APP_DIR/deploy/goa-kombucha-ip.conf' /etc/apache2/sites-available/goa-kombucha-ip.conf
+  cp '$APP_DIR/deploy/goa-ip-certbot.service' /etc/systemd/system/goa-ip-certbot.service
+  cp '$APP_DIR/deploy/goa-ip-certbot.timer' /etc/systemd/system/goa-ip-certbot.timer
+  systemctl daemon-reload
+  systemctl enable --now goa-ip-certbot.timer >/dev/null
   a2ensite goa-kombucha-ip.conf >/dev/null
   apache2ctl configtest
   systemctl reload apache2"

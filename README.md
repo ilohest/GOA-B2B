@@ -47,14 +47,17 @@ Les fichiers produits dans `server/fixtures/` doivent ensuite être commités.
 
 ## Mise en ligne sur le VPS
 
-La préproduction est publiée sur `http://82.112.255.95` dans
+La préproduction est publiée sur `https://82.112.255.95` dans
 `/var/www/html/isaure/goa-kombucha`. Elle utilise les émulateurs Firebase du
 VPS. Le script de mise en ligne configure `COMMANDE_EST_DEVIS=false` : les
 validations créent de vraies commandes Easybeer fermes.
 
 Prérequis locaux : accès SSH au VPS, `npm`, `rsync`, `curl` et un fichier
-`server/.env` complet. Le VPS doit disposer de Node.js 22+, PM2, Apache et
-Java 21 (`openjdk-21-jre-headless`).
+`server/.env` complet. Le VPS doit disposer de Node.js 22+, PM2, Apache,
+Java 21 (`openjdk-21-jre-headless`) et du Certbot IP isolé dans
+`/opt/certbot-ip`. Le certificat Let’s Encrypt de l'adresse IP est court ; le
+timer `goa-ip-certbot.timer` le vérifie quatre fois par jour et recharge Apache
+après un renouvellement.
 
 Pour vérifier, construire et redéployer l'ensemble de l'application :
 
@@ -63,15 +66,17 @@ npm run deploy:vps
 ```
 
 Le script conserve les données Firebase distantes entre deux déploiements,
-redémarre les processus PM2, vérifie la configuration Apache puis teste la page
-publique et l'API. Ses paramètres peuvent être remplacés sans modifier le
-fichier :
+redémarre les processus PM2, installe la configuration HTTPS et le timer de
+renouvellement, vérifie Apache puis teste la page publique et l'API. Le backend
+et les émulateurs écoutent uniquement sur la boucle locale ; Apache publie en
+HTTPS les routes utiles. Les paramètres du script peuvent être remplacés sans
+modifier le fichier :
 
 ```bash
 VPS_HOST=root@82.112.255.95 \
 APP_DIR=/var/www/html/isaure/goa-kombucha \
-PUBLIC_URL=http://82.112.255.95 \
-AUTH_EMULATOR_URL=http://82.112.255.95:9099 \
+PUBLIC_URL=https://82.112.255.95 \
+AUTH_EMULATOR_URL=https://82.112.255.95 \
 npm run deploy:vps
 ```
 
