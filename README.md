@@ -122,8 +122,9 @@ Le script VPS reste uniquement disponible pour la préproduction temporaire.
 - La boutique auto-répare le catalogue/grille et les prix du client après
   **30 min**, avec stale-while-revalidate, verrou distribué et délai
   anti-rafale. Les seuils sont configurables dans `server/.env.example`.
-- Un Cloud Scheduler quotidien vers `POST /api/scheduled/sync` reste utile comme
-  filet de sécurité pour les listes admin, mais il est optionnel pour le catalogue.
+- En production, un Cloud Scheduler quotidien vers `POST /api/scheduled/sync`
+  assure une mise à jour générale de sécurité, en complément des actualisations
+  déclenchées à la consultation.
 - Garder `PRIX_CACHE_MAX_AGE_MINUTES` supérieur aux seuils proactifs et
   `PRIX_COMMANDE_MAX_AGE_MINUTES` compris entre le seuil de refresh prix et le
   garde-fou dur. Les listes clients et commandes se renouvellent selon leurs

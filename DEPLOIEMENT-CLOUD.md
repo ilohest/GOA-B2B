@@ -9,7 +9,7 @@ compte de facturation doivent appartenir au client.
 - Cloud Run `goa-b2b-api` : API Hono/Node.
 - Firebase Auth, Firestore et Storage : comptes et données.
 - Cloud Tasks `easybeer-sync` : synchronisations longues et retries.
-- Cloud Scheduler : filet de sécurité quotidien optionnel.
+- Cloud Scheduler : mise à jour générale quotidienne de sécurité.
 - Secret Manager : identifiants Easybeer, SMTP et secrets techniques.
 
 Région applicative : `europe-west1` (Belgique). Pour la base Firestore, choisir
@@ -100,9 +100,10 @@ DKIM ou DMARC utilisés par les e-mails.
 Attendre la validation DNS et la génération du certificat HTTPS avant les tests
 de connexion et d'invitation.
 
-## 7. Scheduler quotidien optionnel
+## 7. Mise à jour générale quotidienne
 
-Créer une tâche Cloud Scheduler quotidienne vers l'URL Cloud Run directe :
+Avant l'ouverture aux clients, créer une tâche Cloud Scheduler quotidienne vers
+l'URL Cloud Run directe :
 
 - méthode : `POST` ;
 - chemin : `/api/scheduled/sync` ;

@@ -1,4 +1,4 @@
-<!-- guide-version: 1.45 -->
+<!-- guide-version: 1.46 -->
 <!-- guide-updated-at: 2026-07-22 -->
 
 # Guide administrateur — plateforme de commande GOA
@@ -30,90 +30,38 @@ seule à la synchronisation suivante.
 
 ## 3. Mise à jour des informations Easybeer
 
-Pour éviter de trop solliciter Easybeer, la plateforme conserve temporairement
-la dernière version connue des produits, des prix, des commandes et des clients.
-Ces informations en cache ne sont pas toutes actualisées de la même manière :
+La plateforme vérifie régulièrement les informations provenant d'Easybeer :
+produits, prix, remises, clients et commandes. Une mise à jour générale est
+également effectuée automatiquement chaque jour. **Dans la plupart des cas, vous
+n'avez donc rien à faire.**
 
-- le **catalogue, les types de clients et la grille tarifaire**, communs à tous,
-  sont vérifiés à l'ouverture de la boutique s'ils ont plus de **30 minutes** ;
-- la **fiche, les remises et les tarifs négociés de chaque client** sont vérifiés
-  séparément lorsqu'il ouvre sa boutique, s'ils ont plus de **30 minutes** ;
-- la page admin **Clients** vérifie automatiquement sa liste si elle a plus de
-  **30 minutes** ;
-- la page admin **Commandes** et l'historique de commandes d'un client vérifient
-  automatiquement leurs données si elles ont plus de **10 minutes**.
-
-Lorsqu'une mise à jour est nécessaire, une seule demande est lancée pour la même
-information, même si plusieurs personnes ouvrent la plateforme en même temps.
-Pendant la vérification, les dernières données valides restent affichées. Si
-aucune donnée n'est encore disponible, la page indique qu'elle est en cours de
-préparation.
-
-Une mise à jour automatique quotidienne peut être ajoutée par sécurité, mais
-elle n'est pas nécessaire au fonctionnement normal. Le bouton **« Tout
-synchroniser »** du tableau de bord permet de demander immédiatement une mise à
-jour complète après un changement important dans Easybeer.
+Si Easybeer est momentanément indisponible, la dernière version disponible reste
+affichée afin que vos clients ne se retrouvent pas devant une boutique vide.
 
 ### Quand cliquer sur « Tout synchroniser » ?
 
-Utilisez-le seulement dans ces cas :
+Ce bouton met à jour les informations Easybeer utilisées dans l'administration
+et dans la boutique client. Utilisez-le si :
 
 - vous avez changé un **prix**, une **grille tarifaire**, une **remise**, une
   fiche client ou un produit dans Easybeer et le changement doit être visible
   immédiatement ;
-- vous préparez une ouverture de commande et le tableau de bord signale une
-  donnée en cache qui n'a pas été vérifiée récemment.
+- le tableau de bord vous signale que certaines informations doivent être
+  vérifiées.
 
-Évitez de cliquer plusieurs fois : Easybeer limite le nombre de demandes. La
-plateforme empêche les mises à jour en double et affiche un compte à rebours si
-Easybeer est momentanément saturé.
+Une fois la synchronisation terminée, les nouvelles informations sont utilisées
+au prochain affichage de la boutique. Si un client avait déjà la page ouverte,
+il lui suffit de la recharger. Vous pouvez quitter le tableau de bord pendant la
+synchronisation : elle continue automatiquement. Évitez simplement de cliquer
+plusieurs fois.
 
-Vous pouvez changer de page pendant la synchronisation : la tâche continue côté
-serveur. En revenant sur le tableau de bord, son état et le résultat enregistré
-sont de nouveau affichés. Il n'est donc pas nécessaire de laisser cette page
-ouverte.
+Les boutons des pages **Clients**, **Commandes** et **Catalogue** actualisent
+uniquement la page concernée. Les boutons **« Ouvrir dans Easybeer »** ouvrent
+Easybeer sans lancer de mise à jour.
 
-### Ce qui se met à jour autrement
-
-- **Ouverture de la boutique** : vérifie le catalogue commun et les informations
-  propres au client, puis actualise uniquement ce qui est devenu trop ancien.
-- **Ouverture des pages admin Clients ou Commandes** : vérifie et actualise
-  automatiquement la liste concernée lorsqu'elle est trop ancienne.
-- **Ouverture de la page admin Catalogue** : affiche le cache existant sans
-  appeler Easybeer ; son bouton d'actualisation lance la mise à jour ciblée.
-- **Mise à jour automatique de sécurité (optionnelle)** : actualise toutes les
-  informations, même si personne n'a ouvert la boutique.
-- **Bouton du tableau de bord** : met à jour le catalogue, les listes admin et
-  les informations des comptes clients de la plateforme.
-- **Boutons d'actualisation des pages** : Clients et Commandes relancent une
-  mise à jour ciblée de leur liste ; Catalogue relance uniquement produits,
-  types et grille tarifaire. Les prix personnalisés sont vérifiés client par
-  client lors de l'ouverture de leur boutique ; utilisez **« Tout synchroniser »**
-  seulement pour les actualiser immédiatement pour tous les comptes existants.
-- **Validation d'une commande client** : quand un client confirme sa commande,
-  elle est immédiatement créée dans Easybeer. Easybeer calcule ensuite le total
-  final de référence.
-- **Premier accès d'un client** : si ses tarifs ne sont pas encore prêts, la
-  boutique les récupère automatiquement et lui affiche un message d'attente.
-- **Boutons « Ouvrir dans Easybeer »** : ils n'actualisent rien, ils ouvrent
-  seulement la page correspondante dans Easybeer.
-
-Les pages Clients, Commandes et Catalogue affichent leur date de dernière mise à
-jour. Leurs boutons servent à actualiser uniquement la page concernée. Le tableau
-de bord compare les dates réelles des différents caches et prévient si l'un
-d'eux n'a pas été vérifié depuis plus de **30 heures** ; il ne se fie pas
-seulement à la date du dernier clic sur **« Tout synchroniser »**.
-
-Pendant le chargement d'une page, des aperçus gris reprennent la forme du contenu
-à venir. Ils disparaissent automatiquement dès que les informations sont prêtes.
-
-**Sécurité sur les prix** : la plateforme utilise d'abord le tarif négocié du
-client, puis le tarif de sa catégorie si nécessaire. Avant de créer une commande,
-elle tente une mise à jour si le tarif doit être revérifié. Si elle ne peut
-confirmer aucun tarif datant de moins de **60 minutes**, elle bloque temporairement
-la commande de l'article plutôt que de risquer d'utiliser un prix trop ancien.
-Easybeer calcule ensuite les remises et les taxes : le total du panier avant
-validation reste donc indicatif.
+Avant d'accepter une commande, la plateforme vérifie également les prix. Si un
+prix ne peut pas être confirmé, elle suspend temporairement la commande plutôt
+que d'utiliser un mauvais tarif.
 
 ## 4. Le catalogue
 

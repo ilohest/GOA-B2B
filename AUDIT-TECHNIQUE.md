@@ -96,10 +96,10 @@ Les affirmations ont été comparées aux routes, règles métier et composants 
 
 ### Priorité haute — exploitation
 
-- Le catalogue client n'exige plus de job externe : son cache est entretenu à la
-  demande. Un appel quotidien à `POST /api/scheduled/sync` avec
-  `SCHEDULER_SECRET` reste recommandé uniquement comme filet de sécurité pour les
-  listes admin et les périodes sans consultation.
+- Le catalogue client reste utilisable sans job externe grâce aux mises à jour
+  déclenchées à la consultation. La production prévoit néanmoins un appel
+  quotidien à `POST /api/scheduled/sync` avec `SCHEDULER_SECRET`, comme filet de
+  sécurité général et pour les périodes sans consultation.
 - Ajouter une alerte externe si `cache/meta.dernierSync.syncedAt` dépasse 24 h ou
   si le rapport contient des erreurs. Le tableau de bord avertit, mais ce n'est
   pas une alerte proactive.
@@ -147,8 +147,8 @@ Les affirmations ont été comparées aux routes, règles métier et composants 
 
 ## Checklist de mise en production
 
-- Si le filet de sécurité est souhaité, configurer et tester `SCHEDULER_SECRET`
-  et un job quotidien ; ce n'est pas un prérequis du catalogue client.
+- Avant l'ouverture aux clients, configurer et tester `SCHEDULER_SECRET` et le
+  job quotidien prévu comme filet de sécurité général.
 - Conserver `PRIX_AUTO_REFRESH_MINUTES <= PRIX_COMMANDE_MAX_AGE_MINUTES < PRIX_CACHE_MAX_AGE_MINUTES`.
 - Vérifier le diagnostic `/api/admin/sync/status` après déploiement.
 - Déclencher une synchro complète, puis contrôler catalogue, grille et un client

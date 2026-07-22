@@ -100,6 +100,7 @@ ssh "$VPS_HOST" "set -e
   fi
 
   export SERVER_HOST=127.0.0.1
+  export SYNC_INTERVAL_MINUTES=1440
   if pm2 describe goa-kombucha-api >/dev/null 2>&1; then
     pm2 restart goa-kombucha-api --update-env
   else
