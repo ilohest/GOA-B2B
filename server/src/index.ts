@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { randomUUID } from 'node:crypto'
-import { config } from './config.js'
+import { config, validerConfigurationProduction } from './config.js'
 import { requireAuth, requireAdmin } from './auth.js'
 import { getDb, getAdminAuth, getBucket } from './firebase.js'
 import {
@@ -22,7 +22,6 @@ import {
   idStockBouteilleElementCommande,
   detailCommande,
   telechargerDocument,
-  listeDocumentsFacturesRecentes,
   type LigneCommandeInput,
   type ProduitAutocomplete,
 } from './easybeer.js'
@@ -45,8 +44,6 @@ import {
   rafraichirCacheClientCible,
   remplirCacheClientCible,
   SYNC_LOCK_TTL_MS,
-  syncCommandesClient,
-  syncCommandesRecentes,
   typesClientEnCascade,
   type CacheClientDoc,
   type CommandeClientCache,
@@ -80,8 +77,11 @@ import {
 } from './remisesCommande.js'
 import { creerInvitation, lireInvitation, consommerInvitation } from './invitations.js'
 import { emailActif, envoyerInvitationEmail } from './email.js'
+import { cloudTasksConfigure, planifierSynchronisationEasybeer, requeteCloudTasksAutorisee } from './tasks.js'
 
 import { EasybeerBanError, etatBanEasybeer, surBan, restaurerBan } from './easybeer.js'
+
+validerConfigurationProduction()
 
 const app = new Hono()
 
@@ -112,6 +112,7 @@ type CachesCatalogue = {
  */
 async function lireCachesCatalogueResilients(
   db: NonNullable<ReturnType<typeof getDb>>,
+  options: { attendreSiPlusVieuxQueMs?: number } = {},
 ): Promise<CachesCatalogue> {
   const lire = async (): Promise<Partial<Omit<CachesCatalogue, 'revalidationEnCours'>>> => {
     const [catalogue, grille, types] = await Promise.all([
@@ -141,10 +142,23 @@ async function lireCachesCatalogueResilients(
     )
   }
 
+  const doitAttendreRevalidation =
+    options.attendreSiPlusVieuxQueMs != null &&
+    (cacheEstAncien(caches.catalogue?.syncedAt, options.attendreSiPlusVieuxQueMs) ||
+      cacheEstAncien(caches.grille?.syncedAt, options.attendreSiPlusVieuxQueMs))
+  if (doitAttendreRevalidation) {
+    try {
+      const resultat = await lancerRafraichissementCatalogue(db, { automatique: true })
+      if ('rafraichi' in resultat) caches = await lire()
+    } catch (err) {
+      console.warn(`[sync] revalidation catalogue avant commande : ${(err as Error).message}`)
+    }
+  }
+
   const ageMaxMs = config.cache.catalogueRefreshAgeMinutes * 60_000
   const ageDurMs = config.cache.prixMaxAgeMinutes * 60_000
   const expirationDure =
-    cacheEstAncien(caches.catalogue.syncedAt, ageDurMs) || cacheEstAncien(caches.grille.syncedAt, ageDurMs)
+    cacheEstAncien(caches.catalogue?.syncedAt, ageDurMs) || cacheEstAncien(caches.grille?.syncedAt, ageDurMs)
   if (expirationDure) {
     // Ici le prochain contrôle de commande bloquerait les prix. On attend donc
     // la tentative de réparation au lieu de compter sur une tâche post-réponse.
@@ -328,7 +342,9 @@ app.get('/api/catalogue', requireAuth, async (c) => {
   }
 
   const [{ catalogue: catalogueCache, grille, types, revalidationEnCours }, overrides] = await Promise.all([
-    lireCachesCatalogueResilients(db),
+    lireCachesCatalogueResilients(db, {
+      attendreSiPlusVieuxQueMs: config.cache.prixCommandeMaxAgeMinutes * 60_000,
+    }),
     lireOverrides(db),
   ])
   const { produits, syncedAt } = catalogueCache
@@ -459,23 +475,6 @@ async function retirerCommandeClientCache(
   await ref.set({ commandes, syncedAt: Date.now(), localUpdatedAt: Date.now() }, { merge: true })
 }
 
-async function rafraichirCachesCommandeClient(
-  db: NonNullable<ReturnType<typeof getDb>>,
-  idClient: number,
-  contexte: string,
-) {
-  try {
-    await syncCommandesRecentes(db)
-  } catch (e) {
-    console.warn(`[sync] commandes récentes après ${contexte} : ${(e as Error).message}`)
-    try {
-      await syncCommandesClient(db, idClient)
-    } catch (fallbackError) {
-      console.warn(`[sync] commandes client après ${contexte} : ${(fallbackError as Error).message}`)
-    }
-  }
-}
-
 async function lireCommandesLocales(
   db: NonNullable<ReturnType<typeof getDb>>,
   idClient: number,
@@ -603,7 +602,9 @@ async function resoudreLignes(
   if (!valides.length) return ko('Aucune ligne de commande valide')
 
   const [{ catalogue: catalogueCache, grille, types }, overrides] = await Promise.all([
-    lireCachesCatalogueResilients(db),
+    lireCachesCatalogueResilients(db, {
+      attendreSiPlusVieuxQueMs: config.cache.prixCommandeMaxAgeMinutes * 60_000,
+    }),
     lireOverrides(db),
   ])
   const { produits } = catalogueCache
@@ -626,10 +627,13 @@ async function resoudreLignes(
       config.cache.prixRefreshAgeMinutes * 60_000,
     )
   ) {
-    rafraichirCacheClientCible(db, easybeerIdClient).catch((err) =>
-      console.warn(`[sync] auto-refresh prix avant commande ${easybeerIdClient} : ${(err as Error).message}`),
-    )
+    const revalide = await rafraichirCacheClientCible(db, easybeerIdClient).catch((err) => {
+      console.warn(`[sync] revalidation prix avant commande ${easybeerIdClient} : ${(err as Error).message}`)
+      return null
+    })
+    if (revalide) cacheClient = revalide
   }
+  if (cacheClient.idGrilleTarifaire == null) return ko('Grille tarifaire introuvable pour ce client')
 
   // Prix de base = grille du type du client ; le prix personnalisé prime (même
   // résolution que l'affichage → jamais de blocage sur un produit fraîchement
@@ -639,7 +643,7 @@ async function resoudreLignes(
     cacheClient.client.type?.idClientType,
     types,
   )
-  const maxAgeMs = config.cache.prixMaxAgeMinutes * 60_000
+  const maxAgeMs = config.cache.prixCommandeMaxAgeMinutes * 60_000
   const now = Date.now()
 
   const parId = new Map<number, ProduitAutocomplete>(produits.map((p) => [p.idStockBouteille, p]))
@@ -809,11 +813,9 @@ app.post('/api/commandes', requireAuth, async (c) => {
     dateCreation: Date.now(),
     modifiable: true,
   })
-  // Réconciliation du cache commandes (admin + client) depuis Easybeer : en
-  // TÂCHE DE FOND, jamais sur le chemin de la réponse — sinon chaque commande
-  // attend un resync de ~200 commandes (lent, et déclencheur de throttle → 500).
-  // La commande vient d'être ajoutée au cache client localement (upsert ci-dessus).
-  void rafraichirCachesCommandeClient(db, user.easybeerIdClient, `création commande ${resultat.id}`)
+  // Le cache client vient d'être mis à jour localement. La liste admin sera
+  // réconciliée à sa prochaine lecture si son TTL de 10 min est dépassé ; on
+  // n'abandonne plus une promesse post-réponse, non garantie sur Cloud Run.
 
   return c.json({
     ok: true,
@@ -852,25 +854,17 @@ app.get('/api/commandes', requireAuth, async (c) => {
     return c.json({ commandes, direct: true })
   }
   try {
-    const { commandes, syncedAt } = await lireCommandesClientCache(db, user.easybeerIdClient)
-    return c.json({ commandes, syncedAt, indisponible: false })
+    const resultat = await lireCommandesClientCache(db, user.easybeerIdClient)
+    return c.json({ ...resultat, indisponible: resultat.indisponible ?? false })
   } catch (e) {
-    if (e instanceof CacheIndisponibleError) {
-      try {
-        const commandes = await syncCommandesClient(db, user.easybeerIdClient)
-        return c.json({ commandes, syncedAt: Date.now(), indisponible: false, source: 'easybeer' })
-      } catch {
-        const commandes = await lireCommandesLocales(db, user.easybeerIdClient)
-        return c.json({
-          commandes,
-          syncedAt: null,
-          indisponible: true,
-          source: commandes.length ? 'local' : 'aucune',
-          code: e.code,
-        })
-      }
-    }
-    throw e
+    const commandes = await lireCommandesLocales(db, user.easybeerIdClient)
+    return c.json({
+      commandes,
+      syncedAt: null,
+      indisponible: true,
+      source: commandes.length ? 'local' : 'aucune',
+      erreurRefresh: (e as Error).message,
+    })
   }
 })
 
@@ -884,12 +878,8 @@ app.post('/api/commandes/sync', requireAuth, async (c) => {
   if (user.easybeerIdClient == null) return c.json({ commandes: [] })
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
-  const commandes = await syncCommandesClient(db, user.easybeerIdClient)
-  return c.json({
-    commandes,
-    syncedAt: Date.now(),
-    indisponible: false,
-  })
+  const resultat = await lireCommandesClientCache(db, user.easybeerIdClient, true)
+  return c.json({ ...resultat, indisponible: resultat.indisponible ?? false })
 })
 
 /** Charge une commande pour modification (contrôle propriété + garde-fou statut). */
@@ -1145,7 +1135,8 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
     modifiable: true,
   })
   // Réconciliation en tâche de fond (cf. création) — jamais bloquant.
-  void rafraichirCachesCommandeClient(db, user.easybeerIdClient, `modification commande ${idCommande}`)
+  // Le cache client est déjà corrigé localement ; la liste admin se
+  // réconcilie à sa prochaine lecture périmée.
 
   return c.json({
     ok: true,
@@ -1182,7 +1173,7 @@ async function comptesParClient(): Promise<Record<number, { statut: 'invited' | 
 app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
-  const [{ clients, syncedAt, indisponible }, comptes] = await Promise.all([
+  const [{ clients, syncedAt, indisponible, revalidationEnCours, revalidationEchouee }, comptes] = await Promise.all([
     lireListeClients(db, c.req.query('refresh') === '1'),
     comptesParClient(),
   ])
@@ -1191,6 +1182,8 @@ app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
     comptes,
     syncedAt,
     indisponible: indisponible ?? false,
+    revalidationEnCours: revalidationEnCours ?? false,
+    revalidationEchouee: revalidationEchouee ?? false,
     retryAfterSeconds: indisponible ? etatBanEasybeer().secondesRestantes : 0,
   })
 })
@@ -1631,29 +1624,6 @@ app.get('/api/admin/statut-easybeer', requireAuth, requireAdmin, (c) => c.json(e
 
 // ---- Admin : commandes (tous clients) ----
 
-const CACHE_FACTURES_COMMANDES_MS = 10 * 60 * 1000
-
-async function facturesCommandesRecentes(db: NonNullable<ReturnType<typeof getDb>>) {
-  const ref = db.doc('cache/commandesFactures')
-  const snap = await ref.get()
-  const cached = snap.data() as
-    | { factures?: Record<string, { existe: boolean; numero: string | null }>; syncedAt?: number }
-    | undefined
-
-  if (cached?.factures && cached.syncedAt && Date.now() - cached.syncedAt < CACHE_FACTURES_COMMANDES_MS) {
-    return cached.factures
-  }
-
-  const factures = await listeDocumentsFacturesRecentes(500)
-  const parCommande: Record<string, { existe: boolean; numero: string | null }> = {}
-  for (const f of factures) {
-    if (f.idCommande == null) continue
-    parCommande[String(f.idCommande)] = { existe: true, numero: f.code ?? null }
-  }
-  await ref.set({ factures: parCommande, syncedAt: Date.now() })
-  return parCommande
-}
-
 /**
  * Les commandes récentes (30 jours par défaut), depuis le CACHE (resynchro via
  * `?refresh=1` ou le job de synchro) — plus d'appel Easybeer par visite.
@@ -1661,22 +1631,18 @@ async function facturesCommandesRecentes(db: NonNullable<ReturnType<typeof getDb
 app.get('/api/admin/commandes', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
-  const { commandes, syncedAt, indisponible } = await lireCommandesRecentes(db, c.req.query('refresh') === '1')
-  let factures: Record<string, { existe: boolean; numero: string | null }> = {}
-  try {
-    factures = await facturesCommandesRecentes(db)
-  } catch {
-    // La colonne FA est informative : si Easybeer refuse temporairement la liste
-    // documents, on affiche le cache commandes sans bloquer la page.
-  }
+  const { commandes, syncedAt, indisponible, revalidationEnCours, revalidationEchouee } =
+    await lireCommandesRecentes(db, c.req.query('refresh') === '1')
   return c.json({
     commandes: commandes.map((cmd) => ({
       ...cmd,
-      facture: (cmd.idCommande != null ? factures[String(cmd.idCommande)] : undefined) ?? cmd.facture ?? null,
+      facture: cmd.facture ?? null,
       totalHT: cmd.totalHT ?? (cmd.totalTTC != null ? cmd.totalTTC / 1.055 : null),
     })),
     syncedAt,
     indisponible: indisponible ?? false,
+    revalidationEnCours: revalidationEnCours ?? false,
+    revalidationEchouee: revalidationEchouee ?? false,
     retryAfterSeconds: indisponible ? etatBanEasybeer().secondesRestantes : 0,
     easybeerAppUrl: config.easybeer.appUrl,
   })
@@ -1733,6 +1699,13 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     etat: { code: string }
   }[]
   const produits = (catalogueSnap.data()?.produits ?? []) as unknown[]
+  const clientsSyncedAt = (clientsSnap.data()?.syncedAt as number | undefined) ?? null
+  const commandesSyncedAt = (commandesSnap.data()?.syncedAt as number | undefined) ?? null
+  const catalogueSyncedAt = (catalogueSnap.data()?.syncedAt as number | undefined) ?? null
+  const timestampsCache = [clientsSyncedAt, commandesSyncedAt, catalogueSyncedAt]
+  const cachePlusAncienAt = timestampsCache.every((timestamp): timestamp is number => typeof timestamp === 'number')
+    ? Math.min(...timestampsCache)
+    : null
   const meta = metaSnap.data()
   // Les rapports antérieurs à l'ajout du champ `reussi` restent lisibles :
   // on recalcule leur état à partir des erreurs enregistrées.
@@ -1769,6 +1742,12 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     clients: { total: clients.length, avecCompte: statutsComptes.length, actifs: statutsComptes.filter((s) => s.statut === 'active').length },
     commandes30j: { nombre: commandes30j.length, caHT: caHT30j, caTTC: caTTC30j },
     catalogue: { produits: produits.length, visibles, ruptures },
+    cache: {
+      clientsAt: clientsSyncedAt,
+      commandesAt: commandesSyncedAt,
+      catalogueAt: catalogueSyncedAt,
+      plusAncienAt: cachePlusAncienAt,
+    },
     dernierSync: (meta?.dernierSyncReussiAt as number | undefined) ?? ancienRapportReussi,
     dernierRapportSync: dernierRapportNormalise,
   })
@@ -1873,9 +1852,13 @@ app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
     )
   }
 
-  // Une synchro complète prend couramment plusieurs minutes (prix de chaque
-  // client à cadence limitée). La laisser vivre après la réponse évite les
-  // timeouts du proxy HTTP ; le dashboard suit le verrou et le rapport final.
+  if (cloudTasksConfigure()) {
+    const task = await planifierSynchronisationEasybeer('admin')
+    return c.json({ demarree: true, task: task.nom }, 202)
+  }
+
+  // Compatibilité VPS/dev. En production Cloud Run, la validation de config
+  // impose Cloud Tasks et ce chemin n'est donc jamais utilisé.
   void executerSyncCache()
     .then((res) => {
       if (res.status >= 500) console.warn('[sync] tâche admin terminée en erreur :', res.body)
@@ -1894,8 +1877,26 @@ app.post('/api/scheduled/sync', async (c) => {
   const header = c.req.header('Authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : ''
   if (token !== config.schedulerSecret) return c.json({ error: 'Non autorisé' }, 401)
+  if (cloudTasksConfigure()) {
+    const task = await planifierSynchronisationEasybeer('scheduler')
+    return c.json({ demarree: true, task: task.nom }, 202)
+  }
   const res = await executerSyncCache()
   return c.json(res.body, res.status as 200 | 202 | 501 | 503)
+})
+
+/** Worker privé logique de Cloud Tasks. Les retries sont pilotés par la file. */
+app.post('/api/tasks/sync', async (c) => {
+  if (!requeteCloudTasksAutorisee(c.req.header('X-Goa-Task-Secret'))) {
+    return c.json({ error: 'Non autorisé' }, 401)
+  }
+  const res = await executerSyncCache()
+  if (res.status === 202) return c.json({ ok: true, dejaEnCours: true }, 200)
+  if (res.status !== 200) return c.json(res.body, res.status as 501 | 503)
+  if (!('ok' in res.body) || res.body.ok !== true) {
+    return c.json({ ...res.body, error: 'Synchronisation partielle — nouvelle tentative demandée' }, 500)
+  }
+  return c.json(res.body, 200)
 })
 
 // Synchro périodique optionnelle (SYNC_INTERVAL_MINUTES > 0). En prod, préférer

@@ -64,6 +64,8 @@ export interface AdminClientsResponse {
   comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }>
   syncedAt: number | null
   indisponible?: boolean
+  revalidationEnCours?: boolean
+  revalidationEchouee?: boolean
   retryAfterSeconds?: number
 }
 
@@ -71,6 +73,13 @@ export interface AdminDashboardResponse {
   clients: { total: number; avecCompte: number; actifs: number }
   commandes30j: { nombre: number; caHT: number; caTTC: number }
   catalogue: { produits: number; visibles: number; ruptures: number }
+  cache: {
+    clientsAt: number | null
+    commandesAt: number | null
+    catalogueAt: number | null
+    /** Le plus ancien des trois snapshots, null si l'un manque. */
+    plusAncienAt: number | null
+  }
   /** Horodatage de la dernière synchronisation entièrement réussie. */
   dernierSync: number | null
   /** Dernière tentative, y compris lorsqu'elle est partielle. */
@@ -233,6 +242,8 @@ export interface CommandesClientResponse {
   commandes: CommandeResume[]
   syncedAt?: number | null
   indisponible?: boolean
+  revalidationEnCours?: boolean
+  revalidationEchouee?: boolean
   source?: 'local' | 'aucune'
   code?: string
 }
@@ -253,6 +264,8 @@ export interface AdminCommandesResponse {
   commandes: AdminCommandeResume[]
   syncedAt: number | null
   indisponible?: boolean
+  revalidationEnCours?: boolean
+  revalidationEchouee?: boolean
   retryAfterSeconds?: number
   easybeerAppUrl: string
 }

@@ -16,6 +16,7 @@
     "remplir-commandes": "tsx scripts/remplir-cache-commandes.ts"
   },
   "dependencies": {
+    "@google-cloud/tasks": "^6.2.3",
     "@hono/node-server": "^1.13.7",
     "dotenv": "^16.4.7",
     "firebase-admin": "^13.0.2",

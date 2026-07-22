@@ -45,6 +45,16 @@ const actualisation = useMutation({
   mutationFn: () => api.get<AdminCommandesResponse>('/admin/commandes?refresh=1'),
   onSuccess: (res) => {
     queryClient.setQueryData(['admin', 'commandes'], res)
+    if (res.revalidationEchouee) {
+      toast.warning('Actualisation Easybeer impossible.', {
+        description: 'La dernière liste en cache reste affichée.',
+      })
+      return
+    }
+    if (res.revalidationEnCours) {
+      toast.info('Une actualisation est déjà en cours.')
+      return
+    }
     toast.success('Commandes actualisées.', {
       description: 'Les données commandes ont été mises à jour.',
     })

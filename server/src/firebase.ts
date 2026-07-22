@@ -5,13 +5,14 @@
  *  - Émulateurs (FIREBASE_EMULATORS=true, dev) : init sans clé de service,
  *    pointée sur les émulateurs Auth/Firestore locaux via les variables
  *    d'environnement standard du SDK Admin.
- *  - Prod : clé de compte de service (GOOGLE_APPLICATION_CREDENTIALS).
+ *  - Prod Cloud Run : identité du compte de service via Application Default
+ *    Credentials, sans fichier de clé. Une clé locale reste acceptée pour les
+ *    outils ponctuels hors Google Cloud.
  *
- * Si rien n'est configuré, `getDb()` renvoie null : les endpoints dépendant
- * de Firestore le signalent proprement au lieu de planter au démarrage.
+ * En production, les garde-fous de config imposent un projectId et un bucket.
  */
 import { readFileSync } from 'node:fs'
-import { initializeApp, cert, type App } from 'firebase-admin/app'
+import { initializeApp, applicationDefault, cert, type App } from 'firebase-admin/app'
 import { getAuth, type Auth, type DecodedIdToken } from 'firebase-admin/auth'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
@@ -40,19 +41,17 @@ function ensureApp(): App | null {
     return app
   }
 
-  const path = config.firebase.credentialsPath
-  if (!path) {
-    console.warn('[firebase] Aucune clé de service (GOOGLE_APPLICATION_CREDENTIALS) — Firestore désactivé.')
-    return null
-  }
   try {
-    const serviceAccount = JSON.parse(readFileSync(path, 'utf8'))
+    const path = config.firebase.credentialsPath
+    const credential = path
+      ? cert(JSON.parse(readFileSync(path, 'utf8')))
+      : applicationDefault()
     app = initializeApp({
-      credential: cert(serviceAccount),
+      credential,
       projectId: config.firebase.projectId,
-      storageBucket: config.firebase.projectId ? `${config.firebase.projectId}.appspot.com` : undefined,
+      storageBucket: config.firebase.storageBucket,
     })
-    console.log('[firebase] Admin initialisé (clé de service).')
+    console.log(`[firebase] Admin initialisé (${path ? 'clé locale' : 'identité Google du service'}).`)
   } catch (e) {
     console.error('[firebase] Échec init Admin :', (e as Error).message)
     app = null

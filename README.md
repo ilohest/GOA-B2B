@@ -81,6 +81,18 @@ L'aide intégrée récapitule ces options :
 npm run deploy:vps -- --help
 ```
 
+### Production serverless
+
+La cible de production recommandée est Firebase Hosting + Cloud Run + Cloud
+Tasks. Le guide complet se trouve dans [`DEPLOIEMENT-CLOUD.md`](./DEPLOIEMENT-CLOUD.md).
+
+```bash
+FIREBASE_PROJECT_ID="projet-client" npm run setup:cloud
+FIREBASE_PROJECT_ID="projet-client" npm run deploy:cloud
+```
+
+Le script VPS reste uniquement disponible pour la préproduction temporaire.
+
 ## À faire en fin de développement
 
 - **Skeletons** : repasser sur tous les états de chargement (catalogue, listes,
@@ -102,13 +114,16 @@ npm run deploy:vps -- --help
   n'est requis. À la première visite après expiration du TTL, une revalidation
   partagée est lancée et tous les autres clients continuent à utiliser le même
   snapshot valide.
-- La boutique auto-répare le catalogue/grille après **30 min** et les prix du
-  client après **6 h**, avec stale-while-revalidate, verrou distribué et délai
+- La boutique auto-répare le catalogue/grille et les prix du client après
+  **30 min**, avec stale-while-revalidate, verrou distribué et délai
   anti-rafale. Les seuils sont configurables dans `server/.env.example`.
 - Un Cloud Scheduler quotidien vers `POST /api/scheduled/sync` reste utile comme
   filet de sécurité pour les listes admin, mais il est optionnel pour le catalogue.
-- Garder `PRIX_CACHE_MAX_AGE_MINUTES` supérieur aux deux seuils proactifs. La
-  valeur par défaut est **2160 minutes** (36 h) : à la limite dure, une réparation
+- Garder `PRIX_CACHE_MAX_AGE_MINUTES` supérieur aux seuils proactifs et
+  `PRIX_COMMANDE_MAX_AGE_MINUTES` compris entre le seuil de refresh prix et le
+  garde-fou dur. Les listes clients et commandes se renouvellent selon leurs
+  TTL respectifs. La valeur du garde-fou dur est **2160 minutes** (36 h) : à
+  cette limite, une réparation
   est tentée avant de bloquer une commande qui n'a toujours aucun prix frais.
 - Après une modification de prix dans Easybeer en journée, lancer
   **Synchroniser Easybeer** depuis l'admin si le nouveau prix doit être visible

@@ -1,0 +1,15 @@
+.git
+.github
+.firebase
+.env
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+emulator-data
+firebase-export-*
+*.log
+*.pdf
+*.png
+*.webp
+TODO-*

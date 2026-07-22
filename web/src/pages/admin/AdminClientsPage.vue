@@ -81,6 +81,16 @@ const actualisation = useMutation({
   mutationFn: () => api.get<AdminClientsResponse>("/admin/clients?refresh=1"),
   onSuccess: (res) => {
     queryClient.setQueryData(["admin", "clients"], res);
+    if (res.revalidationEchouee) {
+      toast.warning("Actualisation Easybeer impossible.", {
+        description: "La dernière liste en cache reste affichée.",
+      });
+      return;
+    }
+    if (res.revalidationEnCours) {
+      toast.info("Une actualisation est déjà en cours.");
+      return;
+    }
     toast.success("Clients actualisés.", {
       description: "Les données clients ont été mises à jour.",
     });

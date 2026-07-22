@@ -32,8 +32,9 @@ seuil dur, sans supprimer le dernier snapshot valide.
 7. Les erreurs et bans ne remplacent jamais un cache valide par du vide.
 
 Ces seuils sont configurables : `CATALOGUE_AUTO_REFRESH_MINUTES`,
-`PRIX_AUTO_REFRESH_MINUTES`, `CACHE_AUTO_REFRESH_COOLDOWN_MINUTES` et
-`PRIX_CACHE_MAX_AGE_MINUTES`.
+`PRIX_AUTO_REFRESH_MINUTES`, `PRIX_COMMANDE_MAX_AGE_MINUTES`,
+`CLIENTS_AUTO_REFRESH_MINUTES`, `COMMANDES_AUTO_REFRESH_MINUTES`,
+`CACHE_AUTO_REFRESH_COOLDOWN_MINUTES` et `PRIX_CACHE_MAX_AGE_MINUTES`.
 
 ## Appels Easybeer et protection contre les bans
 
@@ -148,7 +149,7 @@ Les affirmations ont été comparées aux routes, règles métier et composants 
 
 - Si le filet de sécurité est souhaité, configurer et tester `SCHEDULER_SECRET`
   et un job quotidien ; ce n'est pas un prérequis du catalogue client.
-- Conserver `PRIX_AUTO_REFRESH_MINUTES < PRIX_CACHE_MAX_AGE_MINUTES`.
+- Conserver `PRIX_AUTO_REFRESH_MINUTES <= PRIX_COMMANDE_MAX_AGE_MINUTES < PRIX_CACHE_MAX_AGE_MINUTES`.
 - Vérifier le diagnostic `/api/admin/sync/status` après déploiement.
 - Déclencher une synchro complète, puis contrôler catalogue, grille et un client
   avec tarif personnalisé.

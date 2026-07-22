@@ -20,12 +20,24 @@ const catalogueRefreshAgeMinutes = nombreConfig(
   30,
   1,
 )
-const prixRefreshAgeMinutes = nombreConfig('PRIX_AUTO_REFRESH_MINUTES', process.env.PRIX_AUTO_REFRESH_MINUTES, 360, 1)
+const prixRefreshAgeMinutes = nombreConfig('PRIX_AUTO_REFRESH_MINUTES', process.env.PRIX_AUTO_REFRESH_MINUTES, 30, 1)
+const prixCommandeMaxAgeMinutes = nombreConfig(
+  'PRIX_COMMANDE_MAX_AGE_MINUTES',
+  process.env.PRIX_COMMANDE_MAX_AGE_MINUTES,
+  60,
+  1,
+)
 if (catalogueRefreshAgeMinutes >= prixMaxAgeMinutes || prixRefreshAgeMinutes >= prixMaxAgeMinutes) {
   throw new Error('Les seuils de refresh proactif doivent être inférieurs à PRIX_CACHE_MAX_AGE_MINUTES')
 }
+if (prixCommandeMaxAgeMinutes < prixRefreshAgeMinutes || prixCommandeMaxAgeMinutes > prixMaxAgeMinutes) {
+  throw new Error(
+    'PRIX_COMMANDE_MAX_AGE_MINUTES doit être compris entre PRIX_AUTO_REFRESH_MINUTES et PRIX_CACHE_MAX_AGE_MINUTES',
+  )
+}
 
 export const config = {
+  production: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT ?? 8788),
   webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
 
@@ -40,6 +52,7 @@ export const config = {
 
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || undefined,
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined,
     credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS || undefined,
     // Dev : émulateurs locaux (Auth + Firestore) au lieu d'un vrai projet.
     emulators: process.env.FIREBASE_EMULATORS === 'true',
@@ -51,6 +64,14 @@ export const config = {
   // Synchro périodique Easybeer → cache (0 = désactivée ; en prod, Cloud Scheduler).
   syncIntervalMinutes: Number(process.env.SYNC_INTERVAL_MINUTES ?? 0),
   schedulerSecret: process.env.SCHEDULER_SECRET || undefined,
+
+  cloudTasks: {
+    projectId: process.env.CLOUD_TASKS_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || undefined,
+    location: process.env.CLOUD_TASKS_LOCATION || 'europe-west1',
+    queue: process.env.CLOUD_TASKS_QUEUE || 'easybeer-sync',
+    serviceUrl: process.env.CLOUD_RUN_SERVICE_URL?.replace(/\/$/, '') || undefined,
+    secret: process.env.TASKS_SECRET || undefined,
+  },
 
   // true (défaut, dev) => les commandes partent en DEVIS Easybeer (réversible).
   // Passer à false en prod pour créer de vraies commandes.
@@ -67,6 +88,21 @@ export const config = {
     // pour le client qui consulte la boutique.
     catalogueRefreshAgeMinutes,
     prixRefreshAgeMinutes,
+    // Plus strict que la durée d'affichage : avant d'accepter une commande,
+    // on tente une revalidation puis on refuse si le tarif dépasse ce seuil.
+    prixCommandeMaxAgeMinutes,
+    clientsRefreshAgeMinutes: nombreConfig(
+      'CLIENTS_AUTO_REFRESH_MINUTES',
+      process.env.CLIENTS_AUTO_REFRESH_MINUTES,
+      30,
+      1,
+    ),
+    commandesRefreshAgeMinutes: nombreConfig(
+      'COMMANDES_AUTO_REFRESH_MINUTES',
+      process.env.COMMANDES_AUTO_REFRESH_MINUTES,
+      10,
+      1,
+    ),
     // Après un échec/ban, une visite client ne doit pas relancer une rafale.
     autoRefreshCooldownMinutes: nombreConfig(
       'CACHE_AUTO_REFRESH_COOLDOWN_MINUTES',
@@ -103,4 +139,35 @@ export const config = {
     // URL absolue du logo GOA (PNG) pour l'email ; vide → wordmark texte.
     logoUrl: process.env.INVITE_LOGO_URL || undefined,
   },
+}
+
+export function erreursConfigurationProduction(configuration: typeof config = config): string[] {
+  if (!configuration.production) return []
+  const erreurs: string[] = []
+  if (configuration.firebase.emulators) erreurs.push('FIREBASE_EMULATORS doit être false')
+  if (configuration.authDisabled) erreurs.push('AUTH_DISABLED doit être false')
+  if (!configuration.firebase.projectId) erreurs.push('FIREBASE_PROJECT_ID est requis')
+  if (!configuration.firebase.storageBucket) erreurs.push('FIREBASE_STORAGE_BUCKET est requis')
+  if (!configuration.webOrigin.startsWith('https://')) erreurs.push('WEB_ORIGIN doit utiliser HTTPS')
+  if (configuration.syncIntervalMinutes > 0) erreurs.push('SYNC_INTERVAL_MINUTES doit être 0 sur Cloud Run')
+  if (!configuration.schedulerSecret || configuration.schedulerSecret.length < 32) {
+    erreurs.push('SCHEDULER_SECRET doit contenir au moins 32 caractères')
+  }
+  if (!configuration.cloudTasks.projectId || !configuration.cloudTasks.serviceUrl || !configuration.cloudTasks.secret) {
+    erreurs.push('Cloud Tasks requiert CLOUD_TASKS_PROJECT_ID, CLOUD_RUN_SERVICE_URL et TASKS_SECRET')
+  } else if (configuration.cloudTasks.secret.length < 32) {
+    erreurs.push('TASKS_SECRET doit contenir au moins 32 caractères')
+  }
+  if (!configuration.smtp.host || !configuration.smtp.user || !configuration.smtp.pass) {
+    erreurs.push('SMTP_HOST, SMTP_USER et SMTP_PASS sont requis')
+  }
+  return erreurs
+}
+
+/** Empêche une révision Cloud Run dangereusement configurée de démarrer. */
+export function validerConfigurationProduction(): void {
+  const erreurs = erreursConfigurationProduction()
+  if (erreurs.length) {
+    throw new Error(`Configuration de production invalide : ${erreurs.join(' ; ')}`)
+  }
 }

@@ -82,13 +82,14 @@ watch(syncGlobaleEnCours, async (enCours, etaitEnCours) => {
 })
 
 const syncAncienne = computed(() => {
-  const dernierSync = data.value?.dernierSync
-  return !dernierSync || Date.now() - dernierSync > SYNC_ATTENTION_MS
+  const cachePlusAncienAt = data.value?.cache.plusAncienAt
+  return !cachePlusAncienAt || Date.now() - cachePlusAncienAt > SYNC_ATTENTION_MS
 })
 
 const derniereTentativePartielle = computed(() => {
   const rapport = data.value?.dernierRapportSync
-  return rapport && !rapport.reussi ? rapport : null
+  const cachePlusAncienAt = data.value?.cache.plusAncienAt
+  return rapport && !rapport.reussi && (!cachePlusAncienAt || rapport.syncedAt >= cachePlusAncienAt) ? rapport : null
 })
 
 const synchro = useMutation({
@@ -203,8 +204,8 @@ const stats = computed(() => {
           >
             Dernière tentative : {{ dateHeureFr(derniereTentativePartielle.syncedAt) }} · partielle
           </p>
-          <p v-else-if="data?.dernierSync" class="text-xs whitespace-nowrap text-muted-foreground">
-            À jour : {{ dateHeureFr(data.dernierSync) }}
+          <p v-else-if="data?.cache.plusAncienAt" class="text-xs whitespace-nowrap text-muted-foreground">
+            Cache le plus ancien : {{ dateHeureFr(data.cache.plusAncienAt) }}
           </p>
           <p v-else class="text-xs whitespace-nowrap text-muted-foreground">
             Aucune synchronisation
@@ -245,8 +246,8 @@ const stats = computed(() => {
         <CardHeader class="pb-2">
           <CardTitle class="text-base text-amber-900">Synchronisation à vérifier</CardTitle>
           <CardDescription class="text-amber-800">
-            La synchronisation Easybeer prévue pendant la nuit ne semble pas récente.
-            Lancez une synchronisation avant l'ouverture des commandes.
+            Certaines données Easybeer en cache n'ont pas été vérifiées récemment.
+            Chaque section se rafraîchit automatiquement à son ouverture ; vous pouvez aussi tout synchroniser maintenant.
           </CardDescription>
         </CardHeader>
         <CardContent v-if="diagnosticSync" class="pt-0">

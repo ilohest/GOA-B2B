@@ -2,10 +2,12 @@
   "name": "goa-kombucha",
   "private": true,
   "scripts": {
-    "dev:emulators": "firebase emulators:start --project demo-goa-kombucha --import=./emulator-data --export-on-exit=./emulator-data",
+    "dev:emulators": "firebase emulators:start --project demo-goa-kombucha --only auth,firestore,storage --import=./emulator-data --export-on-exit=./emulator-data",
     "dev:server": "npm --prefix server run dev",
     "dev:web": "npm --prefix web run dev",
     "deploy:vps": "./scripts/deploy-vps.sh",
+    "setup:cloud": "./scripts/setup-cloud.sh",
+    "deploy:cloud": "./scripts/deploy-cloud.sh",
     "seed": "npm --prefix server run seed",
     "typecheck": "npm --prefix server run typecheck && npm --prefix web run typecheck",
     "test": "npm --prefix server run test"

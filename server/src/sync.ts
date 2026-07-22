@@ -669,38 +669,113 @@ export async function syncCommandesClient(db: Firestore, idClient: number): Prom
 
 // --- Lectures des caches admin/client ---
 
+type OptionsLectureCache = {
+  forcerRefresh?: boolean
+  ageRefreshMs?: number
+}
+
+type ResultatLectureCache = {
+  items: unknown[]
+  syncedAt: number | null
+  indisponible?: boolean
+  revalidationEnCours?: boolean
+  revalidationEchouee?: boolean
+}
+
 /**
- * ⚠️ Une lecture NORMALE (sans `forcerRefresh`) ne touche JAMAIS Easybeer :
- * elle renvoie le cache, ou `indisponible` si le cache est vide. C'est capital
- * pour le rate-limiting — chaque appel pendant un ban le prolonge, donc une
- * simple visite de page ne doit rien déclencher. Seul un `refresh` EXPLICITE
- * (bouton Synchroniser) appelle Easybeer, et un ban s'y propage (503 → compte
- * à rebours côté UI).
+ * Exécute un refresh Easybeer sous bail Firestore. Le bail local déduplique
+ * une même ressource et le verrou global empêche deux instances Cloud Run de
+ * solliciter Easybeer en parallèle. Le cooldown persistant évite les rafales
+ * après une panne ; un clic explicite peut l'ignorer, mais jamais ignorer un
+ * traitement déjà actif.
+ */
+async function lancerRafraichissementCacheSimple(
+  db: Firestore,
+  cleVerrou: string,
+  remplir: (db: Firestore) => Promise<unknown[]>,
+  automatique: boolean,
+): Promise<{ items: unknown[] } | { enCours: true }> {
+  const maintenant = Date.now()
+  const bail = db.doc(`cacheRefresh/${cleVerrou}`)
+  const verrouGlobal = db.doc('cache/lock')
+  const owner = `${cleVerrou}-${randomUUID()}`
+  const cooldownMs = config.cache.autoRefreshCooldownMinutes * 60_000
+  const acquis = await db.runTransaction(async (tx) => {
+    const [etat, global] = await Promise.all([tx.get(bail), tx.get(verrouGlobal)])
+    const data = etat.data() as { startedAt?: number; lastAttemptAt?: number } | undefined
+    const globalStartedAt = global.data()?.startedAt as number | undefined
+    if (globalStartedAt && maintenant - globalStartedAt < SYNC_LOCK_TTL_MS) return false
+    if (data?.startedAt && maintenant - data.startedAt < SYNC_LOCK_TTL_MS) return false
+    if (automatique && data?.lastAttemptAt && maintenant - data.lastAttemptAt < cooldownMs) return false
+    tx.set(bail, { startedAt: maintenant, lastAttemptAt: maintenant, owner }, { merge: true })
+    tx.set(verrouGlobal, { startedAt: maintenant, owner, kind: cleVerrou })
+    return true
+  })
+  if (!acquis) return { enCours: true }
+
+  const heartbeat = setInterval(() => {
+    db.runTransaction(async (tx) => {
+      const [local, global] = await Promise.all([tx.get(bail), tx.get(verrouGlobal)])
+      const maintenantHeartbeat = Date.now()
+      if (local.data()?.owner === owner) tx.set(bail, { startedAt: maintenantHeartbeat }, { merge: true })
+      if (global.data()?.owner === owner) tx.set(verrouGlobal, { startedAt: maintenantHeartbeat }, { merge: true })
+    }).catch(() => {})
+  }, 60_000)
+  heartbeat.unref?.()
+
+  try {
+    return { items: await remplir(db) }
+  } finally {
+    clearInterval(heartbeat)
+    await db.runTransaction(async (tx) => {
+      const [local, global] = await Promise.all([tx.get(bail), tx.get(verrouGlobal)])
+      if (local.data()?.owner === owner) {
+        tx.set(bail, { startedAt: null, finishedAt: Date.now(), owner: null }, { merge: true })
+      }
+      if (global.data()?.owner === owner) {
+        tx.set(verrouGlobal, { startedAt: null, finishedAt: Date.now(), owner: null, kind: null })
+      }
+    }).catch(() => {})
+  }
+}
+
+/**
+ * Lecture stale-while-revalidate des listes. Une valeur fraîche est rendue
+ * sans toucher Easybeer. Une valeur ancienne ou absente est renouvelée sous
+ * verrou ; si Easybeer échoue, le dernier snapshot reste disponible.
  */
 async function lireCacheOuRemplir(
   db: Firestore,
   chemin: string,
   cle: 'clients' | 'commandes',
   remplir: (db: Firestore) => Promise<unknown[]>,
-  forcerRefresh: boolean,
-): Promise<{ items: unknown[]; syncedAt: number | null; indisponible?: boolean }> {
+  options: OptionsLectureCache,
+  cleVerrou: string,
+): Promise<ResultatLectureCache> {
   const snap = await db.doc(chemin).get()
   const cache = snap.exists ? (snap.data() as Record<string, unknown>) : null
+  const syncedAt = (cache?.syncedAt as number | undefined) ?? null
+  const doitRafraichir =
+    options.forcerRefresh ||
+    !cache ||
+    (options.ageRefreshMs != null && cacheEstAncien(syncedAt, options.ageRefreshMs))
+  if (!doitRafraichir) return { items: (cache?.[cle] as unknown[]) ?? [], syncedAt }
 
-  if (!forcerRefresh) {
-    // Lecture normale : cache uniquement, aucun appel Easybeer.
-    if (cache) return { items: (cache[cle] as unknown[]) ?? [], syncedAt: (cache.syncedAt as number) ?? null }
-    return { items: [], syncedAt: null, indisponible: true }
-  }
-
-  // Refresh explicite : on tente Easybeer. En cas de ban, repli sur le cache
-  // existant si possible, sinon on laisse remonter l'erreur (503 + compte à rebours).
   try {
-    const items = await remplir(db)
-    return { items, syncedAt: Date.now() }
+    const resultat = await lancerRafraichissementCacheSimple(db, cleVerrou, remplir, !options.forcerRefresh)
+    if ('enCours' in resultat) {
+      return cache
+        ? { items: (cache[cle] as unknown[]) ?? [], syncedAt, revalidationEnCours: true }
+        : { items: [], syncedAt: null, indisponible: true, revalidationEnCours: true }
+    }
+    return { items: resultat.items, syncedAt: Date.now() }
   } catch (e) {
-    if (e instanceof EasybeerBanError && cache) {
-      return { items: (cache[cle] as unknown[]) ?? [], syncedAt: (cache.syncedAt as number) ?? null }
+    if (cache) {
+      return {
+        items: (cache[cle] as unknown[]) ?? [],
+        syncedAt,
+        revalidationEchouee: true,
+      }
     }
     throw e
   }
@@ -709,35 +784,50 @@ async function lireCacheOuRemplir(
 export async function lireListeClients(
   db: Firestore,
   forcerRefresh = false,
-): Promise<{ clients: ClientResume[]; syncedAt: number | null; indisponible?: boolean }> {
-  const res = await lireCacheOuRemplir(db, 'cache/clientsListe', 'clients', syncListeClients, forcerRefresh)
-  return { clients: res.items as ClientResume[], syncedAt: res.syncedAt, indisponible: res.indisponible }
+): Promise<{ clients: ClientResume[]; syncedAt: number | null; indisponible?: boolean; revalidationEnCours?: boolean; revalidationEchouee?: boolean }> {
+  const res = await lireCacheOuRemplir(
+    db,
+    'cache/clientsListe',
+    'clients',
+    syncListeClients,
+    { forcerRefresh, ageRefreshMs: config.cache.clientsRefreshAgeMinutes * 60_000 },
+    'clients-liste',
+  )
+  const { items, ...meta } = res
+  return { clients: items as ClientResume[], ...meta }
 }
 
 export async function lireCommandesRecentes(
   db: Firestore,
   forcerRefresh = false,
-): Promise<{ commandes: CommandeResumeCache[]; syncedAt: number | null; indisponible?: boolean }> {
+): Promise<{ commandes: CommandeResumeCache[]; syncedAt: number | null; indisponible?: boolean; revalidationEnCours?: boolean; revalidationEchouee?: boolean }> {
   const res = await lireCacheOuRemplir(
     db,
     'cache/commandesRecentes',
     'commandes',
     syncCommandesRecentes,
-    forcerRefresh,
+    { forcerRefresh, ageRefreshMs: config.cache.commandesRefreshAgeMinutes * 60_000 },
+    'commandes-recentes',
   )
-  return { commandes: res.items as CommandeResumeCache[], syncedAt: res.syncedAt, indisponible: res.indisponible }
+  const { items, ...meta } = res
+  return { commandes: items as CommandeResumeCache[], ...meta }
 }
 
 export async function lireCommandesClient(
   db: Firestore,
   idClient: number,
-): Promise<{ commandes: CommandeClientCache[]; syncedAt: number | null }> {
-  const snap = await db.doc(`cacheCommandesClients/${idClient}`).get()
-  if (!snap.exists) {
-    throw new CacheIndisponibleError('commandes_client_cache_manquant', `Historique client ${idClient} non synchronisé`)
-  }
-  const data = snap.data() as { commandes?: CommandeClientCache[]; syncedAt?: number }
-  return { commandes: data.commandes ?? [], syncedAt: data.syncedAt ?? null }
+  forcerRefresh = false,
+): Promise<{ commandes: CommandeClientCache[]; syncedAt: number | null; indisponible?: boolean; revalidationEnCours?: boolean; revalidationEchouee?: boolean }> {
+  const res = await lireCacheOuRemplir(
+    db,
+    `cacheCommandesClients/${idClient}`,
+    'commandes',
+    (firestore) => syncCommandesClient(firestore, idClient),
+    { forcerRefresh, ageRefreshMs: config.cache.commandesRefreshAgeMinutes * 60_000 },
+    `commandes-client-${idClient}`,
+  )
+  const { items, ...meta } = res
+  return { commandes: items as CommandeClientCache[], ...meta }
 }
 
 // --- Lectures du cache (catalogue / référentiels / clients) ---
@@ -827,7 +917,10 @@ export async function remplirCacheClientCible(
   if (!options.forcer && existant.exists && cacheExistant?.idGrilleTarifaire != null) return cacheExistant
 
   const derniere = dernieresTentativesRemplissage.get(idClient) ?? 0
-  if (Date.now() - derniere < REMPLISSAGE_MIN_INTERVAL_MS) return null
+  // Un appel `forcer` provient d'un bail Firestore déjà acquis : le cooldown
+  // distribué a donc été contrôlé. Ne pas le bloquer une seconde fois avec
+  // l'état mémoire propre à cette instance.
+  if (!options.forcer && Date.now() - derniere < REMPLISSAGE_MIN_INTERVAL_MS) return null
   dernieresTentativesRemplissage.set(idClient, Date.now())
 
   const [produits, types, visibles] = await Promise.all([
