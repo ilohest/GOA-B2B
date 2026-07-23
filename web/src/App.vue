@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
 import { onClickOutside, useEventListener } from '@vueuse/core'
 import { toast } from 'vue-sonner'
-import { LogOut } from '@lucide/vue'
+import { LogOut, Store } from '@lucide/vue'
 import { useAuth } from '@/composables/useAuth'
 import { useHeaderSaveBar } from '@/composables/useHeaderSaveBar'
 import { useMe } from '@/composables/useMe'
@@ -86,6 +86,11 @@ async function onLogout() {
     toast.error('Déconnexion impossible. Réessayez.')
   }
 }
+
+function ouvrirApercuBoutique() {
+  profilMobileOuvert.value = false
+  router.push({ name: 'admin-boutique-apercu' })
+}
 </script>
 
 <template>
@@ -131,6 +136,16 @@ async function onLogout() {
           </div>
           <span class="hidden max-w-64 truncate text-sm text-zinc-300 sm:inline">{{ nomHeader }}</span>
           <Button
+            v-if="estAdmin"
+            variant="outline"
+            size="sm"
+            class="hidden border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white sm:inline-flex"
+            @click="ouvrirApercuBoutique"
+          >
+            <Store class="size-4" />
+            Voir la boutique
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             class="hidden border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white sm:inline-flex"
@@ -156,6 +171,15 @@ async function onLogout() {
                 <p class="truncate text-sm font-semibold">{{ nomHeader }}</p>
                 <p v-if="emailHeader" class="truncate text-xs text-zinc-500">{{ emailHeader }}</p>
               </div>
+              <button
+                v-if="estAdmin"
+                type="button"
+                class="flex w-full items-center gap-2 border-b px-4 py-3 text-left text-sm font-medium text-zinc-800 transition hover:bg-zinc-100"
+                @click="ouvrirApercuBoutique"
+              >
+                <Store class="size-4 text-zinc-500" />
+                Voir la boutique
+              </button>
               <button
                 type="button"
                 class="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium text-zinc-800 transition hover:bg-zinc-100"

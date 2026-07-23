@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, watchEffect } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   Loader2,
   RotateCcw,
@@ -56,7 +56,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 const router = useRouter();
+const route = useRoute();
 const { data, isPending, isError, error } = useMe();
+const modeApercu = computed(() => route.name === "admin-boutique-apercu");
 const {
   quantites,
   changer,
@@ -65,19 +67,30 @@ const {
   modification,
   nbCartons,
   lignes,
-} = usePanier();
+} = usePanier(modeApercu.value ? "apercu-admin" : "client");
 
-// L'admin n'a pas d'espace boutique : direction l'administration.
+// Hors route d'aperçu explicite, l'admin reste dans son espace.
 watchEffect(() => {
-  if (data.value?.user.role === "admin") router.replace("/admin");
+  if (data.value?.user.role === "admin" && !modeApercu.value)
+    router.replace("/admin");
+  if (data.value?.user.role === "client" && modeApercu.value)
+    router.replace("/");
 });
 
 const catalogue = useQuery({
-  queryKey: computed(() => ["catalogue", modification.value?.idCommande ?? null]),
+  queryKey: computed(() => [
+    modeApercu.value ? "catalogue-apercu-admin" : "catalogue",
+    modification.value?.idCommande ?? null,
+  ]),
   queryFn: () =>
     api.get<CatalogueClientResponse>(
-      modification.value ? `/catalogue?commande=${modification.value.idCommande}` : "/catalogue",
+      modeApercu.value
+        ? "/admin/boutique-apercu"
+        : modification.value
+          ? `/catalogue?commande=${modification.value.idCommande}`
+          : "/catalogue",
     ),
+  enabled: computed(() => data.value != null),
   // Cache client en préparation (compte tout juste activé) : les prix arrivent
   // en tâche de fond → on re-sonde jusqu'à ce qu'ils soient là.
   refetchInterval: (query) =>
@@ -94,9 +107,10 @@ const compteSansTarifs = computed(
 );
 const comptePreparation = computed(
   () =>
-    compteSansTarifs.value ||
-    Boolean(data.value?.cacheEnPreparation) ||
-    Boolean(catalogue.data.value?.cacheEnPreparation),
+    !modeApercu.value &&
+    (compteSansTarifs.value ||
+      Boolean(data.value?.cacheEnPreparation) ||
+      Boolean(catalogue.data.value?.cacheEnPreparation)),
 );
 
 // --- Reprise de la dernière commande ---
@@ -335,6 +349,9 @@ function erreurCommandeLisible(message: string) {
 
 const envoi = useMutation({
   mutationFn: () => {
+    if (modeApercu.value) {
+      throw new Error("Aucune commande ne peut être envoyée depuis le mode aperçu.");
+    }
     if (!lignes.value.length) {
       throw new Error("Votre panier est vide.");
     }
@@ -458,6 +475,22 @@ function viderPanierAvecAnnulation() {
   >
     <!-- Colonne principale -->
     <div class="grid gap-4">
+      <div
+        v-if="modeApercu"
+        class="sticky top-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/95 px-4 py-3 text-sm text-blue-950 shadow-sm backdrop-blur"
+      >
+        <div class="flex items-start gap-2.5">
+          <Store class="mt-0.5 size-4 shrink-0 text-blue-600" />
+          <p>
+            <span class="font-semibold">Mode aperçu de la boutique</span>
+            <span class="text-blue-800"> — le panier peut être testé, mais aucune commande ne sera envoyée.</span>
+          </p>
+        </div>
+        <Button variant="outline" size="sm" class="border-blue-200 bg-white" @click="router.push('/admin')">
+          Quitter l’aperçu
+        </Button>
+      </div>
+
       <!-- Compte fraîchement activé : les prix se préparent -->
       <div
         v-if="comptePreparation"
@@ -778,7 +811,7 @@ function viderPanierAvecAnnulation() {
               "
               @click="ouvrirRecap"
             >
-              {{ modification ? "Mettre à jour" : "Commander" }}
+              {{ modeApercu ? "Voir le récapitulatif" : modification ? "Mettre à jour" : "Commander" }}
             </Button>
             <Button
               v-if="modification"
@@ -883,7 +916,7 @@ function viderPanierAvecAnnulation() {
             "
             @click="ouvrirRecap"
           >
-            {{ modification ? "Mettre à jour" : "Commander" }}
+            {{ modeApercu ? "Voir le récapitulatif" : modification ? "Mettre à jour" : "Commander" }}
           </Button>
         </div>
       </div>
@@ -931,7 +964,9 @@ function viderPanierAvecAnnulation() {
             </DialogTitle>
             <DialogDescription>
               {{
-                modification
+                modeApercu
+                  ? "Vérifiez le rendu final — aucune commande ne sera envoyée."
+                  : modification
                   ? "Cette version annule et remplace la précédente."
                   : "Vérifiez les quantités avant l'envoi."
               }}
@@ -1002,6 +1037,7 @@ function viderPanierAvecAnnulation() {
               class="w-full"
               size="lg"
               :disabled="
+                modeApercu ||
                 envoi.isPending.value ||
                 commandeBloqueeParPrix ||
                 commandeBloqueeParConditionnement ||
@@ -1012,7 +1048,9 @@ function viderPanierAvecAnnulation() {
               @click="envoi.mutate()"
             >
               {{
-                envoi.isPending.value
+                modeApercu
+                  ? "Aperçu uniquement"
+                  : envoi.isPending.value
                   ? "Envoi…"
                   : modification
                     ? "Confirmer la modification"

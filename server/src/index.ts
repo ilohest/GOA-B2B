@@ -438,6 +438,51 @@ app.get('/api/catalogue', requireAuth, async (c) => {
   })
 })
 
+/** Aperçu générique de la boutique pour l'admin, sans usurpation de client. */
+app.get('/api/admin/boutique-apercu', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ produits: await listeProduitsAutocomplete() })
+
+  const [{ catalogue: catalogueCache, grille }, overrides] = await Promise.all([
+    lireCachesCatalogueResilients(db),
+    lireOverrides(db),
+  ])
+  const normaliser = (valeur: string) =>
+    valeur.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+  const ligneTarifStandard =
+    grille.lignes.find((ligne) => normaliser(ligne.typeClient) === 'client pro') ??
+    grille.lignes[0]
+  const idTypeStandard = ligneTarifStandard?.idClientType ?? null
+  const grillePrix = grillePrixPourClient(grille.lignes, idTypeStandard, []).prix
+  const unitesMeta = Object.fromEntries(
+    grille.lignes
+      .filter((ligne) => ligne.idStockBouteille != null)
+      .map((ligne) => [
+        ligne.idStockBouteille!,
+        {
+          produit: ligne.produit ?? null,
+          contenant: ligne.contenant ?? null,
+          packaging: ligne.packaging ?? null,
+        },
+      ]),
+  )
+  const produitsApercu = catalogueClient(catalogueCache.produits, overrides, {
+    grillePrix,
+    grilleSyncedAt: grille.syncedAt,
+    maxAgeMs: Infinity,
+    unitesMeta,
+  })
+
+  return c.json({
+    produits: produitsApercu,
+    syncedAt: catalogueCache.syncedAt,
+    prixMaxAgeMinutes: config.cache.prixMaxAgeMinutes,
+    prixPlusAncienAgeMs: null,
+    cacheEnPreparation: false,
+    revalidationEnCours: false,
+  })
+})
+
 // ---- Commandes ----
 
 /** États Easybeer au-delà desquels le client ne peut plus modifier (décision §6.3). */
@@ -765,6 +810,9 @@ async function totauxReelsEasybeer(
 
 app.post('/api/commandes', requireAuth, async (c) => {
   const user = c.get('user')
+  if (user.role !== 'client') {
+    return c.json({ error: "Le mode administrateur ne permet pas d'envoyer une commande" }, 403)
+  }
   if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
@@ -1115,6 +1163,9 @@ app.get('/api/commandes/:id/edition', requireAuth, async (c) => {
  */
 app.put('/api/commandes/:id', requireAuth, async (c) => {
   const user = c.get('user')
+  if (user.role !== 'client') {
+    return c.json({ error: "Le mode administrateur ne permet pas de modifier une commande" }, 403)
+  }
   if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)

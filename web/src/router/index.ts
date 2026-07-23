@@ -74,6 +74,11 @@ const router = createRouter({
         },
       ],
     },
+    {
+      path: '/apercu-boutique',
+      name: 'admin-boutique-apercu',
+      component: () => import('@/pages/HomePage.vue'),
+    },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

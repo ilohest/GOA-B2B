@@ -1,6 +1,7 @@
 import { computed, ref, watch } from 'vue'
+import type { Ref } from 'vue'
 
-const CLE_STOCKAGE = 'goa-panier-v1'
+const CLE_STOCKAGE_CLIENT = 'goa-panier-v1'
 type ModificationPanier = {
   idCommande: number
   numero: number | null
@@ -12,10 +13,10 @@ type PanierStocke = {
   modification?: ModificationPanier | null
 }
 
-function lirePanierStocke(): PanierStocke {
+function lirePanierStocke(cleStockage: string): PanierStocke {
   if (typeof window === 'undefined') return {}
   try {
-    const brut = window.localStorage.getItem(CLE_STOCKAGE)
+    const brut = window.localStorage.getItem(cleStockage)
     if (!brut) return {}
     const parse = JSON.parse(brut) as PanierStocke
     return parse && typeof parse === 'object' ? parse : {}
@@ -36,33 +37,51 @@ function normaliserQuantites(quantitesStockees: PanierStocke['quantites']) {
   return resultat
 }
 
-function sauvegarderPanier() {
+function sauvegarderPanier(
+  cleStockage: string,
+  quantites: Record<number, number>,
+  modification: ModificationPanier | null,
+) {
   if (typeof window === 'undefined') return
   const payload: PanierStocke = {
-    quantites: Object.fromEntries(Object.entries(quantites.value).map(([id, quantite]) => [id, quantite])),
-    modification: modification.value,
+    quantites: Object.fromEntries(Object.entries(quantites).map(([id, quantite]) => [id, quantite])),
+    modification,
   }
   if (!Object.keys(payload.quantites ?? {}).length && !payload.modification) {
-    window.localStorage.removeItem(CLE_STOCKAGE)
+    window.localStorage.removeItem(cleStockage)
     return
   }
-  window.localStorage.setItem(CLE_STOCKAGE, JSON.stringify(payload))
+  window.localStorage.setItem(cleStockage, JSON.stringify(payload))
 }
 
-const panierInitial = lirePanierStocke()
+type EtatPanier = {
+  quantites: Ref<Record<number, number>>
+  modification: Ref<ModificationPanier | null>
+}
 
-/**
- * Panier (quantités par idStockBouteille). État module partagé — sera réutilisé
- * par la modification de commande (étape 6, pré-remplissage).
- */
-const quantites = ref<Record<number, number>>(normaliserQuantites(panierInitial.quantites))
+const etatsPaniers = new Map<string, EtatPanier>()
 
-/** Renseigné quand le panier édite une commande Easybeer existante (upsert). */
-const modification = ref<ModificationPanier | null>(panierInitial.modification ?? null)
+function obtenirEtatPanier(cleStockage: string) {
+  const existant = etatsPaniers.get(cleStockage)
+  if (existant) return existant
+  const panierInitial = lirePanierStocke(cleStockage)
+  const etat: EtatPanier = {
+    quantites: ref<Record<number, number>>(normaliserQuantites(panierInitial.quantites)),
+    modification: ref<ModificationPanier | null>(panierInitial.modification ?? null),
+  }
+  watch(
+    [etat.quantites, etat.modification],
+    () => sauvegarderPanier(cleStockage, etat.quantites.value, etat.modification.value),
+    { deep: true },
+  )
+  etatsPaniers.set(cleStockage, etat)
+  return etat
+}
 
-watch([quantites, modification], sauvegarderPanier, { deep: true })
-
-export function usePanier() {
+/** Panier client par défaut, ou panier isolé pour l'aperçu administrateur. */
+export function usePanier(portee: 'client' | 'apercu-admin' = 'client') {
+  const cleStockage = portee === 'apercu-admin' ? 'goa-panier-apercu-admin-v1' : CLE_STOCKAGE_CLIENT
+  const { quantites, modification } = obtenirEtatPanier(cleStockage)
   const changer = (idStockBouteille: number, delta: number) => {
     const actuel = quantites.value[idStockBouteille] ?? 0
     const suivant = Math.max(0, actuel + delta)
