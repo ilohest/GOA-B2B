@@ -79,11 +79,20 @@ const tags = computed(() => {
 /** Paires libellé/valeur affichées telles quelles (— si absent). */
 const infos = computed(() => [
   {
+    label: "Numéro client",
+    valeur: client.value?.numero,
+    confirmationCopie: "Numéro client copié.",
+  },
+  {
     label: "Email",
     valeur: client.value?.emailPrincipal,
     confirmationCopie: "Adresse e-mail copiée.",
   },
-  { label: "Téléphone", valeur: client.value?.telephonePrincipal },
+  {
+    label: "Téléphone",
+    valeur: client.value?.telephonePrincipal,
+    confirmationCopie: "Numéro de téléphone copié.",
+  },
   {
     label: "Adresse de facturation",
     valeur: client.value?.adresseFacturation,
@@ -328,20 +337,21 @@ function periodeRemiseCiblee(
                   class="grid gap-0.5 sm:grid-cols-[12rem_1fr]"
                 >
                   <dt class="text-muted-foreground">{{ i.label }}</dt>
-                  <dd class="flex min-w-0 items-start gap-1.5">
-                    <span class="min-w-0 break-words">{{ i.valeur || "—" }}</span>
-                    <Button
+                  <dd class="min-w-0">
+                    <button
                       v-if="i.valeur && i.confirmationCopie"
                       type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      class="-my-1 size-7 shrink-0 text-muted-foreground"
+                      class="group -my-1 flex min-h-7 w-full cursor-pointer items-start gap-1.5 rounded-sm text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       :aria-label="`Copier ${i.label.toLowerCase()}`"
                       :title="`Copier ${i.label.toLowerCase()}`"
                       @click="copierTexte(i.valeur, i.confirmationCopie)"
                     >
-                      <Copy class="size-3.5" />
-                    </Button>
+                      <span class="min-w-0 break-words">{{ i.valeur }}</span>
+                      <Copy
+                        class="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+                      />
+                    </button>
+                    <span v-else class="min-w-0 break-words">{{ i.valeur || "—" }}</span>
                   </dd>
                 </div>
                 <div
