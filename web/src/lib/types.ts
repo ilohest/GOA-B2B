@@ -71,7 +71,12 @@ export interface AdminClientsResponse {
 
 export interface AdminDashboardResponse {
   clients: { total: number; avecCompte: number; actifs: number }
-  commandes30j: { nombre: number; caHT: number; caTTC: number }
+  commandes30j: {
+    nombre: number
+    statuts: { etat: EtatCommande; nombre: number }[]
+    caHT: number
+    caTTC: number
+  }
   catalogue: { produits: number; visibles: number; ruptures: number }
   cache: {
     clientsAt: number | null
@@ -135,7 +140,7 @@ export interface ProduitCatalogueClient {
   prixUpdatedAt: number | null
   prixEstFrais: boolean
   historique: boolean
-  /** Incrément de quantité imposé (1 sauf clients La Poste : 3 ou 2). */
+  /** Incrément par goût (toujours 1 ; contraintes logistiques au niveau panier). */
   pas: number
 }
 

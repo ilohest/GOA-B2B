@@ -2,8 +2,8 @@
  * Réconciliation d'une commande passée avec le catalogue courant du client.
  *
  * Entre deux commandes un produit peut avoir été retiré du catalogue, passer en
- * rupture, perdre son tarif, ou voir son pas de commande changer (clients La
- * Poste). On ne réinjecte donc jamais une commande telle quelle : chaque ligne
+ * rupture, perdre son tarif, ou voir son pas de commande changer. On ne
+ * réinjecte donc jamais une commande telle quelle : chaque ligne
  * est classée, et le récap montre au client ce qui sera réellement ajouté.
  */
 import type { CommandeRecommande, ProduitCatalogueClient } from './types'

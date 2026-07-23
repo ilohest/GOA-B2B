@@ -3,7 +3,7 @@
 import { computed } from 'vue'
 import type { EtatCommande } from '@/lib/types'
 
-const props = defineProps<{ etat: EtatCommande }>()
+const props = defineProps<{ etat: EtatCommande; nombre?: number }>()
 
 const styleBadge = computed(() =>
   props.etat.couleur
@@ -25,5 +25,6 @@ const styleBadge = computed(() =>
       :style="{ backgroundColor: etat.couleur ?? 'var(--muted-foreground)' }"
     />
     {{ etat.libelle }}
+    <span v-if="nombre != null" class="font-semibold tabular-nums">{{ nombre }}</span>
   </span>
 </template>

@@ -61,11 +61,11 @@ import {
 import {
   catalogueAdmin,
   catalogueClient,
+  groupesLivraisonPostaleInvalides,
   grillePrixPourClient,
   lireOverrides,
   majOverride,
   normaliserTags,
-  pasDeCommande,
   resoudrePrixUnite,
 } from './catalogue.js'
 import {
@@ -680,16 +680,30 @@ async function resoudreLignes(
     lignes.push({ produit, quantite: l.quantite, prixUnitaireHT: prixHT })
   }
 
-  // Règle transporteur La Poste (brief §6.3) : gros cartons homogènes →
-  // multiples de 3 (35cl) / 2 (1L) pour les clients tagués `laposte`.
+  // Règle transporteur La Poste : les goûts peuvent être mélangés. Le total
+  // est contrôlé par groupe de contenant + packaging.
   const tags = normaliserTags(cacheClient.client.tags)
-  for (const l of lignes) {
-    const pas = pasDeCommande(l.produit.libelle, tags)
-    if (l.quantite % pas !== 0) {
-      return ko(
-        `Livraison La Poste : « ${l.produit.libelle} » se commande par cartons complets, par multiple de ${pas} — quantité reçue : ${l.quantite}`,
-      )
-    }
+  const metaParId = new Map(
+    grille.lignes
+      .filter((ligne) => ligne.idStockBouteille != null)
+      .map((ligne) => [ligne.idStockBouteille!, ligne]),
+  )
+  const groupesPostauxInvalides = groupesLivraisonPostaleInvalides(
+    lignes.map((ligne) => {
+      const meta = metaParId.get(ligne.produit.idStockBouteille)
+      return {
+        quantite: ligne.quantite,
+        contenant: meta?.contenant ?? ligne.produit.libelle,
+        packaging: meta?.packaging ?? `Produit ${ligne.produit.idStockBouteille}`,
+      }
+    }),
+    tags,
+  )
+  if (groupesPostauxInvalides.length) {
+    const groupe = groupesPostauxInvalides[0]
+    return ko(
+      `Livraison La Poste : le format « ${groupe.contenant} · ${groupe.packaging} » doit totaliser un multiple de ${groupe.multiple} cartons, tous goûts confondus (actuellement ${groupe.quantite}).`,
+    )
   }
 
   // Contrôle du minimum de commande (brief §6.3), aussi appliqué côté front.
@@ -1696,7 +1710,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     totalHT: number | null
     totalTTC: number | null
     dateCreation: number | null
-    etat: { code: string }
+    etat: { code: string; libelle: string; couleur: string | null }
   }[]
   const produits = (catalogueSnap.data()?.produits ?? []) as unknown[]
   const clientsSyncedAt = (clientsSnap.data()?.syncedAt as number | undefined) ?? null
@@ -1723,6 +1737,27 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
 
   const depuis30j = Date.now() - 30 * 24 * 3600 * 1000
   const commandes30j = commandes.filter((cmd) => (cmd.dateCreation ?? 0) >= depuis30j && cmd.etat.code !== 'ANNULEE')
+  const statutsCommandes30j = Array.from(
+    commandes30j.reduce((groupes, cmd) => {
+      const code = cmd.etat.code || 'INCONNU'
+      const groupe = groupes.get(code)
+      if (groupe) {
+        groupe.nombre++
+      } else {
+        groupes.set(code, {
+          etat: {
+            code,
+            libelle: cmd.etat.libelle || code,
+            couleur: cmd.etat.couleur ?? null,
+          },
+          nombre: 1,
+        })
+      }
+      return groupes
+    }, new Map<string, { etat: { code: string; libelle: string; couleur: string | null }; nombre: number }>()),
+  )
+    .map(([, groupe]) => groupe)
+    .sort((a, b) => b.nombre - a.nombre || a.etat.libelle.localeCompare(b.etat.libelle, 'fr'))
   const caHT30j = commandes30j.reduce(
     (somme, cmd) => somme + (cmd.totalHT ?? (cmd.totalTTC != null ? cmd.totalTTC / 1.055 : 0)),
     0,
@@ -1740,7 +1775,12 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
 
   return c.json({
     clients: { total: clients.length, avecCompte: statutsComptes.length, actifs: statutsComptes.filter((s) => s.statut === 'active').length },
-    commandes30j: { nombre: commandes30j.length, caHT: caHT30j, caTTC: caTTC30j },
+    commandes30j: {
+      nombre: commandes30j.length,
+      statuts: statutsCommandes30j,
+      caHT: caHT30j,
+      caTTC: caTTC30j,
+    },
     catalogue: { produits: produits.length, visibles, ruptures },
     cache: {
       clientsAt: clientsSyncedAt,

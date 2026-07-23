@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Stepper de quantité en pilule, mobile-first (gros boutons tactiles).
- * `pas` = incrément imposé (ex. règle La Poste : 3 pour 35cl, 2 pour 1L).
+ * `pas` = incrément éventuellement imposé à un article (1 par défaut).
  */
 import { ref, watch } from 'vue'
 import { Info } from '@lucide/vue'

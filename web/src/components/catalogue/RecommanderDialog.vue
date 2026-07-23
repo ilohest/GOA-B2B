@@ -128,8 +128,8 @@ function confirmer() {
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2">
           <RotateCcw class="size-5 text-muted-foreground" />
-          Recommander la commande n°
-          {{ props.commande?.numero ?? props.commande?.idCommande }}
+          Recommander la commande
+          #{{ props.commande?.numero ?? props.commande?.idCommande }}
         </DialogTitle>
         <DialogDescription>
           Passée le {{ dateFr(props.commande?.dateCreation) }} — aux tarifs et

@@ -104,9 +104,8 @@ export function usePanier() {
   /**
    * Reprend une commande passée dans une NOUVELLE commande (« recommander ») :
    * contrairement à `chargerCommande`, aucun mode modification n'est armé.
-   * Les quantités reçues sont déjà alignées sur le pas de commande (cf.
-   * `reconcilierCommande`), et le panier existant l'est aussi via le stepper :
-   * leur somme reste donc valide en mode « ajouter ».
+   * Les quantités reçues sont déjà alignées sur l'éventuel pas de commande
+   * propre à l'article (cf. `reconcilierCommande`).
    */
   const appliquerCommande = (
     lignesCommande: { idStockBouteille: number; quantite: number }[],

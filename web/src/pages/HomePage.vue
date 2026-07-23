@@ -3,7 +3,6 @@ import { computed, ref, watch, watchEffect } from "vue";
 import { useRouter } from "vue-router";
 import {
   Loader2,
-  PackageCheck,
   RotateCcw,
   Store,
   TriangleAlert,
@@ -21,6 +20,7 @@ import type {
 } from "@/lib/types";
 import { dateFr, prixFr } from "@/lib/format";
 import { estimerRemisesCommande } from "@/lib/remises";
+import { groupesConditionnementPostalInvalides } from "@/lib/livraisonPostale";
 import { useMe } from "@/composables/useMe";
 import { usePanier } from "@/composables/usePanier";
 import ProduitCard from "@/components/catalogue/ProduitCard.vue";
@@ -252,28 +252,20 @@ const tagsClient = computed(() => {
     .filter(Boolean);
 });
 const livraisonPostale = computed(() => tagsClient.value.includes("laposte"));
-const pasLivraisonPostale = computed(() =>
-  [
-    ...new Set(
-      (catalogue.data.value?.produits ?? [])
-        .map((p) => p.pas)
-        .filter((pas) => pas > 1),
-    ),
-  ].sort((a, b) => a - b),
+const groupesPostauxInvalides = computed(() =>
+  livraisonPostale.value
+    ? groupesConditionnementPostalInvalides(lignesDetail.value)
+    : [],
 );
-const resumeLivraisonPostale = computed(() => {
-  if (!pasLivraisonPostale.value.length)
-    return "La Poste impose des colis homogènes : commande par cartons complets.";
-  return `La Poste impose des colis homogènes : commande par ${pasLivraisonPostale.value.join(" ou ")} cartons selon le format.`;
-});
-const agePrixCatalogue = computed(() => {
-  const ageMs = catalogue.data.value?.prixPlusAncienAgeMs;
-  if (ageMs == null) return null;
-  const minutes = Math.max(1, Math.ceil(ageMs / 60_000));
-  if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
-});
-
+const erreursConditionnementPostal = computed(() =>
+  groupesPostauxInvalides.value.map((groupe) => {
+    const cartons = groupe.manque > 1 ? "cartons" : "carton";
+    return `Livraison La Poste : ajoutez ${groupe.manque} ${cartons} en ${groupe.contenant} · ${groupe.packaging}, avec le ou les goûts de votre choix.`;
+  }),
+);
+const commandeBloqueeParConditionnement = computed(
+  () => groupesPostauxInvalides.value.length > 0,
+);
 /** Volet détail de la barre mobile. */
 const barreDepliee = ref(false);
 const affichageMobile = useMediaQuery("(max-width: 1023px)");
@@ -360,6 +352,9 @@ const envoi = useMutation({
     }
     if (sousMinimum.value && minimum.value != null) {
       throw new Error(`Minimum de commande : ${prixFr(minimum.value)} HT.`);
+    }
+    if (commandeBloqueeParConditionnement.value) {
+      throw new Error(erreursConditionnementPostal.value[0]);
     }
     const body = { commentaire: commentaire.value, lignes: lignes.value };
     return modification.value
@@ -450,8 +445,8 @@ function supprimerLignePanier(idStockBouteille: number) {
       >
         <p class="min-w-0 flex-1 text-sm">
           <span class="font-semibold text-primary">
-            Modification de la commande n°
-            {{ modification.numero ?? modification.idCommande }}
+            Modification de la commande
+            #{{ modification.numero ?? modification.idCommande }}
           </span>
           <span class="text-muted-foreground">
             — ajustez les quantités ci-dessous puis validez. La nouvelle version
@@ -466,6 +461,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             size="sm"
             :disabled="
               sousMinimum ||
+              commandeBloqueeParConditionnement ||
               commandeBloqueeParPrix ||
               comptePreparation ||
               nbCartons === 0
@@ -477,26 +473,6 @@ function supprimerLignePanier(idStockBouteille: number) {
         </div>
       </div>
 
-      <div
-        v-if="livraisonPostale"
-        class="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
-      >
-        <span
-          class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-primary shadow-xs"
-        >
-          <PackageCheck class="size-4" />
-        </span>
-        <div class="grid gap-0.5">
-          <p class="font-medium text-foreground">
-            Livraison La Poste : commande par cartons complets
-          </p>
-          <p class="text-muted-foreground">
-            {{ resumeLivraisonPostale }} Les boutons +/− suivent ce pas
-            automatiquement.
-          </p>
-        </div>
-      </div>
-
       <section>
         <div class="mb-5">
           <h1
@@ -505,16 +481,6 @@ function supprimerLignePanier(idStockBouteille: number) {
             <Store class="size-5 text-muted-foreground" />
             Produits
           </h1>
-          <Skeleton
-            v-if="catalogue.isPending.value || isPending"
-            class="mt-2 h-3 w-44"
-          />
-          <p
-            v-else-if="agePrixCatalogue"
-            class="mt-1 text-xs text-muted-foreground"
-          >
-            Tarifs synchronisés il y a {{ agePrixCatalogue }}.
-          </p>
         </div>
 
         <div
@@ -732,7 +698,7 @@ function supprimerLignePanier(idStockBouteille: number) {
           <CardTitle class="text-lg">
             {{
               modification
-                ? `Modification n° ${modification.numero ?? modification.idCommande}`
+                ? `Modification #${modification.numero ?? modification.idCommande}`
                 : "Votre commande"
             }}
           </CardTitle>
@@ -745,6 +711,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
+            :erreurs-conditionnement="erreursConditionnementPostal"
             :remise-montant="remiseMontant"
             :remises-detail="remisesDetail"
             defilement-contraint
@@ -760,6 +727,7 @@ function supprimerLignePanier(idStockBouteille: number) {
               size="lg"
               :disabled="
                 sousMinimum ||
+                commandeBloqueeParConditionnement ||
                 commandeBloqueeParPrix ||
                 comptePreparation ||
                 nbCartons === 0
@@ -800,8 +768,8 @@ function supprimerLignePanier(idStockBouteille: number) {
             </span>
           </div>
           <p v-if="modification" class="mb-2 text-xs font-medium text-primary">
-            Modification de la commande n°
-            {{ modification.numero ?? modification.idCommande }} — la nouvelle
+            Modification de la commande
+            #{{ modification.numero ?? modification.idCommande }} — la nouvelle
             version annule et remplace la précédente.
           </p>
           <PanierRecap
@@ -810,6 +778,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
+            :erreurs-conditionnement="erreursConditionnementPostal"
             :remise-montant="remiseMontant"
             :remises-detail="remisesDetail"
             defilement-contraint
@@ -837,8 +806,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             @click="barreDepliee = !barreDepliee"
           >
             <p v-if="modification" class="text-xs font-medium text-primary">
-              Modification n°
-              {{ modification.numero ?? modification.idCommande }}
+              Modification #{{ modification.numero ?? modification.idCommande }}
             </p>
             <p class="text-sm font-semibold">
               {{ nbCartons }} carton{{ nbCartons > 1 ? "s" : "" }} —
@@ -850,11 +818,18 @@ function supprimerLignePanier(idStockBouteille: number) {
             <p v-if="sousMinimum" class="text-xs text-destructive">
               Minimum : {{ prixFr(minimum!) }} HT
             </p>
+            <p
+              v-if="commandeBloqueeParConditionnement"
+              class="text-xs text-destructive"
+            >
+              Conditionnement La Poste incomplet
+            </p>
           </button>
           <Button
             size="lg"
             :disabled="
               sousMinimum ||
+              commandeBloqueeParConditionnement ||
               commandeBloqueeParPrix ||
               comptePreparation ||
               nbCartons === 0
@@ -903,7 +878,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             <DialogTitle>
               {{
                 modification
-                  ? `Modifier la commande n° ${modification.numero ?? modification.idCommande}`
+                  ? `Modifier la commande #${modification.numero ?? modification.idCommande}`
                   : "Récapitulatif de votre commande"
               }}
             </DialogTitle>
@@ -921,6 +896,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             :total-h-t="totalHT"
             :minimum="minimum"
             :sous-minimum="sousMinimum"
+            :erreurs-conditionnement="erreursConditionnementPostal"
             :remise-montant="remiseMontant"
             :remises-detail="remisesDetail"
             defilement-contraint
@@ -981,6 +957,7 @@ function supprimerLignePanier(idStockBouteille: number) {
               :disabled="
                 envoi.isPending.value ||
                 commandeBloqueeParPrix ||
+                commandeBloqueeParConditionnement ||
                 comptePreparation ||
                 sousMinimum ||
                 nbCartons === 0
@@ -1009,7 +986,7 @@ function supprimerLignePanier(idStockBouteille: number) {
               Votre commande a bien été transmise à GOA<template
                 v-if="confirmation.numero"
               >
-                (n° {{ confirmation.numero }})</template
+                (#{{ confirmation.numero }})</template
               >.
             </DialogDescription>
           </DialogHeader>

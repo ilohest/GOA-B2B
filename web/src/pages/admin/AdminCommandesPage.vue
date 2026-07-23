@@ -149,7 +149,7 @@ function allerPage(delta: number) {
 }
 
 const colonnesTri: { cle: CleTri; label: string; classe?: string }[] = [
-  { cle: 'numero', label: '#' },
+  { cle: 'numero', label: 'Commande' },
   { cle: 'dateCreation', label: 'Date' },
   { cle: 'etat', label: 'Statut' },
   { cle: 'client', label: 'Client' },
@@ -284,7 +284,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
           >
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0">
-                <p class="font-semibold">Commande n° {{ cmd.numero ?? cmd.idCommande }}</p>
+                <p class="font-semibold">Commande #{{ cmd.numero ?? cmd.idCommande }}</p>
                 <p class="text-xs text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</p>
               </div>
               <p class="shrink-0 text-right font-semibold tabular-nums">
@@ -308,7 +308,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
             <div class="grid gap-2 text-sm">
               <RouterLink
                 v-if="cmd.client?.idClient"
-                :to="`/admin/clients/${cmd.client.idClient}`"
+                :to="{ path: `/admin/clients/${cmd.client.idClient}`, query: { retour: 'commandes' } }"
                 class="min-w-0 hover:underline"
                 @click.stop
               >
@@ -372,13 +372,13 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
                 class="cursor-pointer"
                 @click="commandeOuverte = cmd.idCommande"
               >
-                <TableCell class="font-medium">{{ cmd.numero ?? cmd.idCommande }}</TableCell>
+                <TableCell class="font-medium">#{{ cmd.numero ?? cmd.idCommande }}</TableCell>
                 <TableCell class="text-sm text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</TableCell>
                 <TableCell><EtatBadge :etat="cmd.etat" /></TableCell>
                 <TableCell class="min-w-0">
                   <RouterLink
                     v-if="cmd.client?.idClient"
-                    :to="`/admin/clients/${cmd.client.idClient}`"
+                    :to="{ path: `/admin/clients/${cmd.client.idClient}`, query: { retour: 'commandes' } }"
                     class="flex min-w-0 items-baseline gap-1 hover:underline"
                     @click.stop
                   >

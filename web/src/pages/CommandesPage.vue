@@ -85,7 +85,7 @@ const recommandeBloquee = computed(() => modification.value != null);
 function recommander(commande: CommandeResume) {
   if (recommandeBloquee.value) {
     toast.info(
-      `Vous modifiez la commande n° ${modification.value?.numero ?? modification.value?.idCommande}.`,
+      `Vous modifiez la commande #${modification.value?.numero ?? modification.value?.idCommande}.`,
       { description: "Validez ou annulez cette modification avant d'en recommander une autre." },
     );
     return;
@@ -303,7 +303,7 @@ async function modifier(commande: CommandeResume) {
             >
               <span class="grid gap-1">
                 <span class="flex items-center gap-2 text-sm font-medium">
-                  Commande n° {{ cmd.numero ?? cmd.idCommande }}
+                  Commande #{{ cmd.numero ?? cmd.idCommande }}
                   <EtatBadge :etat="cmd.etat" />
                   <span
                     v-if="data?.source !== 'local'"
@@ -562,7 +562,7 @@ async function modifier(commande: CommandeResume) {
             Votre commande a bien été transmise à GOA<template
               v-if="confirmation.numero"
             >
-              (n° {{ confirmation.numero }})</template
+              (#{{ confirmation.numero }})</template
             >.
           </DialogDescription>
         </DialogHeader>

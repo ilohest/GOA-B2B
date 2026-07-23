@@ -57,9 +57,9 @@ export const config = {
     credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS || undefined,
     // Dev : émulateurs locaux (Auth + Firestore) au lieu d'un vrai projet.
     emulators: process.env.FIREBASE_EMULATORS === 'true',
-    emulatorAuthHost: process.env.FIREBASE_AUTH_EMULATOR_HOST ?? 'localhost:9099',
-    emulatorFirestoreHost: process.env.FIRESTORE_EMULATOR_HOST ?? 'localhost:8080',
-    emulatorStorageHost: process.env.FIREBASE_STORAGE_EMULATOR_HOST ?? 'localhost:9199',
+    emulatorAuthHost: process.env.FIREBASE_AUTH_EMULATOR_HOST ?? 'localhost:9100',
+    emulatorFirestoreHost: process.env.FIRESTORE_EMULATOR_HOST ?? 'localhost:8180',
+    emulatorStorageHost: process.env.FIREBASE_STORAGE_EMULATOR_HOST ?? 'localhost:9200',
   },
 
   // Synchro périodique Easybeer → cache (0 = désactivée ; en prod, Cloud Scheduler).

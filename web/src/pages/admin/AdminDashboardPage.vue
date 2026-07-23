@@ -9,6 +9,7 @@ import { dateHeureFr, prixFr } from '@/lib/format'
 import { easybeerLien } from '@/lib/easybeer'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import EasybeerLink from '@/components/admin/EasybeerLink.vue'
+import EtatBadge from '@/components/EtatBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -167,6 +168,7 @@ const stats = computed(() => {
       titre: 'Commandes (30 j)',
       valeur: String(d.commandes30j.nombre),
       detail: `${prixFr(d.commandes30j.caHT)} HT · ${prixFr(d.commandes30j.caTTC)} TTC`,
+      statuts: d.commandes30j.statuts,
       lien: '/admin/commandes',
       easybeer: easybeerLien.commandes(),
       action: 'Voir les commandes',
@@ -256,7 +258,7 @@ const stats = computed(() => {
       </Card>
 
       <div class="grid gap-4 sm:grid-cols-3">
-        <Card v-for="s in stats" :key="s.titre" class="relative">
+        <Card v-for="s in stats" :key="s.titre" class="relative flex h-full flex-col">
           <EasybeerLink
             :href="s.easybeer"
             :label="`${s.titre} dans Easybeer`"
@@ -266,9 +268,17 @@ const stats = computed(() => {
             <CardDescription>{{ s.titre }}</CardDescription>
             <CardTitle class="text-3xl tracking-tight">{{ s.valeur }}</CardTitle>
           </CardHeader>
-          <CardContent class="grid gap-3">
+          <CardContent class="flex flex-1 flex-col gap-3">
             <p class="text-sm text-muted-foreground">{{ s.detail }}</p>
-            <Button variant="outline" size="sm" class="justify-self-start" as-child>
+            <div v-if="s.statuts?.length" class="flex flex-wrap gap-2">
+              <div
+                v-for="statut in s.statuts"
+                :key="statut.etat.code"
+              >
+                <EtatBadge :etat="statut.etat" :nombre="statut.nombre" />
+              </div>
+            </div>
+            <Button variant="outline" size="sm" class="mt-auto self-start" as-child>
               <RouterLink :to="s.lien">{{ s.action }}</RouterLink>
             </Button>
           </CardContent>

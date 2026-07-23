@@ -160,7 +160,7 @@ async function supprimerTest() {
   messageSuppression.value = null
   try {
     await supprimerCommande(idCommandeCreee.value)
-    messageSuppression.value = `Commande ${idCommandeCreee.value} supprimée d'Easybeer.`
+    messageSuppression.value = `Commande #${idCommandeCreee.value} supprimée d'Easybeer.`
     resultat.value = null
   } catch (e) {
     messageSuppression.value = e instanceof Error ? e.message : String(e)
@@ -255,7 +255,7 @@ onMounted(chargerReferences)
         ✅ {{ estDevis ? 'Devis' : 'Commande' }} enregistré(e) dans Easybeer.
         <ul>
           <li v-if="resultat.id != null">idCommande : <strong>{{ resultat.id }}</strong></li>
-          <li v-if="resultat.numero != null">Numéro : <strong>{{ resultat.numero }}</strong></li>
+          <li v-if="resultat.numero != null"><strong>#{{ resultat.numero }}</strong></li>
         </ul>
 
         <button
@@ -264,7 +264,7 @@ onMounted(chargerReferences)
           :disabled="suppressionEnCours"
           @click="supprimerTest"
         >
-          {{ suppressionEnCours ? 'Suppression…' : `🗑 Supprimer la commande ${idCommandeCreee}` }}
+          {{ suppressionEnCours ? 'Suppression…' : `🗑 Supprimer la commande #${idCommandeCreee}` }}
         </button>
       </div>
 

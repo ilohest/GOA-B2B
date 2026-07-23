@@ -41,14 +41,58 @@ export function normaliserTags(tags: unknown): string[] {
     .filter(Boolean)
 }
 
-/**
- * Pas de commande (incrément de quantité) : les clients tagués `laposte`
- * commandent en gros cartons homogènes → multiples de 3 (35cl) / 2 (1L).
- */
-export function pasDeCommande(libelle: string, tags: string[]): number {
+/** Multiple de cartons requis par groupe de contenant + packaging. */
+export function multipleLivraisonPostale(libelle: string, tags: string[]): number {
   if (!tags.includes('laposte')) return 1
   const format = detecterFormat(libelle)
   return format === '35cl' ? 3 : format === '1l' ? 2 : 1
+}
+
+export interface LigneLivraisonPostale {
+  quantite: number
+  contenant: string | null
+  packaging: string | null
+}
+
+export interface GroupeLivraisonPostaleInvalide {
+  contenant: string
+  packaging: string
+  quantite: number
+  multiple: number
+  manque: number
+}
+
+/**
+ * Contrôle La Poste au niveau du panier : les goûts peuvent être mélangés,
+ * mais le total des cartons d'un même contenant + packaging doit respecter le
+ * multiple logistique du format.
+ */
+export function groupesLivraisonPostaleInvalides(
+  lignes: LigneLivraisonPostale[],
+  tags: string[],
+): GroupeLivraisonPostaleInvalide[] {
+  if (!tags.includes('laposte')) return []
+  const groupes = new Map<string, Omit<GroupeLivraisonPostaleInvalide, 'manque'>>()
+  for (const ligne of lignes) {
+    if (!ligne.contenant || !ligne.packaging) continue
+    const multiple = multipleLivraisonPostale(ligne.contenant, tags)
+    if (multiple <= 1) continue
+    const cle = `${ligne.contenant.trim().toLowerCase()}\u0000${ligne.packaging.trim().toLowerCase()}`
+    const groupe = groupes.get(cle)
+    if (groupe) groupe.quantite += ligne.quantite
+    else groupes.set(cle, {
+      contenant: ligne.contenant,
+      packaging: ligne.packaging,
+      quantite: ligne.quantite,
+      multiple,
+    })
+  }
+  return [...groupes.values()]
+    .filter((groupe) => groupe.quantite % groupe.multiple !== 0)
+    .map((groupe) => ({
+      ...groupe,
+      manque: groupe.multiple - (groupe.quantite % groupe.multiple),
+    }))
 }
 
 export async function lireOverrides(db: Firestore): Promise<Record<string, CatalogueOverride>> {
@@ -148,7 +192,7 @@ export interface ProduitCatalogueClient {
   prixEstFrais: boolean
   /** Unité masquée, exposée uniquement pour modifier une commande qui la contient déjà. */
   historique: boolean
-  /** Incrément de quantité imposé (1 sauf clients La Poste : 3 ou 2). */
+  /** Incrément par goût (toujours 1 ; contraintes logistiques au niveau panier). */
   pas: number
 }
 
@@ -262,7 +306,6 @@ export function catalogueClient(
     >
   } = {},
 ): ProduitCatalogueClient[] {
-  const tags = normaliserTags(options.tagsClient ?? null)
   const now = options.now ?? Date.now()
   const prixMaxAgeMs = options.maxAgeMs ?? Infinity
   const sources: SourcesPrixClient = { ...options, now, maxAgeMs: prixMaxAgeMs }
@@ -292,7 +335,9 @@ export function catalogueClient(
         prixUpdatedAt: updatedAt,
         prixEstFrais: prixHT != null && updatedAt != null && now - updatedAt <= prixMaxAgeMs,
         historique: !o.visible,
-        pas: pasDeCommande(p.libelle, tags),
+        // Le client choisit chaque goût à l'unité. La contrainte La Poste est
+        // contrôlée globalement dans le panier par contenant + packaging.
+        pas: 1,
       }
     })
     .sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr'))

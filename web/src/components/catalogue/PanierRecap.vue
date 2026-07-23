@@ -4,7 +4,7 @@
  * le volet dépliable de la barre mobile et le dialog de confirmation.
  */
 import { computed, nextTick, onMounted, ref, watch } from "vue";
-import { Trash2 } from "@lucide/vue";
+import { Info, Trash2 } from "@lucide/vue";
 import { useResizeObserver } from "@vueuse/core";
 import { prixFr } from "@/lib/format";
 import type { DetailRemiseCiblee } from "@/lib/remises";
@@ -33,6 +33,8 @@ const props = defineProps<{
   totalHT: number;
   minimum: number | null;
   sousMinimum: boolean;
+  /** Erreurs de multiples logistiques bloquant la validation du panier. */
+  erreursConditionnement?: string[];
   /**
    * Montant de remise ESTIMÉ, fidèle à Easybeer (une remise par ligne =
    * ciblée-ou-globale, hors « remise 2 » en € qu'Easybeer n'applique pas).
@@ -66,6 +68,58 @@ const totalApresRemise = computed(() => props.totalHT - (props.remiseMontant ?? 
 const tauxTVA = 0.055;
 const montantTVA = computed(() => totalApresRemise.value * tauxTVA);
 const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
+
+const formatNombre = new Intl.NumberFormat("fr-FR", {
+  maximumFractionDigits: 2,
+});
+
+function contenanceEnLitres(contenant: string | null | undefined) {
+  if (!contenant || !/bouteille/i.test(contenant)) return null;
+  const resultat = contenant.match(/(\d+(?:[.,]\d+)?)\s*(ml|cl|dl|l)\b/i);
+  if (!resultat) return null;
+  const valeur = Number(resultat[1].replace(",", "."));
+  if (!Number.isFinite(valeur)) return null;
+  const unite = resultat[2].toLowerCase();
+  if (unite === "ml") return valeur / 1000;
+  if (unite === "cl") return valeur / 100;
+  if (unite === "dl") return valeur / 10;
+  return valeur;
+}
+
+function bouteillesParArticle(packaging: string | null | undefined) {
+  if (!packaging) return null;
+  if (/\bunit[eé]\b/i.test(packaging)) return 1;
+  const resultat = packaging.match(/\b(\d+)\b/);
+  if (!resultat) return null;
+  const quantite = Number(resultat[1]);
+  return quantite > 0 ? quantite : null;
+}
+
+const recapBouteilles = computed(() => {
+  const parContenance = new Map<number, number>();
+  for (const ligne of props.lignes) {
+    const contenanceLitres = contenanceEnLitres(ligne.contenant);
+    const parArticle = bouteillesParArticle(ligne.packaging);
+    if (contenanceLitres == null || parArticle == null) continue;
+    parContenance.set(
+      contenanceLitres,
+      (parContenance.get(contenanceLitres) ?? 0) + ligne.quantite * parArticle,
+    );
+  }
+  return [...parContenance.entries()]
+    .map(([contenanceLitres, nbBouteilles]) => ({
+      contenanceLitres,
+      nbBouteilles,
+      totalLitres: nbBouteilles * contenanceLitres,
+    }))
+    .sort((a, b) => a.contenanceLitres - b.contenanceLitres);
+});
+
+const totalLitresBouteilles = computed(() =>
+  recapBouteilles.value.reduce((total, ligne) => total + ligne.totalLitres, 0),
+);
+
+const volumeFr = (litres: number) => `${formatNombre.format(litres)} L`;
 
 const listeProduits = ref<HTMLElement | null>(null);
 const listeDeborde = ref(false);
@@ -274,8 +328,38 @@ onMounted(async () => {
         <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(totalTTC) }}</span>
       </li>
     </ul>
+    <div
+      v-if="recapBouteilles.length"
+      class="relative z-10 flex shrink-0 items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-950"
+    >
+      <Info class="mt-0.5 size-3.5 shrink-0 text-blue-600" />
+      <p v-if="recapBouteilles.length === 1">
+        <strong>{{ recapBouteilles[0].nbBouteilles }} bouteilles</strong>
+        de {{ volumeFr(recapBouteilles[0].contenanceLitres) }}, soit
+        <strong>{{ volumeFr(totalLitresBouteilles) }}</strong> de nectar divin au
+        total.
+      </p>
+      <div v-else class="grid gap-1">
+        <ul class="grid gap-0.5">
+          <li v-for="ligne in recapBouteilles" :key="ligne.contenanceLitres">
+            {{ ligne.nbBouteilles }} bouteilles de
+            {{ volumeFr(ligne.contenanceLitres) }}
+          </li>
+        </ul>
+        <p class="font-medium">
+          Soit {{ volumeFr(totalLitresBouteilles) }} de nectar divin au total.
+        </p>
+      </div>
+    </div>
     <p v-if="sousMinimum && minimum != null" class="text-xs text-destructive">
       Minimum de commande : {{ prixFr(minimum) }} HT
+    </p>
+    <p
+      v-for="erreur in erreursConditionnement"
+      :key="erreur"
+      class="text-xs text-destructive"
+    >
+      {{ erreur }}
     </p>
     <slot />
   </div>

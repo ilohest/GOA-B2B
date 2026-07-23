@@ -77,7 +77,7 @@ watch(
           class="absolute top-0 right-10 text-muted-foreground"
         />
         <DialogTitle class="flex items-center gap-2">
-          Commande n° {{ data?.numero ?? idCommande }}
+          Commande #{{ data?.numero ?? idCommande }}
           <EtatBadge v-if="data?.etat" :etat="data.etat" />
         </DialogTitle>
         <DialogDescription v-if="data?.reference">Réf. {{ data.reference }}</DialogDescription>

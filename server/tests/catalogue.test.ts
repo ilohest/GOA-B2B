@@ -4,7 +4,7 @@ import {
   detecterFormat,
   grillePrixPourClient,
   normaliserTags,
-  pasDeCommande,
+  groupesLivraisonPostaleInvalides,
   resoudrePrixUnite,
   type CatalogueOverride,
 } from '../src/catalogue.js'
@@ -43,19 +43,32 @@ describe('normaliserTags', () => {
   })
 })
 
-describe('pasDeCommande (règle La Poste)', () => {
-  const l1 = 'Cola - Chaï - 0.0° - Carton de 6 Bouteilles - 1L'
-  const l35 = 'Cola - Chaï - 0.0° - Carton de 18 Bouteilles - 0.35L'
-  it('client non tagué → pas de contrainte', () => {
-    expect(pasDeCommande(l1, [])).toBe(1)
-    expect(pasDeCommande(l35, ['frigo'])).toBe(1)
+describe('groupesLivraisonPostaleInvalides', () => {
+  it('additionne les goûts ayant le même contenant et le même packaging', () => {
+    const lignes = [
+      { quantite: 1, contenant: 'Bouteille - 1L', packaging: 'Carton de 6' },
+      { quantite: 1, contenant: 'Bouteille - 1L', packaging: 'Carton de 6' },
+    ]
+    expect(groupesLivraisonPostaleInvalides(lignes, ['laposte'])).toEqual([])
   })
-  it('client laposte → multiples 2 (1L) et 3 (35cl)', () => {
-    expect(pasDeCommande(l1, ['laposte'])).toBe(2)
-    expect(pasDeCommande(l35, ['laposte'])).toBe(3)
+
+  it('signale chaque groupe incomplet avec le nombre de cartons manquants', () => {
+    const lignes = [
+      { quantite: 1, contenant: 'Bouteille - 1L', packaging: 'Carton de 6' },
+      { quantite: 2, contenant: 'Bouteille - 0.35L', packaging: 'Carton de 12' },
+      { quantite: 1, contenant: 'Bouteille - 1L', packaging: 'Unité' },
+    ]
+    expect(groupesLivraisonPostaleInvalides(lignes, ['laposte'])).toEqual([
+      expect.objectContaining({ packaging: 'Carton de 6', quantite: 1, multiple: 2, manque: 1 }),
+      expect.objectContaining({ packaging: 'Carton de 12', quantite: 2, multiple: 3, manque: 1 }),
+      expect.objectContaining({ packaging: 'Unité', quantite: 1, multiple: 2, manque: 1 }),
+    ])
   })
-  it('format inconnu → pas de contrainte même en laposte', () => {
-    expect(pasDeCommande('Fût 20 litres', ['laposte'])).toBe(1)
+
+  it('ne contraint ni les autres clients ni les formats inconnus', () => {
+    const lignes = [{ quantite: 1, contenant: 'Fût - 20L', packaging: 'Unité' }]
+    expect(groupesLivraisonPostaleInvalides(lignes, ['laposte'])).toEqual([])
+    expect(groupesLivraisonPostaleInvalides(lignes, [])).toEqual([])
   })
 })
 
@@ -112,12 +125,9 @@ describe('catalogueClient (fusion produits × overrides × prix)', () => {
     expect(res.find((p) => p.idStockBouteille === 2)?.libelle).toBe('Mon Alpha')
   })
 
-  it('expose le pas La Poste selon le tag client', () => {
+  it('laisse chaque goût commandable à l’unité, y compris pour La Poste', () => {
     const res = catalogueClient(produits, overrides, { tagsClient: 'laposte' })
-    expect(res.find((p) => p.idStockBouteille === 1)?.pas).toBe(2)
-    expect(res.find((p) => p.idStockBouteille === 2)?.pas).toBe(3)
-    const sansTag = catalogueClient(produits, overrides)
-    expect(sansTag.every((p) => p.pas === 1)).toBe(true)
+    expect(res.every((p) => p.pas === 1)).toBe(true)
   })
 
   it('marque les prix frais et expirés par produit', () => {

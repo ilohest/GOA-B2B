@@ -2,7 +2,7 @@
  * Vérif E2E de COHÉRENCE d'une commande à travers TOUT le flux :
  *   création (client) → vue CLIENT → vue ADMIN → vue EASYBEER (source de vérité).
  * On crée un devis réel (client test 825435), on relit les 3 vues, on vérifie
- * qu'elles concordent (id, n°, total HT, remise, état), puis on SUPPRIME le devis.
+ * qu'elles concordent (id, #, total HT, remise, état), puis on SUPPRIME le devis.
  *
  * ⚠️ Tape Easybeer (création + relectures + suppression) → à lancer ponctuellement
  * (risque de ban en session de tests intensive). Nécessite le SERVEUR lancé
@@ -17,7 +17,7 @@ import { getDb } from '../src/firebase.js'
 import { lireCatalogue } from '../src/sync.js'
 
 const BASE = `http://localhost:${config.port}`
-const AUTH_EMU = `http://localhost:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key-emulator`
+const AUTH_EMU = `http://localhost:9100/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake-api-key-emulator`
 const CLIENT_EMAIL = 'client-remise-eb@goa.local'
 const ADMIN_EMAIL = 'admin@goa.local'
 const PASSWORD = 'goa-dev-123'
@@ -121,7 +121,7 @@ async function main() {
   })
   const idCommande: number = creation.easybeer?.id
   const numero = creation.easybeer?.numero
-  console.log(`1. Créée : idCommande=${idCommande} n°${numero} | confirmation totalHT=${creation.totalHT} remise=${creation.remiseTotale} totauxReels=${creation.totauxReels}\n`)
+  console.log(`1. Créée : idCommande=${idCommande} #${numero} | confirmation totalHT=${creation.totalHT} remise=${creation.remiseTotale} totauxReels=${creation.totauxReels}\n`)
   check('création OK (id Easybeer renvoyé)', typeof idCommande === 'number')
   check('confirmation = totaux RÉELS Easybeer (pas repli local)', creation.totauxReels === true)
   if (!idCommande) {

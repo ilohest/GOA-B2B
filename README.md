@@ -7,7 +7,7 @@ Easybeer (source de vérité unique — voir `BRIEF-DEV-V1.md` §2 et `EASYBEER.
 
 - `web/` — front Vue 3 + Vite + TS, shadcn-vue (Reka UI + Tailwind v4), TanStack Query, Zod.
 - `server/` — backend Hono : proxy Easybeer (Basic Auth côté serveur), auth Firebase, Firestore.
-- `firebase.json` / `firestore.rules` — émulateurs locaux (Auth 9099, Firestore 8080, UI 4000).
+- `firebase.json` / `firestore.rules` — émulateurs locaux (Auth 9100, Firestore 8180, Storage 9200, UI 4100).
 
 ## Démarrage en dev
 

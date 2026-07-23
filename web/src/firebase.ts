@@ -34,7 +34,7 @@ let app: FirebaseApp | null = null
 export const firebaseAuth: Auth | null = firebaseConfigured ? getAuth((app = initializeApp(cfg))) : null
 
 if (firebaseAuth && useEmulator) {
-  const host = import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL ?? 'http://localhost:9099'
+  const host = import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL ?? 'http://localhost:9100'
   connectAuthEmulator(firebaseAuth, host, { disableWarnings: true })
 }
 

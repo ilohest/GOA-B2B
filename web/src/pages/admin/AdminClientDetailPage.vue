@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import { Copy, UserRound } from "@lucide/vue";
+import { ArrowLeft, Copy, UserRound } from "@lucide/vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
@@ -20,6 +20,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const route = useRoute();
 const idClient = computed(() => Number(route.params.id));
+const retour = computed(() =>
+  route.query.retour === "commandes"
+    ? { to: "/admin/commandes", label: "Commandes" }
+    : { to: "/admin/clients", label: "Clients" },
+);
 
 const commandeOuverte = ref<number | null>(null);
 
@@ -145,12 +150,17 @@ function periodeRemiseCiblee(
   <div class="grid gap-4">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <RouterLink
-          to="/admin/clients"
-          class="text-sm text-muted-foreground hover:underline"
+        <Button
+          variant="ghost"
+          size="sm"
+          class="-ml-3 mb-1 h-9 gap-2 px-3 text-muted-foreground"
+          as-child
         >
-          ← Clients
-        </RouterLink>
+          <RouterLink :to="retour.to">
+            <ArrowLeft class="size-4" />
+            {{ retour.label }}
+          </RouterLink>
+        </Button>
         <div
           v-if="isPending"
           class="mt-1 flex items-center gap-2"
@@ -698,7 +708,7 @@ function periodeRemiseCiblee(
               >
                 <div class="flex items-center gap-2">
                   <p class="text-sm font-medium">
-                    n° {{ cmd.numero ?? cmd.idCommande }}
+                    #{{ cmd.numero ?? cmd.idCommande }}
                   </p>
                   <EtatBadge :etat="cmd.etat" />
                 </div>
