@@ -79,7 +79,12 @@ const router = createRouter({
       name: 'admin-boutique-apercu',
       component: () => import('@/pages/HomePage.vue'),
     },
-    { path: '/:pathMatch(.*)*', redirect: '/' },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/pages/NotFoundPage.vue'),
+      meta: { public: true },
+    },
   ],
 })
 
