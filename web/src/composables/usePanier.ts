@@ -13,6 +13,7 @@ type ModificationPanier = {
 type PanierStocke = {
   quantites?: Record<string, number>
   modification?: ModificationPanier | null
+  commentaire?: string
 }
 
 function lirePanierStocke(cleStockage: string): PanierStocke {
@@ -43,13 +44,15 @@ function sauvegarderPanier(
   cleStockage: string,
   quantites: Record<number, number>,
   modification: ModificationPanier | null,
+  commentaire: string,
 ) {
   if (typeof window === 'undefined') return
   const payload: PanierStocke = {
     quantites: Object.fromEntries(Object.entries(quantites).map(([id, quantite]) => [id, quantite])),
     modification,
+    commentaire,
   }
-  if (!Object.keys(payload.quantites ?? {}).length && !payload.modification) {
+  if (!Object.keys(payload.quantites ?? {}).length && !payload.modification && !payload.commentaire) {
     window.localStorage.removeItem(cleStockage)
     return
   }
@@ -59,6 +62,7 @@ function sauvegarderPanier(
 type EtatPanier = {
   quantites: Ref<Record<number, number>>
   modification: Ref<ModificationPanier | null>
+  commentaire: Ref<string>
 }
 
 const etatsPaniers = new Map<string, EtatPanier>()
@@ -81,10 +85,16 @@ function obtenirEtatPanier(cleStockage: string) {
   const etat: EtatPanier = {
     quantites: ref<Record<number, number>>(normaliserQuantites(panierInitial.quantites)),
     modification: ref<ModificationPanier | null>(panierInitial.modification ?? null),
+    commentaire: ref(panierInitial.commentaire ?? panierInitial.modification?.commentaire ?? ''),
   }
   watch(
-    [etat.quantites, etat.modification],
-    () => sauvegarderPanier(cleStockage, etat.quantites.value, etat.modification.value),
+    [etat.quantites, etat.modification, etat.commentaire],
+    () => sauvegarderPanier(
+      cleStockage,
+      etat.quantites.value,
+      etat.modification.value,
+      etat.commentaire.value,
+    ),
     { deep: true },
   )
   etatsPaniers.set(cleStockage, etat)
@@ -103,7 +113,7 @@ export function usePanier(portee: 'client' | 'apercu-admin' = 'client') {
     nettoyerAncienPanierGlobal()
     cleStockage = `goa-panier-client-${uid}-v1`
   }
-  const { quantites, modification } = obtenirEtatPanier(cleStockage)
+  const { quantites, modification, commentaire } = obtenirEtatPanier(cleStockage)
   const changer = (idStockBouteille: number, delta: number) => {
     const actuel = quantites.value[idStockBouteille] ?? 0
     const suivant = Math.max(0, actuel + delta)
@@ -119,6 +129,7 @@ export function usePanier(portee: 'client' | 'apercu-admin' = 'client') {
   const vider = () => {
     quantites.value = {}
     modification.value = null
+    commentaire.value = ''
   }
 
   /** Pré-remplit le panier depuis une commande existante (mode modification). */
@@ -140,6 +151,7 @@ export function usePanier(portee: 'client' | 'apercu-admin' = 'client') {
         commande.lignes.map((ligne) => [ligne.idStockBouteille, ligne.quantite]),
       ),
     }
+    commentaire.value = commande.commentaire
   }
 
   /**
@@ -153,6 +165,7 @@ export function usePanier(portee: 'client' | 'apercu-admin' = 'client') {
     mode: 'remplacer' | 'ajouter' = 'remplacer',
   ) => {
     modification.value = null
+    commentaire.value = ''
     if (mode === 'remplacer') quantites.value = {}
     for (const l of lignesCommande) {
       if (l.quantite <= 0) continue
@@ -179,6 +192,7 @@ export function usePanier(portee: 'client' | 'apercu-admin' = 'client') {
     chargerCommande,
     appliquerCommande,
     modification,
+    commentaire,
     nbCartons,
     lignes,
   }

@@ -223,7 +223,7 @@ function confirmer() {
             </span>
             <span class="text-muted-foreground">
               à ajouter<template v-if="recap.ecartees.length">
-                · {{ recap.ecartees.length }} ligne{{
+                · {{ recap.ecartees.length }} article{{
                   recap.ecartees.length > 1 ? "s" : ""
                 }}
                 écartée{{ recap.ecartees.length > 1 ? "s" : "" }}</template

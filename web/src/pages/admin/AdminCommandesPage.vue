@@ -334,10 +334,10 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
         <div class="hidden rounded-lg border [&_[data-slot=table-container]]:overflow-visible md:block">
           <Table class="table-fixed">
             <colgroup>
-              <col style="width: 6%" />
+              <col style="width: 8%" />
               <col style="width: 11%" />
               <col style="width: 12%" />
-              <col style="width: 24%" />
+              <col style="width: 22%" />
               <col style="width: 6%" />
               <col style="width: 13%" />
               <col style="width: 11%" />
@@ -352,7 +352,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
                   :class="colonne.classe?.includes('justify-end') ? 'text-right' : ''"
                 >
                   <button
-                    class="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-semibold uppercase tracking-wide text-foreground/80 transition-colors hover:bg-background/80"
+                    class="inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-xs font-semibold uppercase tracking-wide text-foreground/80 transition-colors hover:bg-background/80"
                     :class="colonne.classe"
                     @click="basculerTri(colonne.cle)"
                   >

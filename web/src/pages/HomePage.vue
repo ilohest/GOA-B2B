@@ -1,28 +1,17 @@
 <script setup lang="ts">
-import { computed, ref, watch, watchEffect } from "vue";
+import { computed, ref, watchEffect } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  Loader2,
-  RotateCcw,
-  Store,
-  TriangleAlert,
-} from "@lucide/vue";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { RotateCcw, Store } from "@lucide/vue";
+import { useQuery } from "@tanstack/vue-query";
 import { useMediaQuery, useScrollLock } from "@vueuse/core";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
 import type {
-  CatalogueClientResponse,
-  CommandeResultat,
   CommandeResume,
   CommandesClientResponse,
-  ProduitCatalogueClient,
 } from "@/lib/types";
 import { dateFr, prixFr } from "@/lib/format";
-import { estimerRemisesCommande } from "@/lib/remises";
-import { groupesConditionnementPostalInvalides } from "@/lib/livraisonPostale";
-import { useMe } from "@/composables/useMe";
-import { usePanier } from "@/composables/usePanier";
+import { useCommandeCourante } from "@/composables/useCommandeCourante";
 import ProduitCard from "@/components/catalogue/ProduitCard.vue";
 import PanierRecap from "@/components/catalogue/PanierRecap.vue";
 import RecommanderDialog from "@/components/catalogue/RecommanderDialog.vue";
@@ -35,14 +24,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -53,21 +34,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
 const router = useRouter();
 const route = useRoute();
-const { data, isPending, isError, error } = useMe();
 const modeApercu = computed(() => route.name === "admin-boutique-apercu");
 const {
+  data,
+  isPending,
+  isError,
+  error,
+  catalogue,
+  comptePreparation,
   quantites,
   changer,
   fixer,
   vider,
   modification,
   nbCartons,
-  lignes,
-} = usePanier(modeApercu.value ? "apercu-admin" : "client");
+  produitsParId,
+  lignesDetail,
+  totalHT,
+  minimum,
+  sousMinimum,
+  remisesDetail,
+  remiseMontant,
+  commandeBloqueeParPrix,
+  erreursConditionnementPostal,
+  commandeBloqueeParConditionnement,
+} = useCommandeCourante(modeApercu);
 
 // Hors route d'aperçu explicite, l'admin reste dans son espace.
 watchEffect(() => {
@@ -76,42 +70,6 @@ watchEffect(() => {
   if (data.value?.user.role === "client" && modeApercu.value)
     router.replace("/");
 });
-
-const catalogue = useQuery({
-  queryKey: computed(() => [
-    modeApercu.value ? "catalogue-apercu-admin" : "catalogue",
-    modification.value?.idCommande ?? null,
-  ]),
-  queryFn: () =>
-    api.get<CatalogueClientResponse>(
-      modeApercu.value
-        ? "/admin/boutique-apercu"
-        : modification.value
-          ? `/catalogue?commande=${modification.value.idCommande}`
-          : "/catalogue",
-    ),
-  enabled: computed(() => data.value != null),
-  // Cache client en préparation (compte tout juste activé) : les prix arrivent
-  // en tâche de fond → on re-sonde jusqu'à ce qu'ils soient là.
-  refetchInterval: (query) =>
-    query.state.data?.cacheEnPreparation
-      ? 4000
-      : query.state.data?.revalidationEnCours
-        ? 30000
-        : false,
-});
-
-// Compte fraîchement activé ou cache client incomplet : les tarifs se préparent côté serveur.
-const compteSansTarifs = computed(
-  () => data.value?.client != null && data.value.idGrilleTarifaire == null,
-);
-const comptePreparation = computed(
-  () =>
-    !modeApercu.value &&
-    (compteSansTarifs.value ||
-      Boolean(data.value?.cacheEnPreparation) ||
-      Boolean(catalogue.data.value?.cacheEnPreparation)),
-);
 
 // --- Reprise de la dernière commande ---
 
@@ -199,87 +157,8 @@ function reinitialiserFiltresCatalogue() {
   filtrePackaging.value = "tous";
 }
 
-// --- Panier ---
-
-const produitsParId = computed(() => {
-  const map = new Map<number, ProduitCatalogueClient>();
-  for (const p of catalogue.data.value?.produits ?? [])
-    map.set(p.idStockBouteille, p);
-  return map;
-});
-
-const lignesDetail = computed(() =>
-  lignes.value
-    .map((l) => {
-      const produit = produitsParId.value.get(l.idStockBouteille);
-      return produit
-        ? {
-            ...l,
-            libelle: produit.libelle,
-            contenant: produit.contenant,
-            packaging: produit.packaging,
-            photoUrl: produit.photoUrl,
-            prixUnitaireHT: produit.prixHT ?? 0,
-            pas: produit.pas,
-            idProduit: produit.idProduit,
-            idContenant: produit.idContenant,
-            idLot: produit.idLot,
-            produit,
-            historique: produit.historique,
-            sousTotal: (produit.prixHT ?? 0) * l.quantite,
-            quantiteMaximum: produit.historique
-              ? modification.value?.quantitesInitiales?.[l.idStockBouteille] ?? l.quantite
-              : undefined,
-          }
-        : null;
-    })
-    .filter((l): l is NonNullable<typeof l> => l !== null),
-);
-
-const totalHT = computed(() =>
-  lignesDetail.value.reduce((somme, l) => somme + l.sousTotal, 0),
-);
-const minimum = computed(() => data.value?.client?.minimumCommande ?? null);
-const sousMinimum = computed(
-  () => minimum.value != null && totalHT.value < minimum.value,
-);
-// Une remise par ligne : ciblée produit si applicable, sinon remise globale principale.
-const remisesDetail = computed(() =>
-  estimerRemisesCommande(lignesDetail.value, data.value?.client),
-);
-const remiseMontant = computed(() =>
-  remisesDetail.value.reduce((total, d) => total + d.montant, 0),
-);
-const lignesPrixExpires = computed(() =>
-  lignesDetail.value.filter((l) => !l.produit.prixEstFrais),
-);
-const commandeBloqueeParPrix = computed(
-  () => lignesPrixExpires.value.length > 0,
-);
 const panierVisible = computed(
   () => nbCartons.value > 0 || modification.value != null,
-);
-const tagsClient = computed(() => {
-  const tags = data.value?.client?.tags;
-  if (!tags) return [];
-  return (Array.isArray(tags) ? tags : String(tags).split(","))
-    .map((tag) => tag.trim().toLowerCase())
-    .filter(Boolean);
-});
-const livraisonPostale = computed(() => tagsClient.value.includes("laposte"));
-const groupesPostauxInvalides = computed(() =>
-  livraisonPostale.value
-    ? groupesConditionnementPostalInvalides(lignesDetail.value)
-    : [],
-);
-const erreursConditionnementPostal = computed(() =>
-  groupesPostauxInvalides.value.map((groupe) => {
-    const cartons = groupe.manque > 1 ? "cartons" : "carton";
-    return `Livraison La Poste : ajoutez ${groupe.manque} ${cartons} en ${groupe.contenant} · ${groupe.packaging}, avec le ou les goûts de votre choix.`;
-  }),
-);
-const commandeBloqueeParConditionnement = computed(
-  () => groupesPostauxInvalides.value.length > 0,
 );
 /** Volet détail de la barre mobile. */
 const barreDepliee = ref(false);
@@ -291,137 +170,16 @@ watchEffect(() => {
   scrollPageVerrouille.value = barreDepliee.value && affichageMobile.value;
 });
 
-// --- Envoi de la commande ---
-
-const queryClient = useQueryClient();
-const dialogOuvert = ref(false);
-const commentaire = ref("");
-const erreurEnvoi = ref<{
-  titre: string;
-  message: string;
-  aide?: string;
-} | null>(null);
-const confirmation = ref<{
-  numero?: number | null;
-  totalHT: number;
-  totalTTC: number | null;
-  remiseTotale: number | null;
-  totauxReels: boolean;
-  modification: boolean;
-} | null>(null);
-
-// En mode modification, on repart du commentaire existant de la commande.
-watch(
-  modification,
-  (m) => {
-    if (m) commentaire.value = m.commentaire;
-  },
-  { immediate: true },
-);
-
-function erreurCommandeLisible(message: string) {
-  const normalise = message.toLowerCase();
-  if (normalise.includes("grille tarifaire introuvable")) {
-    return {
-      titre: "Nous n'avons pas pu finaliser la commande",
-      message: "",
-    };
-  }
-  if (normalise.includes("compte est en cours de préparation")) {
-    return {
-      titre: "Compte en préparation",
-      message: "Vos tarifs sont encore en cours de chargement.",
-      aide: "Réessayez dans une minute.",
-    };
-  }
-  if (normalise.includes("minimum de commande")) {
-    return {
-      titre: "Minimum de commande non atteint",
-      message,
-    };
-  }
-  return {
-    titre: "Commande non envoyée",
-    message,
-    aide: "Vérifiez votre panier ou contactez GOA si le problème persiste.",
-  };
-}
-
-const envoi = useMutation({
-  mutationFn: () => {
-    if (modeApercu.value) {
-      throw new Error("Aucune commande ne peut être envoyée depuis le mode aperçu.");
-    }
-    if (!lignes.value.length) {
-      throw new Error("Votre panier est vide.");
-    }
-    if (lignesDetail.value.length !== lignes.value.length) {
-      throw new Error(
-        "Un produit du panier n'est plus disponible au catalogue. Retirez-le puis réessayez.",
-      );
-    }
-    if (commandeBloqueeParPrix.value) {
-      throw new Error(
-        "Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.",
-      );
-    }
-    if (comptePreparation.value) {
-      throw new Error("Votre compte est en cours de préparation.");
-    }
-    if (sousMinimum.value && minimum.value != null) {
-      throw new Error(`Minimum de commande : ${prixFr(minimum.value)} HT.`);
-    }
-    if (commandeBloqueeParConditionnement.value) {
-      throw new Error(erreursConditionnementPostal.value[0]);
-    }
-    const body = { commentaire: commentaire.value, lignes: lignes.value };
-    return modification.value
-      ? api.put<CommandeResultat>(
-          `/commandes/${modification.value.idCommande}`,
-          body,
-        )
-      : api.post<CommandeResultat>("/commandes", body);
-  },
-  onSuccess: (res) => {
-    const confirmationCommande = {
-      numero: res.easybeer.numero ?? modification.value?.numero ?? null,
-      totalHT: res.totalHT,
-      totalTTC: res.totalTTC,
-      remiseTotale: res.remiseTotale,
-      totauxReels: res.totauxReels,
-      modification: modification.value != null,
-    };
-    sessionStorage.setItem(
-      "goa-commande-confirmation",
-      JSON.stringify(confirmationCommande),
-    );
-    vider();
-    commentaire.value = "";
-    barreDepliee.value = false;
-    dialogOuvert.value = false;
-    confirmation.value = null;
-    queryClient.invalidateQueries({ queryKey: ["commandes"] });
-    router.push("/commandes");
-  },
-  onError: (e) => {
-    const erreur = erreurCommandeLisible((e as Error).message);
-    erreurEnvoi.value = erreur;
-    toast.error(erreur.titre, {
-      description: erreur.message,
-      duration: 7000,
-    });
-  },
-});
-
 function ouvrirRecap() {
-  confirmation.value = null;
-  erreurEnvoi.value = null;
-  dialogOuvert.value = true;
+  router.push({
+    name: modeApercu.value
+      ? "admin-boutique-confirmation"
+      : "confirmation-commande",
+  });
 }
 
 function annulerModification() {
   vider();
-  commentaire.value = "";
   barreDepliee.value = false;
 }
 
@@ -921,187 +679,6 @@ function viderPanierAvecAnnulation() {
         </div>
       </div>
     </div>
-
-    <!-- Confirmation -->
-    <Dialog v-model:open="dialogOuvert">
-      <DialogContent
-        class="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-md"
-      >
-        <template v-if="envoi.isPending.value">
-          <div class="grid justify-items-center gap-4 py-8 text-center">
-            <span
-              class="grid size-14 place-items-center rounded-full bg-primary/10 text-primary"
-            >
-              <Loader2 class="size-7 animate-spin" />
-            </span>
-            <div class="grid gap-1">
-              <DialogTitle>
-                {{
-                  modification
-                    ? "Mise à jour en cours"
-                    : "Commande en cours de traitement"
-                }}
-              </DialogTitle>
-              <DialogDescription>
-                Cette étape peut prendre quelques secondes.
-              </DialogDescription>
-            </div>
-            <Button class="w-full" size="lg" disabled>
-              <Loader2 class="size-4 animate-spin" />
-              {{ modification ? "Mise à jour…" : "Envoi…" }}
-            </Button>
-          </div>
-        </template>
-
-        <template v-else-if="!confirmation">
-          <DialogHeader class="shrink-0">
-            <DialogTitle>
-              {{
-                modification
-                  ? `Modifier la commande #${modification.numero ?? modification.idCommande}`
-                  : "Récapitulatif de votre commande"
-              }}
-            </DialogTitle>
-            <DialogDescription>
-              {{
-                modeApercu
-                  ? "Vérifiez le rendu final — aucune commande ne sera envoyée."
-                  : modification
-                  ? "Cette version annule et remplace la précédente."
-                  : "Vérifiez les quantités avant l'envoi."
-              }}
-            </DialogDescription>
-          </DialogHeader>
-          <PanierRecap
-            class="min-h-0 flex-1"
-            :lignes="lignesDetail"
-            :total-h-t="totalHT"
-            :minimum="minimum"
-            :sous-minimum="sousMinimum"
-            :erreurs-conditionnement="erreursConditionnementPostal"
-            :remise-montant="remiseMontant"
-            :remises-detail="remisesDetail"
-            defilement-contraint
-          />
-          <div class="grid shrink-0 gap-1.5">
-            <Label for="commentaire">Commentaire (facultatif)</Label>
-            <Textarea
-              id="commentaire"
-              v-model="commentaire"
-              placeholder="Précisions de livraison, demandes particulières…"
-              rows="3"
-            />
-          </div>
-          <div
-            v-if="
-              commandeBloqueeParPrix ||
-              (sousMinimum && minimum != null) ||
-              erreurEnvoi
-            "
-            class="grid shrink-0 gap-2"
-          >
-            <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
-              Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
-            </p>
-            <p
-              v-if="sousMinimum && minimum != null"
-              class="text-xs text-amber-700"
-            >
-              Minimum de commande : {{ prixFr(minimum) }} HT.
-            </p>
-            <div
-              v-if="erreurEnvoi"
-              class="flex gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-3 text-sm text-destructive"
-              role="alert"
-            >
-              <TriangleAlert class="mt-0.5 size-4 shrink-0" />
-              <div class="min-w-0">
-                <p class="font-semibold">{{ erreurEnvoi.titre }}</p>
-                <p
-                  v-if="erreurEnvoi.message"
-                  class="mt-1 leading-snug break-words"
-                >
-                  {{ erreurEnvoi.message }}
-                </p>
-                <p
-                  v-if="erreurEnvoi.aide"
-                  class="mt-1 text-xs text-destructive/80"
-                >
-                  {{ erreurEnvoi.aide }}
-                </p>
-              </div>
-            </div>
-          </div>
-          <DialogFooter class="shrink-0">
-            <Button
-              class="w-full"
-              size="lg"
-              :disabled="
-                modeApercu ||
-                envoi.isPending.value ||
-                commandeBloqueeParPrix ||
-                commandeBloqueeParConditionnement ||
-                comptePreparation ||
-                sousMinimum ||
-                nbCartons === 0
-              "
-              @click="envoi.mutate()"
-            >
-              {{
-                modeApercu
-                  ? "Aperçu uniquement"
-                  : envoi.isPending.value
-                  ? "Envoi…"
-                  : modification
-                    ? "Confirmer la modification"
-                    : "Confirmer la commande"
-              }}
-            </Button>
-          </DialogFooter>
-        </template>
-
-        <template v-else>
-          <DialogHeader>
-            <DialogTitle>{{
-              confirmation.modification
-                ? "Commande mise à jour ✓"
-                : "Commande envoyée ✓"
-            }}</DialogTitle>
-            <DialogDescription>
-              Votre commande a bien été transmise à GOA<template
-                v-if="confirmation.numero"
-              >
-                (#{{ confirmation.numero }})</template
-              >.
-            </DialogDescription>
-          </DialogHeader>
-
-          <!-- Totaux relus d'Easybeer quand disponibles. -->
-          <dl class="grid gap-1 rounded-lg border bg-muted/40 p-3 text-sm">
-            <div
-              v-if="confirmation.remiseTotale"
-              class="flex justify-between text-muted-foreground"
-            >
-              <dt>Remise</dt>
-              <dd class="tabular-nums">
-                − {{ prixFr(confirmation.remiseTotale) }}
-              </dd>
-            </div>
-            <div class="flex justify-between font-semibold">
-              <dt>
-                {{ confirmation.totalTTC != null ? "Total TTC" : "Total HT" }}
-              </dt>
-              <dd class="tabular-nums">
-                {{ prixFr(confirmation.totalTTC ?? confirmation.totalHT) }}
-              </dd>
-            </div>
-          </dl>
-          <DialogFooter>
-            <Button class="w-full" @click="dialogOuvert = false">Fermer</Button>
-          </DialogFooter>
-        </template>
-      </DialogContent>
-    </Dialog>
 
     <RecommanderDialog
       v-model:open="recommandeOuvert"

@@ -32,6 +32,11 @@ const router = createRouter({
           component: () => import('@/pages/CommandesPage.vue'),
         },
         {
+          path: 'confirmer-commande',
+          name: 'confirmation-commande',
+          component: () => import('@/pages/CommandeConfirmationPage.vue'),
+        },
+        {
           path: 'compte',
           name: 'compte',
           component: () => import('@/pages/ComptePage.vue'),
@@ -78,6 +83,11 @@ const router = createRouter({
       path: '/apercu-boutique',
       name: 'admin-boutique-apercu',
       component: () => import('@/pages/HomePage.vue'),
+    },
+    {
+      path: '/apercu-boutique/confirmer',
+      name: 'admin-boutique-confirmation',
+      component: () => import('@/pages/CommandeConfirmationPage.vue'),
     },
     {
       path: '/:pathMatch(.*)*',
