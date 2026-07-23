@@ -64,7 +64,9 @@ const remisesParProduit = computed(
 );
 const remisePour = (idStockBouteille: number) =>
   remisesParProduit.value.get(idStockBouteille);
-const totalApresRemise = computed(() => props.totalHT - (props.remiseMontant ?? 0));
+const totalApresRemise = computed(
+  () => props.totalHT - (props.remiseMontant ?? 0),
+);
 const tauxTVA = 0.055;
 const montantTVA = computed(() => totalApresRemise.value * tauxTVA);
 const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
@@ -184,101 +186,108 @@ onMounted(async () => {
           class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
         >
           <div class="flex items-start justify-between gap-3">
-          <span class="min-w-0 flex-1">
-            <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
-            <ProduitFormat
-              class="mt-1"
-              :contenant="l.contenant"
-              :packaging="l.packaging"
-            />
-            <Badge v-if="l.historique" variant="secondary" class="mt-1">
-              Hors catalogue
-            </Badge>
-            <span class="mt-1 block text-muted-foreground">
-              {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
+            <span class="min-w-0 flex-1">
+              <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
+              <ProduitFormat
+                class="mt-1"
+                :contenant="l.contenant"
+                :packaging="l.packaging"
+              />
+              <Badge v-if="l.historique" variant="secondary" class="mt-1">
+                Hors catalogue
+              </Badge>
+              <span class="mt-1 block text-muted-foreground">
+                {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
+              </span>
             </span>
-          </span>
-          <span
-            class="grid shrink-0 justify-items-end gap-0.5 whitespace-nowrap tabular-nums"
-          >
-            <template v-if="remisePour(l.idStockBouteille)">
-              <span class="text-xs text-muted-foreground line-through">
-                {{ prixFr(l.sousTotal) }}
-              </span>
-              <span class="font-semibold text-primary">
-                {{
-                  prixFr(
-                    l.sousTotal - remisePour(l.idStockBouteille)!.montant,
-                  )
-                }}
-              </span>
-            </template>
-            <span v-else class="font-medium">{{ prixFr(l.sousTotal) }}</span>
-          </span>
-        </div>
+            <span
+              class="grid shrink-0 justify-items-end gap-0.5 whitespace-nowrap tabular-nums"
+            >
+              <template v-if="remisePour(l.idStockBouteille)">
+                <span class="text-xs text-muted-foreground line-through">
+                  {{ prixFr(l.sousTotal) }}
+                </span>
+                <span class="font-semibold text-primary">
+                  {{
+                    prixFr(
+                      l.sousTotal - remisePour(l.idStockBouteille)!.montant,
+                    )
+                  }}
+                </span>
+              </template>
+              <span v-else class="font-medium">{{ prixFr(l.sousTotal) }}</span>
+            </span>
+          </div>
 
-        <div
-          v-if="remisePour(l.idStockBouteille)"
-          class="flex items-center justify-between gap-3 rounded-md bg-primary/5 px-2.5 py-2 text-xs text-primary"
-        >
-          <Badge
-            variant="secondary"
-            class="border border-primary/15 bg-background text-primary"
-          >
-            Remise {{ remisePour(l.idStockBouteille)!.remiseLabel }}
-          </Badge>
-          <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">
-            − {{ prixFr(remisePour(l.idStockBouteille)!.montant) }}
-          </span>
-        </div>
-
-        <div v-if="editable" class="flex items-center justify-between gap-2">
           <div
-            class="inline-grid h-8 grid-cols-[2rem_2.5rem_2rem] items-center rounded-full border bg-background"
+            v-if="remisePour(l.idStockBouteille)"
+            class="flex items-center justify-between gap-3 rounded-md bg-primary/5 px-2.5 py-2 text-xs text-primary"
           >
+            <Badge
+              variant="secondary"
+              class="border border-primary/15 bg-background text-primary"
+            >
+              Remise {{ remisePour(l.idStockBouteille)!.remiseLabel }}
+            </Badge>
+            <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">
+              − {{ prixFr(remisePour(l.idStockBouteille)!.montant) }}
+            </span>
+          </div>
+
+          <div v-if="editable" class="flex items-center justify-between gap-2">
+            <div
+              class="inline-grid h-8 grid-cols-[2rem_2.5rem_2rem] items-center rounded-full border bg-background"
+            >
+              <button
+                type="button"
+                class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                :aria-label="`Retirer ${l.pas ?? 1} de ${l.libelle}`"
+                @click="emit('changer', l.idStockBouteille, -(l.pas ?? 1))"
+              >
+                {{ (l.pas ?? 1) > 1 ? `−${l.pas}` : "−" }}
+              </button>
+              <span class="text-center font-semibold tabular-nums">{{
+                l.quantite
+              }}</span>
+              <button
+                type="button"
+                class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                :aria-label="`Ajouter ${l.pas ?? 1} à ${l.libelle}`"
+                :disabled="
+                  l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum
+                "
+                :class="
+                  l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum
+                    ? 'cursor-not-allowed opacity-35'
+                    : ''
+                "
+                @click="emit('changer', l.idStockBouteille, l.pas ?? 1)"
+              >
+                {{ (l.pas ?? 1) > 1 ? `+${l.pas}` : "+" }}
+              </button>
+            </div>
             <button
               type="button"
-              class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              :aria-label="`Retirer ${l.pas ?? 1} de ${l.libelle}`"
-              @click="emit('changer', l.idStockBouteille, -(l.pas ?? 1))"
+              class="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+              :aria-label="`Supprimer ${l.libelle}`"
+              @click="emit('supprimer', l.idStockBouteille)"
             >
-              {{ (l.pas ?? 1) > 1 ? `−${l.pas}` : "−" }}
-            </button>
-            <span class="text-center font-semibold tabular-nums">{{
-              l.quantite
-            }}</span>
-            <button
-              type="button"
-              class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              :aria-label="`Ajouter ${l.pas ?? 1} à ${l.libelle}`"
-              :disabled="l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum"
-              :class="l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum ? 'cursor-not-allowed opacity-35' : ''"
-              @click="emit('changer', l.idStockBouteille, l.pas ?? 1)"
-            >
-              {{ (l.pas ?? 1) > 1 ? `+${l.pas}` : "+" }}
+              <Trash2 class="size-4" />
             </button>
           </div>
-          <button
-            type="button"
-            class="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            :aria-label="`Supprimer ${l.libelle}`"
-            @click="emit('supprimer', l.idStockBouteille)"
-          >
-            <Trash2 class="size-4" />
-          </button>
-        </div>
 
-        <div
-          v-if="editable && (l.pas ?? 1) > 1"
-          class="text-xs text-muted-foreground"
-        >
-          Par {{ l.pas }} cartons
-        </div>
-        <p
-          v-if="editable && l.quantiteMaximum != null"
-          class="text-xs text-muted-foreground"
-        >
-          Ce produit n'est plus proposé actuellement : sa quantité peut être réduite, mais pas augmentée.
+          <div
+            v-if="editable && (l.pas ?? 1) > 1"
+            class="text-xs text-muted-foreground"
+          >
+            Par {{ l.pas }} cartons
+          </div>
+          <p
+            v-if="editable && l.quantiteMaximum != null"
+            class="text-xs text-muted-foreground"
+          >
+            Ce produit n'est plus proposé actuellement : sa quantité peut être
+            réduite, mais pas augmentée.
           </p>
         </li>
       </ul>
@@ -299,7 +308,7 @@ onMounted(async () => {
       class="relative z-10 grid shrink-0 gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-sm"
     >
       <li
-        class="flex items-baseline justify-between gap-3 pt-3"
+        class="flex items-baseline justify-between gap-3"
         :class="aRemise ? 'text-sm' : 'font-semibold'"
       >
         <span>{{ aRemise ? "Sous-total HT" : "Total HT" }}</span>
@@ -316,16 +325,24 @@ onMounted(async () => {
         </li>
         <li class="flex items-baseline justify-between gap-3 font-semibold">
           <span>Total HT</span>
-          <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(totalApresRemise) }}</span>
+          <span class="shrink-0 whitespace-nowrap tabular-nums">{{
+            prixFr(totalApresRemise)
+          }}</span>
         </li>
       </template>
-      <li class="flex items-baseline justify-between gap-3 text-muted-foreground">
+      <li
+        class="flex items-baseline justify-between gap-3 text-muted-foreground"
+      >
         <span>TVA (5,5 %)</span>
-        <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(montantTVA) }}</span>
+        <span class="shrink-0 whitespace-nowrap tabular-nums">{{
+          prixFr(montantTVA)
+        }}</span>
       </li>
       <li class="flex items-baseline justify-between gap-3 font-semibold">
         <span>Total TTC</span>
-        <span class="shrink-0 whitespace-nowrap tabular-nums">{{ prixFr(totalTTC) }}</span>
+        <span class="shrink-0 whitespace-nowrap tabular-nums">{{
+          prixFr(totalTTC)
+        }}</span>
       </li>
     </ul>
     <div
@@ -336,8 +353,8 @@ onMounted(async () => {
       <p v-if="recapBouteilles.length === 1">
         <strong>{{ recapBouteilles[0].nbBouteilles }} bouteilles</strong>
         de {{ volumeFr(recapBouteilles[0].contenanceLitres) }}, soit
-        <strong>{{ volumeFr(totalLitresBouteilles) }}</strong> de nectar divin au
-        total.
+        <strong>{{ volumeFr(totalLitresBouteilles) }}</strong> de nectar divin
+        au total.
       </p>
       <div v-else class="grid gap-1">
         <ul class="grid gap-0.5">

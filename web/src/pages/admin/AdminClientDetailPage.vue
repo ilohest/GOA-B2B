@@ -10,7 +10,7 @@ import type { AdminClientDetail, InvitationResponse } from "@/lib/types";
 import { dateFr, prixFr } from "@/lib/format";
 import { easybeerLien } from "@/lib/easybeer";
 import EtatBadge from "@/components/EtatBadge.vue";
-import CommandeDetailDialog from "@/components/admin/CommandeDetailDialog.vue";
+import CommandeDetailDialog from "@/components/CommandeDetailDialog.vue";
 import EasybeerLink from "@/components/admin/EasybeerLink.vue";
 import ProduitFormat from "@/components/catalogue/ProduitFormat.vue";
 import { Badge } from "@/components/ui/badge";
@@ -732,6 +732,7 @@ function periodeRemiseCiblee(
     <CommandeDetailDialog
       v-model:id-commande="commandeOuverte"
       :easybeer-app-url="data?.easybeerAppUrl"
+      :ids-commandes="data?.commandes.map((commande) => commande.idCommande) ?? []"
     />
   </div>
 </template>

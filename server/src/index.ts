@@ -933,6 +933,7 @@ function construireDetailCommande(
   idCommande: number,
   remisesLocales: RemisesCommandeLocales | null = null,
 ) {
+  const client = sousObjet(commande, ['client'])
   const formaterLibelleRemise = (valeur: string | null) => {
     if (!valeur || valeur === '0') return null
     return /^[0-9]+([.,][0-9]+)?$/.test(valeur) ? `${valeur.replace('.', ',')} %` : valeur
@@ -986,6 +987,17 @@ function construireDetailCommande(
     idCommande,
     numero: commande.numero ?? null,
     reference: commande.reference ?? null,
+    dateCreation:
+      commande.dateCreation == null
+        ? null
+        : new Date(commande.dateCreation as string | number).getTime() || null,
+    client: client
+      ? {
+          idClient: nombreDepuis(client, ['idClient']),
+          nom: texteDepuis(client, ['nom', 'raisonSociale']),
+          numero: texteDepuis(client, ['numero', 'reference']),
+        }
+      : null,
     etat: etatAffichage(commande.etat),
     totalHT: commande.totalHT ?? null,
     totalTTC: commande.totalTTC ?? null,

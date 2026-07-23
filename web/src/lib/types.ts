@@ -365,6 +365,8 @@ export interface CommandeDetail {
   idCommande: number
   numero: number | null
   reference: string | null
+  dateCreation: number | null
+  client: { idClient: number | null; nom: string | null; numero: string | null } | null
   etat?: EtatCommande
   totalHT: number | null
   totalTTC: number | null

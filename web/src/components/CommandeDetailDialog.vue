@@ -1,17 +1,19 @@
 <script setup lang="ts">
 /**
- * Dialog de détail d'une commande côté admin : lignes, totaux HT/TVA/TTC,
- * documents téléchargeables. Ouvert en passant un idCommande (null = fermé).
+ * Dialog partagé de détail d'une commande : lignes, totaux HT/TVA/TTC et
+ * documents téléchargeables. Le contexte sélectionne les routes admin/client.
  */
 import { computed, ref, watch } from 'vue'
+import { ChevronLeft, ChevronRight } from '@lucide/vue'
 import { useQuery } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CommandeDetail } from '@/lib/types'
-import { decomposerTotaux, prixFr } from '@/lib/format'
+import { dateFr, decomposerTotaux, prixFr } from '@/lib/format'
 import { easybeerLien } from '@/lib/easybeer'
 import { useEasybeerBan } from '@/composables/useEasybeerBan'
 import EasybeerLink from '@/components/admin/EasybeerLink.vue'
+import IconTooltip from '@/components/admin/IconTooltip.vue'
 import EtatBadge from '@/components/EtatBadge.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -19,7 +21,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 
-const props = defineProps<{ idCommande: number | null; easybeerAppUrl?: string }>()
+const props = withDefaults(defineProps<{
+  idCommande: number | null
+  easybeerAppUrl?: string
+  contexte?: 'admin' | 'client'
+  idsCommandes?: number[]
+}>(), { contexte: 'admin' })
 const emit = defineEmits<{ 'update:idCommande': [value: number | null] }>()
 
 const ouvert = computed({
@@ -30,9 +37,21 @@ const ouvert = computed({
 })
 
 const idCommande = computed(() => props.idCommande)
+const indexCommande = computed(() =>
+  props.idCommande == null ? -1 : (props.idsCommandes ?? []).indexOf(props.idCommande),
+)
+const idCommandePrecedente = computed(() =>
+  indexCommande.value > 0 ? (props.idsCommandes?.[indexCommande.value - 1] ?? null) : null,
+)
+const idCommandeSuivante = computed(() =>
+  indexCommande.value >= 0 && indexCommande.value < (props.idsCommandes?.length ?? 0) - 1
+    ? (props.idsCommandes?.[indexCommande.value + 1] ?? null)
+    : null,
+)
+const routeCommandes = computed(() => props.contexte === 'admin' ? '/admin/commandes' : '/commandes')
 const { data, isPending, isError, error, refetch, isFetching } = useQuery({
-  queryKey: ['admin', 'commande', idCommande],
-  queryFn: () => api.get<CommandeDetail>(`/admin/commandes/${props.idCommande}`),
+  queryKey: computed(() => [props.contexte, 'commande', idCommande.value]),
+  queryFn: () => api.get<CommandeDetail>(`${routeCommandes.value}/${props.idCommande}`),
   enabled: computed(() => props.idCommande != null),
   retry: false,
 })
@@ -48,7 +67,7 @@ async function telecharger(doc: CommandeDetail['documents'][number]) {
   telechargementEnCours.value = doc.idCommandeDocument
   try {
     await api.telecharger(
-      `/admin/commandes/${props.idCommande}/documents/${doc.idCommandeDocument}/pdf`,
+      `${routeCommandes.value}/${props.idCommande}/documents/${doc.idCommandeDocument}/pdf`,
       doc.nomFichier,
     )
   } catch (e) {
@@ -69,18 +88,50 @@ watch(
 <template>
   <Dialog v-model:open="ouvert">
     <DialogContent class="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-[min(92vw,72rem)]">
-      <DialogHeader class="relative pr-20">
+      <div class="absolute top-2 right-10 flex items-center gap-0.5">
+        <IconTooltip text="Commande précédente">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Commande précédente"
+            :disabled="idCommandePrecedente == null"
+            @click="emit('update:idCommande', idCommandePrecedente)"
+          >
+            <ChevronLeft class="size-4" />
+          </Button>
+        </IconTooltip>
+        <IconTooltip text="Commande suivante">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Commande suivante"
+            :disabled="idCommandeSuivante == null"
+            @click="emit('update:idCommande', idCommandeSuivante)"
+          >
+            <ChevronRight class="size-4" />
+          </Button>
+        </IconTooltip>
         <EasybeerLink
-          v-if="idCommande != null"
+          v-if="contexte === 'admin' && idCommande != null"
           :href="easybeerLien.commandeDetail(easybeerAppUrl, idCommande)"
           label="Ouvrir la commande dans Easybeer"
-          class="absolute top-0 right-10 text-muted-foreground"
+          class="text-muted-foreground"
         />
+      </div>
+      <DialogHeader class="pr-32">
         <DialogTitle class="flex items-center gap-2">
           Commande #{{ data?.numero ?? idCommande }}
           <EtatBadge v-if="data?.etat" :etat="data.etat" />
         </DialogTitle>
-        <DialogDescription v-if="data?.reference">Réf. {{ data.reference }}</DialogDescription>
+        <DialogDescription v-if="data?.dateCreation">
+          Commandée le {{ dateFr(data.dateCreation) }}
+        </DialogDescription>
+        <DialogDescription v-if="contexte === 'admin' && data?.client">
+          Client : <span class="font-medium text-foreground">{{ data.client.nom ?? '—' }}</span>
+          <template v-if="data.client.numero"> · {{ data.client.numero }}</template>
+        </DialogDescription>
       </DialogHeader>
 
       <div

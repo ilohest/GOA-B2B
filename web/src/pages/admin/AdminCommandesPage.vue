@@ -11,7 +11,7 @@ import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
 import { useTriPersistant } from '@/composables/useTriPersistant'
 import EtatBadge from '@/components/EtatBadge.vue'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
-import CommandeDetailDialog from '@/components/admin/CommandeDetailDialog.vue'
+import CommandeDetailDialog from '@/components/CommandeDetailDialog.vue'
 import EasybeerLink from '@/components/admin/EasybeerLink.vue'
 import EasybeerIndisponible from '@/components/admin/EasybeerIndisponible.vue'
 import IconTooltip from '@/components/admin/IconTooltip.vue'
@@ -468,6 +468,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
     <CommandeDetailDialog
       v-model:id-commande="commandeOuverte"
       :easybeer-app-url="data?.easybeerAppUrl"
+      :ids-commandes="commandesTriees.map((commande) => commande.idCommande)"
     />
   </Card>
 </template>
