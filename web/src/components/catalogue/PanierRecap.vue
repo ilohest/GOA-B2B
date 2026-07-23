@@ -196,37 +196,38 @@ onMounted(async () => {
             :key="l.idStockBouteille"
             class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
           >
-          <div class="flex items-start justify-between gap-3">
-            <span class="min-w-0 flex-1">
+          <div class="grid min-w-0 gap-1">
+            <div class="flex items-start justify-between gap-3">
               <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
-              <ProduitFormat
-                class="mt-1"
-                :contenant="l.contenant"
-                :packaging="l.packaging"
-              />
-              <Badge v-if="l.historique" variant="secondary" class="mt-1">
-                Hors catalogue
-              </Badge>
-              <span class="mt-1 block text-muted-foreground">
-                {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
+              <span
+                class="grid shrink-0 justify-items-end gap-0.5 whitespace-nowrap tabular-nums"
+              >
+                <template v-if="remisePour(l.idStockBouteille)">
+                  <span class="text-xs text-muted-foreground line-through">
+                    {{ prixFr(l.sousTotal) }}
+                  </span>
+                  <span class="font-semibold text-primary">
+                    {{
+                      prixFr(
+                        l.sousTotal - remisePour(l.idStockBouteille)!.montant,
+                      )
+                    }}
+                  </span>
+                </template>
+                <span v-else class="font-medium">{{ prixFr(l.sousTotal) }}</span>
               </span>
-            </span>
-            <span
-              class="grid shrink-0 justify-items-end gap-0.5 whitespace-nowrap tabular-nums"
-            >
-              <template v-if="remisePour(l.idStockBouteille)">
-                <span class="text-xs text-muted-foreground line-through">
-                  {{ prixFr(l.sousTotal) }}
-                </span>
-                <span class="font-semibold text-primary">
-                  {{
-                    prixFr(
-                      l.sousTotal - remisePour(l.idStockBouteille)!.montant,
-                    )
-                  }}
-                </span>
-              </template>
-              <span v-else class="font-medium">{{ prixFr(l.sousTotal) }}</span>
+            </div>
+            <ProduitFormat
+              class="mt-0.5"
+              :contenant="l.contenant"
+              :packaging="l.packaging"
+              nowrap
+            />
+            <Badge v-if="l.historique" variant="secondary" class="mt-0.5 w-fit">
+              Hors catalogue
+            </Badge>
+            <span class="text-muted-foreground">
+              {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
             </span>
           </div>
 

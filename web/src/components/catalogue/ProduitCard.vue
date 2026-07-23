@@ -42,12 +42,6 @@ const emit = defineEmits<{
           >
             {{ produit.libelle }}
           </h3>
-          <span
-            v-if="produit.rupture"
-            class="mt-1 inline-flex rounded-md bg-destructive/10 px-1.5 py-0.5 text-[0.65rem] font-semibold text-destructive"
-          >
-            Victime de son succès
-          </span>
         </div>
         <ProduitFormat
           class="mt-2"
@@ -72,8 +66,14 @@ const emit = defineEmits<{
             {{ prixFr(produit.prixHT) }}
           </span>
         </div>
+        <div
+          v-if="produit.rupture"
+          class="flex h-10 w-full items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 px-3 text-xs font-semibold text-destructive"
+        >
+          Victime de son succès
+        </div>
         <QuantiteStepper
-          v-if="!produit.rupture && produit.prixHT != null && produit.prixEstFrais"
+          v-else-if="produit.prixHT != null && produit.prixEstFrais"
           class="w-full"
           :quantite="quantite"
           :pas="produit.pas"

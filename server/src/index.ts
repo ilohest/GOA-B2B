@@ -927,11 +927,27 @@ async function lireRemisesLocalesCommande(
   return docs[0]?.remisesEstimees ?? null
 }
 
+async function lireFormatsCommande(db: NonNullable<ReturnType<typeof getDb>> | null) {
+  const formats = new Map<number, { produit: string; contenant: string; packaging: string }>()
+  if (!db) return formats
+  const grille = await lireGrilleTarifaire(db).catch(() => ({ lignes: [], syncedAt: null }))
+  for (const ligne of grille.lignes) {
+    if (ligne.idStockBouteille == null || formats.has(ligne.idStockBouteille)) continue
+    formats.set(ligne.idStockBouteille, {
+      produit: ligne.produit,
+      contenant: ligne.contenant,
+      packaging: ligne.packaging,
+    })
+  }
+  return formats
+}
+
 /** Construit le détail d'affichage d'une commande (lignes, totaux, documents). */
 function construireDetailCommande(
   commande: Record<string, unknown>,
   idCommande: number,
   remisesLocales: RemisesCommandeLocales | null = null,
+  formats = new Map<number, { produit: string; contenant: string; packaging: string }>(),
 ) {
   const client = sousObjet(commande, ['client'])
   const formaterLibelleRemise = (valeur: string | null) => {
@@ -959,14 +975,18 @@ function construireDetailCommande(
       .filter((libelle): libelle is string => Boolean(libelle))
     const remiseLabel = [...new Set(libellesRemise)].join(' + ') || null
     const idStockBouteille = idStockBouteilleElementCommande(e)
+    const format = idStockBouteille != null ? formats.get(idStockBouteille) : null
     const remiseLocale = idStockBouteille != null ? remisesLocalesParStock.get(idStockBouteille) : null
     const tvaLigne =
       (e.totalTVA as number | undefined) ??
       (totalHT != null ? Math.max(0, Math.round(totalHT * 0.055 * 100) / 100) : null)
     return {
       designation:
+        format?.produit ??
         ((e.stockProduit as { libelle?: string } | undefined)?.libelle as string) ??
         ((e.designation as string) || 'Produit'),
+      contenant: format?.contenant ?? null,
+      packaging: format?.packaging ?? null,
       quantite,
       prixUnitaireHT,
       remiseLabel: remiseLabel ?? remiseLocale?.remiseLabel ?? null,
@@ -1022,7 +1042,8 @@ app.get('/api/commandes/:id', requireAuth, async (c) => {
     return c.json({ error: 'Commande introuvable' }, 404)
   }
   const remisesLocales = db ? await lireRemisesLocalesCommande(db, user.uid, idCommande) : null
-  return c.json(construireDetailCommande(commande, idCommande, remisesLocales))
+  const formats = await lireFormatsCommande(db)
+  return c.json(construireDetailCommande(commande, idCommande, remisesLocales, formats))
 })
 
 /** Téléchargement d'un document (facture, BL…) — toujours la version à jour d'Easybeer. */
@@ -1680,7 +1701,8 @@ app.get('/api/admin/commandes/:id', requireAuth, requireAdmin, async (c) => {
   if (!Number.isFinite(idCommande)) return c.json({ error: 'idCommande invalide' }, 400)
   const commande = await detailCommande(idCommande)
   if (commande?.idCommande == null) return c.json({ error: 'Commande introuvable' }, 404)
-  return c.json(construireDetailCommande(commande, idCommande))
+  const formats = await lireFormatsCommande(getDb())
+  return c.json(construireDetailCommande(commande, idCommande, null, formats))
 })
 
 /** Téléchargement d'un document de commande (admin, sans contrôle de propriété). */

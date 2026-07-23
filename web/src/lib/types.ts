@@ -376,6 +376,8 @@ export interface CommandeDetail {
   commentaire: string
   lignes: {
     designation: string
+    contenant: string | null
+    packaging: string | null
     quantite: number
     prixUnitaireHT: number | null
     remiseLabel: string | null

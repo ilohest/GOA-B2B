@@ -3,9 +3,10 @@
  * Dialog partagé de détail d'une commande : lignes, totaux HT/TVA/TTC et
  * documents téléchargeables. Le contexte sélectionne les routes admin/client.
  */
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ChevronLeft, ChevronRight } from '@lucide/vue'
 import { useQuery } from '@tanstack/vue-query'
+import { useResizeObserver } from '@vueuse/core'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { CommandeDetail } from '@/lib/types'
@@ -15,6 +16,7 @@ import { useEasybeerBan } from '@/composables/useEasybeerBan'
 import EasybeerLink from '@/components/admin/EasybeerLink.vue'
 import IconTooltip from '@/components/admin/IconTooltip.vue'
 import EtatBadge from '@/components/EtatBadge.vue'
+import ProduitFormat from '@/components/catalogue/ProduitFormat.vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -61,6 +63,38 @@ const { banni, secondesRestantes } = useEasybeerBan()
 const totaux = computed(() => (data.value ? decomposerTotaux(data.value) : []))
 
 const telechargementEnCours = ref<number | null>(null)
+const listeMobile = ref<HTMLElement | null>(null)
+const listeDesktop = ref<HTMLElement | null>(null)
+const listeMobileDeborde = ref(false)
+const listeDesktopDeborde = ref(false)
+const listeMobileEnBas = ref(true)
+const listeDesktopEnBas = ref(true)
+
+function mesurerListe(
+  element: HTMLElement | null,
+  deborde: typeof listeMobileDeborde,
+  enBas: typeof listeMobileEnBas,
+) {
+  if (!element || element.clientHeight === 0) {
+    deborde.value = false
+    enBas.value = true
+    return
+  }
+  deborde.value = element.scrollHeight > element.clientHeight + 2
+  enBas.value = element.scrollTop + element.clientHeight >= element.scrollHeight - 2
+}
+
+const mesurerListeMobile = () => mesurerListe(listeMobile.value, listeMobileDeborde, listeMobileEnBas)
+const mesurerListeDesktop = () => mesurerListe(listeDesktop.value, listeDesktopDeborde, listeDesktopEnBas)
+
+useResizeObserver(listeMobile, mesurerListeMobile)
+useResizeObserver(listeDesktop, mesurerListeDesktop)
+
+onMounted(async () => {
+  await nextTick()
+  mesurerListeMobile()
+  mesurerListeDesktop()
+})
 
 async function telecharger(doc: CommandeDetail['documents'][number]) {
   if (props.idCommande == null) return
@@ -79,8 +113,22 @@ async function telecharger(doc: CommandeDetail['documents'][number]) {
 
 watch(
   () => props.idCommande,
-  () => {
+  async () => {
     telechargementEnCours.value = null
+    if (listeMobile.value) listeMobile.value.scrollTop = 0
+    if (listeDesktop.value) listeDesktop.value.scrollTop = 0
+    await nextTick()
+    mesurerListeMobile()
+    mesurerListeDesktop()
+  },
+)
+
+watch(
+  () => data.value?.lignes.length,
+  async () => {
+    await nextTick()
+    mesurerListeMobile()
+    mesurerListeDesktop()
   },
 )
 </script>
@@ -193,14 +241,26 @@ watch(
           <dd class="font-medium">{{ data.modeLivraison }}</dd>
         </dl>
 
-        <div class="grid gap-3 sm:hidden">
-          <article
-            v-for="(l, i) in data.lignes"
-            :key="i"
-            class="grid gap-3 rounded-lg border bg-background p-3 odd:bg-background even:bg-muted/35"
+        <div class="relative min-h-0 sm:hidden">
+          <div
+            ref="listeMobile"
+            class="grid max-h-[min(52dvh,32rem)] gap-3 overflow-y-auto overscroll-contain pr-1"
+            @scroll="mesurerListeMobile"
           >
+            <article
+              v-for="(l, i) in data.lignes"
+              :key="i"
+              class="grid gap-3 rounded-lg border bg-background p-3 odd:bg-background even:bg-muted/35"
+            >
             <div class="flex items-start justify-between gap-3">
-              <p class="min-w-0 font-medium leading-snug">{{ l.designation }}</p>
+              <div class="min-w-0">
+                <p class="font-medium leading-snug">{{ l.designation }}</p>
+                <ProduitFormat
+                  class="mt-1"
+                  :contenant="l.contenant"
+                  :packaging="l.packaging"
+                />
+              </div>
               <p class="shrink-0 text-right font-semibold tabular-nums">
                 {{ l.totalHT != null ? prixFr(l.totalHT) : '—' }}
                 <span class="block text-[11px] font-medium text-muted-foreground">HT</span>
@@ -235,12 +295,27 @@ watch(
                 <p v-else class="font-medium text-muted-foreground">—</p>
               </div>
             </div>
-          </article>
+            </article>
+          </div>
+          <div
+            v-if="listeMobileDeborde && !listeMobileEnBas"
+            class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-background via-background/95 to-transparent px-2 pt-8 pb-1"
+            aria-hidden="true"
+          >
+            <span class="rounded-full border bg-background px-2.5 py-1 text-[0.68rem] font-medium text-muted-foreground shadow-sm">
+              Faites défiler pour voir les autres produits ↓
+            </span>
+          </div>
         </div>
 
-        <div class="hidden overflow-hidden rounded-lg border sm:block">
+        <div class="relative hidden min-h-0 overflow-hidden rounded-lg border sm:block">
+          <div
+            ref="listeDesktop"
+            class="max-h-[min(50dvh,30rem)] overflow-auto overscroll-contain"
+            @scroll="mesurerListeDesktop"
+          >
           <Table>
-            <TableHeader class="[&_tr]:bg-muted">
+            <TableHeader class="sticky top-0 z-10 [&_tr]:bg-muted">
               <TableRow>
                 <TableHead class="min-w-72">Produit</TableHead>
                 <TableHead class="w-16 text-right">Qté</TableHead>
@@ -252,7 +327,14 @@ watch(
             </TableHeader>
             <TableBody>
               <TableRow v-for="(l, i) in data.lignes" :key="i" class="odd:bg-background even:bg-muted/45">
-                <TableCell class="font-medium leading-snug">{{ l.designation }}</TableCell>
+                <TableCell>
+                  <p class="font-medium leading-snug">{{ l.designation }}</p>
+                  <ProduitFormat
+                    class="mt-1"
+                    :contenant="l.contenant"
+                    :packaging="l.packaging"
+                  />
+                </TableCell>
                 <TableCell class="text-right tabular-nums">{{ l.quantite }}</TableCell>
                 <TableCell class="text-right tabular-nums text-muted-foreground">
                   {{ l.prixUnitaireHT != null ? prixFr(l.prixUnitaireHT) : '—' }}
@@ -275,6 +357,16 @@ watch(
               </TableRow>
             </TableBody>
           </Table>
+          </div>
+          <div
+            v-if="listeDesktopDeborde && !listeDesktopEnBas"
+            class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-background via-background/95 to-transparent px-2 pt-8 pb-1"
+            aria-hidden="true"
+          >
+            <span class="rounded-full border bg-background px-2.5 py-1 text-[0.68rem] font-medium text-muted-foreground shadow-sm">
+              Faites défiler pour voir les autres produits ↓
+            </span>
+          </div>
         </div>
 
         <dl class="grid gap-1 border-t pt-3 text-sm">

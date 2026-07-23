@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watchEffect } from 'vue'
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Eye, EyeOff, Package, PackageX, Search } from '@lucide/vue'
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Eye, EyeOff, Package, PackageCheck, PackageX, Search } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
@@ -475,9 +475,15 @@ async function retirerPhoto(idStockBouteille: number) {
                   <div class="mt-2 flex flex-wrap gap-1.5">
                     <Badge variant="outline">{{ u.contenant }}</Badge>
                     <Badge variant="outline">{{ u.packaging }}</Badge>
-                    <Badge v-if="overrideAffiche(u).rupture" variant="destructive">
-                      <PackageX class="size-3" />
-                      Rupture
+                    <Badge
+                      variant="secondary"
+                      :class="overrideAffiche(u).rupture
+                        ? 'border border-destructive/20 bg-destructive/10 text-destructive'
+                        : 'border border-primary/20 bg-primary/10 text-primary'"
+                    >
+                      <PackageX v-if="overrideAffiche(u).rupture" class="size-3" />
+                      <PackageCheck v-else class="size-3" />
+                      {{ overrideAffiche(u).rupture ? 'Rupture' : 'Disponible' }}
                     </Badge>
                     <Badge v-if="!overrideAffiche(u).visible" variant="secondary" class="border border-border bg-muted text-foreground">
                       <EyeOff class="size-3" />
@@ -507,10 +513,20 @@ async function retirerPhoto(idStockBouteille: number) {
                     @update:model-value="(v: boolean) => definirBrouillon(u, 'visible', v)"
                   />
                 </label>
-                <label class="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
-                  <span>Rupture</span>
+                <label
+                  class="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                  :class="overrideAffiche(u).rupture
+                    ? 'border-destructive/30 bg-destructive/5 text-destructive'
+                    : 'border-primary/30 bg-primary/5 text-primary'"
+                >
+                  <span class="flex items-center gap-1.5 font-medium">
+                    <PackageX v-if="overrideAffiche(u).rupture" class="size-4" />
+                    <PackageCheck v-else class="size-4" />
+                    {{ overrideAffiche(u).rupture ? 'Rupture' : 'Disponible' }}
+                  </span>
                   <Switch
                     :model-value="overrideAffiche(u).rupture"
+                    color-mode="availability"
                     @update:model-value="(v: boolean) => definirBrouillon(u, 'rupture', v)"
                   />
                 </label>
@@ -623,14 +639,16 @@ async function retirerPhoto(idStockBouteille: number) {
                   <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap">
                     <Switch
                       :model-value="overrideAffiche(u).rupture"
+                      color-mode="availability"
                       @update:model-value="(v: boolean) => definirBrouillon(u, 'rupture', v)"
                     />
                     <span
                       class="flex items-center gap-1 text-xs font-medium"
-                      :class="overrideAffiche(u).rupture ? 'text-destructive' : 'text-muted-foreground'"
+                      :class="overrideAffiche(u).rupture ? 'text-destructive' : 'text-primary'"
                     >
                       <PackageX v-if="overrideAffiche(u).rupture" class="size-3.5" />
-                      {{ overrideAffiche(u).rupture ? 'Rupture' : 'En stock' }}
+                      <PackageCheck v-else class="size-3.5" />
+                      {{ overrideAffiche(u).rupture ? 'Rupture' : 'Disponible' }}
                     </span>
                   </label>
                 </TableCell>
