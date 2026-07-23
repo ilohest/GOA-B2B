@@ -16,7 +16,6 @@ import type {
   AdminClientsResponse,
   ClientResume,
   InvitationBulkResultat,
-  InvitationResponse,
   Tournee,
 } from "@/lib/types";
 import { dateHeureFr, prixFr } from "@/lib/format";
@@ -204,43 +203,15 @@ const toutSelectionne = computed(
     idsSelectionnables.value.every((id) => selection.has(id)),
 );
 
+const idsSelectionInvitation = computed(() =>
+  [...selection].filter((id) => !data.value?.comptes?.[id]),
+);
+
 function basculerTout(coche: boolean) {
   for (const id of idsSelectionnables.value) {
     if (coche) selection.add(id);
     else selection.delete(id);
   }
-}
-
-// --- Invitation unitaire ---
-
-const dialogOuvert = ref(false);
-const cible = ref<ClientResume | null>(null);
-const emailInvitation = ref("");
-const resultat = ref<InvitationResponse | null>(null);
-
-function ouvrirInvitation(client: ClientResume) {
-  cible.value = client;
-  emailInvitation.value = client.emailPrincipal ?? "";
-  resultat.value = null;
-  dialogOuvert.value = true;
-}
-
-const invitation = useMutation({
-  mutationFn: (input: { easybeerIdClient: number; email?: string }) =>
-    api.post<InvitationResponse>("/admin/invitations", input),
-  onSuccess: (res) => {
-    resultat.value = res;
-    queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
-  },
-  onError: (e) => toast.error((e as Error).message),
-});
-
-function envoyerInvitation() {
-  if (!cible.value?.idClient) return;
-  invitation.mutate({
-    easybeerIdClient: cible.value.idClient,
-    email: emailInvitation.value.trim() || undefined,
-  });
 }
 
 async function copier(texte: string) {
@@ -263,7 +234,7 @@ const bulkInvitations = useMutation({
       reussies: number;
       envoyees: number;
     }>("/admin/invitations/bulk", {
-      invitations: [...selection].map((easybeerIdClient) => ({
+      invitations: idsSelectionInvitation.value.map((easybeerIdClient) => ({
         easybeerIdClient,
       })),
     }),
@@ -503,32 +474,10 @@ const columns: ColumnDef<ClientResume>[] = [
       const compte = compteDe(row.original);
       if (!compte)
         return h("span", { class: "text-sm text-muted-foreground" }, "—");
-      return compte.statut === "active"
-        ? h(Badge, () => "Actif")
-        : h(Badge, { variant: "secondary" }, () => "Invité");
-    },
-  },
-  {
-    id: "actions",
-    header: "",
-    cell: ({ row }) => {
-      const compte = compteDe(row.original);
-      return h(
-        "div",
-        { class: "text-right" },
-        h(
-          Button,
-          {
-            variant: compte ? "ghost" : "outline",
-            size: "sm",
-            onClick: (e: Event) => {
-              e.stopPropagation();
-              ouvrirInvitation(row.original);
-            },
-          },
-          () => (compte ? "Ré-inviter" : "Inviter"),
-        ),
-      );
+      if (compte.statut === "active") return h(Badge, () => "Actif");
+      if (compte.statut === "revoked")
+        return h(Badge, { variant: "destructive" }, () => "Révoqué");
+      return h(Badge, { variant: "secondary" }, () => "Invité");
     },
   },
 ];
@@ -599,6 +548,7 @@ function ouvrirFiche(client: ClientResume) {
         >
           <p class="text-sm font-medium">{{ selection.size }} sélectionné(s)</p>
           <Button
+            v-if="idsSelectionInvitation.length"
             size="sm"
             :disabled="bulkInvitations.isPending.value"
             @click="ouvrirBulkInvitations"
@@ -769,74 +719,6 @@ function ouvrirFiche(client: ClientResume) {
       </CardContent>
     </Card>
 
-    <!-- Invitation unitaire -->
-    <Dialog v-model:open="dialogOuvert">
-      <DialogContent class="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle
-            >Inviter {{ cible?.nom ?? cible?.raisonSociale }}</DialogTitle
-          >
-          <DialogDescription>
-            Un email « créez votre mot de passe » sera envoyé à ce client ({{
-              cible?.numero
-            }}).
-          </DialogDescription>
-        </DialogHeader>
-
-        <div v-if="!resultat" class="grid gap-4">
-          <div class="grid gap-1.5">
-            <Label for="email-invitation">Email du compte</Label>
-            <Input
-              id="email-invitation"
-              v-model="emailInvitation"
-              type="email"
-              placeholder="email@commerce.fr"
-            />
-            <p class="text-xs text-muted-foreground">
-              Pré-rempli avec l'email Easybeer du client. Modifiable (ex. autre
-              acheteur du même commerce).
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              :disabled="invitation.isPending.value"
-              @click="envoyerInvitation"
-            >
-              {{
-                invitation.isPending.value ? "Envoi…" : "Envoyer l'invitation"
-              }}
-            </Button>
-          </DialogFooter>
-        </div>
-
-        <div v-else class="grid gap-4">
-          <p class="text-sm">
-            <template v-if="resultat.envoye">
-              Email envoyé à
-              <span class="font-medium">{{ resultat.email }}</span
-              >.
-            </template>
-            <template v-else>
-              Lien prêt pour
-              <span class="font-medium">{{ resultat.email }}</span>
-              (email non envoyé — copiez-le).
-            </template>
-          </p>
-          <div class="rounded-lg border bg-muted/50 p-3">
-            <p class="text-xs break-all text-muted-foreground">
-              {{ resultat.lien }}
-            </p>
-          </div>
-          <DialogFooter class="gap-2">
-            <Button variant="secondary" @click="dialogOuvert = false"
-              >Fermer</Button
-            >
-            <Button @click="copier(resultat!.lien)">Copier le lien</Button>
-          </DialogFooter>
-        </div>
-      </DialogContent>
-    </Dialog>
-
     <!-- Invitations en masse -->
     <Dialog v-model:open="dialogBulkInvitations">
       <DialogContent class="sm:max-w-lg">
@@ -844,7 +726,9 @@ function ouvrirFiche(client: ClientResume) {
           <DialogTitle
             >Inviter
             {{
-              resultatsBulk ? "la sélection" : `${selection.size} client(s)`
+              resultatsBulk
+                ? "la sélection"
+                : `${idsSelectionInvitation.length} client(s)`
             }}</DialogTitle
           >
           <DialogDescription>

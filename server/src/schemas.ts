@@ -20,6 +20,7 @@ export const CommandeBodySchema = z.object({
 export const InvitationBodySchema = z.object({
   easybeerIdClient: z.number().int().positive(),
   email: z.email('Adresse email invalide').optional(),
+  envoyerEmail: z.boolean().optional(),
 })
 
 export const InvitationsBulkSchema = z.object({
@@ -28,6 +29,10 @@ export const InvitationsBulkSchema = z.object({
 
 export const ActivationBodySchema = z.object({
   password: z.string().min(6, 'Mot de passe : 6 caractères minimum').max(200),
+})
+
+export const AccountRevocationBodySchema = z.object({
+  revoked: z.boolean(),
 })
 
 export const BulkParamsSchema = z

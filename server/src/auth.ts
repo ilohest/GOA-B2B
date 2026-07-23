@@ -15,7 +15,7 @@ export interface AuthUser {
   uid: string
   email?: string
   role: 'client' | 'admin'
-  status?: 'invited' | 'active'
+  status?: 'invited' | 'active' | 'revoked'
   easybeerIdClient?: number
 }
 
@@ -34,7 +34,7 @@ async function resolveUser(uid: string, email?: string): Promise<AuthUser> {
     uid,
     email: email ?? (data.email as string | undefined),
     role: (data.role as 'client' | 'admin') ?? 'client',
-    status: data.status as 'invited' | 'active' | undefined,
+    status: data.status as 'invited' | 'active' | 'revoked' | undefined,
     easybeerIdClient: data.easybeerIdClient as number | undefined,
   }
 }
@@ -56,7 +56,9 @@ export async function requireAuth(c: Context, next: Next) {
 
   try {
     const decoded = await verifyIdToken(token)
-    c.set('user', await resolveUser(decoded.uid, decoded.email))
+    const user = await resolveUser(decoded.uid, decoded.email)
+    if (user.status === 'revoked') return c.json({ error: 'Ce compte a été révoqué' }, 401)
+    c.set('user', user)
     return next()
   } catch {
     return c.json({ error: 'Token invalide' }, 401)

@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import { ArrowLeft, Copy, UserRound } from "@lucide/vue";
+import { ArrowLeft, Check, Copy, Info, Mail, UserRound } from "@lucide/vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
 import { copierDansPressePapiers } from "@/lib/clipboard";
 import type { AdminClientDetail, InvitationResponse } from "@/lib/types";
-import { dateFr, prixFr } from "@/lib/format";
+import { dateFr, dateHeureFr, prixFr } from "@/lib/format";
 import { easybeerLien } from "@/lib/easybeer";
 import EtatBadge from "@/components/EtatBadge.vue";
 import CommandeDetailDialog from "@/components/CommandeDetailDialog.vue";
 import EasybeerLink from "@/components/admin/EasybeerLink.vue";
+import IconTooltip from "@/components/admin/IconTooltip.vue";
 import ProduitFormat from "@/components/catalogue/ProduitFormat.vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ const retour = computed(() =>
 );
 
 const commandeOuverte = ref<number | null>(null);
+const informationCopiee = ref<string | null>(null);
 
 const queryClient = useQueryClient();
 
@@ -37,28 +39,121 @@ const { data, isPending, isError, error } = useQuery({
 
 const client = computed(() => data.value?.client);
 
-// --- Invitation (même flux que « Inviter la sélection ») ---
-const resultatInvit = ref<InvitationResponse | null>(null);
-
 const invitation = useMutation({
-  mutationFn: () =>
+  mutationFn: (envoyerEmail: boolean) =>
     api.post<InvitationResponse>("/admin/invitations", {
       easybeerIdClient: idClient.value,
+      envoyerEmail,
     }),
-  onSuccess: (res) => {
-    resultatInvit.value = res;
-    if (res.envoye) toast.success(`Invitation envoyée à ${res.email}.`);
-    else
+  onSuccess: async (res, envoyerEmail) => {
+    if (envoyerEmail && res.envoye) {
+      toast.success(`Invitation envoyée à ${res.email}.`);
+    } else if (envoyerEmail) {
       toast.message(
-        `Lien généré pour ${res.email} — à copier (email non envoyé).`,
+        `Lien créé, mais l’email n’a pas pu être envoyé à ${res.email}.`,
       );
+    } else if (await copierDansPressePapiers(res.lien)) {
+      toast.success("Lien sécurisé copié.");
+    } else {
+      toast.error("Lien créé, mais impossible de le copier dans le presse-papiers.");
+    }
     queryClient.invalidateQueries({ queryKey: ["admin", "client", idClient] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
   },
   onError: (e) => toast.error((e as Error).message),
 });
 
-async function copierTexte(texte: string, confirmation: string) {
+const peutInviter = computed(() => {
+  const comptes = data.value?.comptes ?? [];
+  return comptes.length === 0 || comptes.every((c) => c.status === "invited");
+});
+
+function invitationEnCours(envoyerEmail: boolean) {
+  return (
+    invitation.isPending.value && invitation.variables.value === envoyerEmail
+  );
+}
+
+async function copierLienInvitation() {
+  const existante = data.value?.invitation;
+  if (existante?.etat === "valide") {
+    if (await copierDansPressePapiers(existante.lien)) {
+      toast.success("Lien sécurisé copié.");
+    } else {
+      toast.error("Impossible de copier dans le presse-papiers.");
+    }
+    return;
+  }
+  invitation.mutate(false);
+}
+
+function libelleEtatInvitation() {
+  switch (data.value?.invitation?.etat) {
+    case "valide":
+      return "Valable";
+    case "utilise":
+      return "Utilisé";
+    case "expire":
+      return "Périmé";
+    case "revoque":
+      return "Révoqué";
+    default:
+      return "Non généré";
+  }
+}
+
+function detailEtatInvitation() {
+  const lien = data.value?.invitation;
+  if (!lien) return "Aucun lien d’invitation n’a encore été généré.";
+  if (lien.etat === "valide")
+    return `Valable jusqu’au ${dateHeureFr(lien.expiresAt)}.`;
+  if (lien.etat === "utilise")
+    return lien.usedAt
+      ? `Utilisé le ${dateHeureFr(lien.usedAt)}.`
+      : "Ce lien a déjà été utilisé.";
+  if (lien.etat === "expire")
+    return `Arrivé à expiration le ${dateHeureFr(lien.expiresAt)}.`;
+  return "Ce lien a été remplacé par une invitation plus récente.";
+}
+
+const statutCompte = useMutation({
+  mutationFn: ({ uid, revoked }: { uid: string; revoked: boolean }) =>
+    api.put<{ ok: true; status: "active" | "revoked" }>(
+      `/admin/accounts/${encodeURIComponent(uid)}/status`,
+      { revoked },
+    ),
+  onSuccess: (_res, variables) => {
+    toast.success(
+      variables.revoked
+        ? "Compte révoqué. L’accès à la plateforme est bloqué."
+        : "Compte réactivé. Le client peut de nouveau se connecter.",
+    );
+    queryClient.invalidateQueries({ queryKey: ["admin", "client", idClient] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
+  },
+  onError: (e) => toast.error((e as Error).message),
+});
+
+function compteEnModification(uid: string) {
+  return (
+    statutCompte.isPending.value && statutCompte.variables.value?.uid === uid
+  );
+}
+
+async function copierTexte(
+  texte: string,
+  confirmation: string,
+  identifiant?: string,
+) {
   if (await copierDansPressePapiers(texte)) {
+    if (identifiant) {
+      informationCopiee.value = identifiant;
+      window.setTimeout(() => {
+        if (informationCopiee.value === identifiant) {
+          informationCopiee.value = null;
+        }
+      }, 2000);
+    }
     toast.success(confirmation);
     return;
   }
@@ -338,19 +433,35 @@ function periodeRemiseCiblee(
                 >
                   <dt class="text-muted-foreground">{{ i.label }}</dt>
                   <dd class="min-w-0">
-                    <button
+                    <IconTooltip
                       v-if="i.valeur && i.confirmationCopie"
-                      type="button"
-                      class="group -my-1 flex min-h-7 w-full cursor-pointer items-start gap-1.5 rounded-sm text-left outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      :aria-label="`Copier ${i.label.toLowerCase()}`"
-                      :title="`Copier ${i.label.toLowerCase()}`"
-                      @click="copierTexte(i.valeur, i.confirmationCopie)"
+                      :text="
+                        informationCopiee === i.label
+                          ? 'Copié !'
+                          : `Copier ${i.label.toLowerCase()}`
+                      "
+                      class="w-full"
+                      show-on-focus
                     >
-                      <span class="min-w-0 break-words">{{ i.valeur }}</span>
-                      <Copy
-                        class="mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
-                      />
-                    </button>
+                      <button
+                        type="button"
+                        class="group -mx-2 -my-1 flex min-h-7 w-[calc(100%+1rem)] cursor-pointer items-center gap-1.5 rounded-sm px-2 text-left outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        :aria-label="`Copier ${i.label.toLowerCase()}`"
+                        @click="copierTexte(i.valeur, i.confirmationCopie, i.label)"
+                      >
+                        <span class="min-w-0 break-words">{{ i.valeur }}</span>
+                        <Check
+                          v-if="informationCopiee === i.label"
+                          class="size-3.5 shrink-0 text-primary"
+                          aria-hidden="true"
+                        />
+                        <Copy
+                          v-else
+                          class="size-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground"
+                          aria-hidden="true"
+                        />
+                      </button>
+                    </IconTooltip>
                     <span v-else class="min-w-0 break-words">{{ i.valeur || "—" }}</span>
                   </dd>
                 </div>
@@ -369,18 +480,30 @@ function periodeRemiseCiblee(
             </CardContent>
           </Card>
 
-          <Card>
+          <Card class="overflow-visible">
             <CardHeader>
               <div class="flex items-center justify-between gap-3">
-                <CardTitle class="text-base">Tarifs personnalisés</CardTitle>
+                <div class="flex items-center gap-1.5">
+                  <CardTitle class="text-base">Tarifs personnalisés</CardTitle>
+                  <IconTooltip
+                    text="Prix définis spécialement pour ce client dans Easybeer. Ils remplacent le tarif habituel avant l'application des remises."
+                    content-class="right-auto left-1/2 max-w-72 -translate-x-1/2 whitespace-normal"
+                    arrow-class="right-auto left-1/2 -translate-x-1/2"
+                    show-on-focus
+                  >
+                    <button
+                      type="button"
+                      class="flex size-6 cursor-help items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      aria-label="Explication des tarifs personnalisés"
+                    >
+                      <Info class="size-3.5" aria-hidden="true" />
+                    </button>
+                  </IconTooltip>
+                </div>
                 <Badge variant="secondary">{{ tarifsPersonnalises.length }}</Badge>
               </div>
             </CardHeader>
             <CardContent class="grid gap-3">
-              <p class="text-xs leading-relaxed text-muted-foreground">
-                Prix définis spécialement pour ce client dans Easybeer. Ils remplacent
-                le tarif habituel avant l'application des remises.
-              </p>
               <p v-if="!tarifsPersonnalises.length" class="text-sm text-muted-foreground">
                 Aucun tarif personnalisé pour ce client.
               </p>
@@ -630,33 +753,103 @@ function periodeRemiseCiblee(
               <ul v-else class="grid gap-1.5 text-sm">
                 <li
                   v-for="c in data.comptes"
-                  :key="c.email"
+                  :key="c.uid"
                   class="flex items-center justify-between gap-3"
                 >
-                  <span>{{ c.email }}</span>
-                  <Badge
-                    :variant="c.status === 'active' ? 'default' : 'secondary'"
-                  >
-                    {{ c.status === "active" ? "Actif" : "Invité" }}
-                  </Badge>
+                  <span class="min-w-0 break-all">{{ c.email }}</span>
+                  <div class="flex shrink-0 items-center gap-2">
+                    <Badge
+                      :variant="
+                        c.status === 'active'
+                          ? 'default'
+                          : c.status === 'revoked'
+                            ? 'destructive'
+                            : 'secondary'
+                      "
+                    >
+                      {{
+                        c.status === "active"
+                          ? "Actif"
+                          : c.status === "revoked"
+                            ? "Révoqué"
+                            : "Invité"
+                      }}
+                    </Badge>
+                    <Button
+                      v-if="c.status === 'active'"
+                      type="button"
+                      size="xs"
+                      variant="destructive"
+                      :disabled="compteEnModification(c.uid)"
+                      @click="statutCompte.mutate({ uid: c.uid, revoked: true })"
+                    >
+                      {{ compteEnModification(c.uid) ? "Révocation…" : "Révoquer" }}
+                    </Button>
+                    <Button
+                      v-else-if="c.status === 'revoked'"
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      :disabled="compteEnModification(c.uid)"
+                      @click="statutCompte.mutate({ uid: c.uid, revoked: false })"
+                    >
+                      {{ compteEnModification(c.uid) ? "Réactivation…" : "Réactiver" }}
+                    </Button>
+                  </div>
                 </li>
               </ul>
 
-              <div class="flex flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  :variant="data?.comptes.length ? 'outline' : 'default'"
-                  :disabled="
-                    invitation.isPending.value || !client?.emailPrincipal
+              <div
+                class="flex items-start justify-between gap-3 rounded-lg border bg-muted/40 p-3"
+              >
+                <div class="grid gap-0.5">
+                  <p class="text-sm font-medium">Lien sécurisé d’invitation</p>
+                  <p class="text-xs text-muted-foreground">
+                    {{ detailEtatInvitation() }}
+                  </p>
+                </div>
+                <Badge
+                  :variant="
+                    data?.invitation?.etat === 'valide'
+                      ? 'default'
+                      : data?.invitation?.etat === 'expire'
+                        ? 'destructive'
+                        : 'secondary'
                   "
-                  @click="invitation.mutate()"
                 >
+                  {{ libelleEtatInvitation() }}
+                </Badge>
+              </div>
+
+              <div v-if="peutInviter" class="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  :disabled="invitation.isPending.value || !client?.emailPrincipal"
+                  @click="invitation.mutate(true)"
+                >
+                  <Mail aria-hidden="true" />
                   {{
-                    invitation.isPending.value
+                    invitationEnCours(true)
                       ? "Envoi…"
-                      : data?.comptes.length
-                        ? "Renvoyer l'invitation"
-                        : "Envoyer l'invitation"
+                      : "Envoyer l’invitation par mail"
+                  }}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  :disabled="
+                    invitation.isPending.value ||
+                    (!client?.emailPrincipal && data?.invitation?.etat !== 'valide')
+                  "
+                  @click="copierLienInvitation"
+                >
+                  <Copy aria-hidden="true" />
+                  {{
+                    invitationEnCours(false)
+                      ? "Génération…"
+                      : "Copier le lien sécurisé"
                   }}
                 </Button>
                 <span
@@ -665,32 +858,6 @@ function periodeRemiseCiblee(
                 >
                   Pas d'email sur la fiche Easybeer.
                 </span>
-              </div>
-
-              <div
-                v-if="resultatInvit"
-                class="grid gap-2 rounded-lg border bg-muted/50 p-3"
-              >
-                <p class="text-xs text-muted-foreground">
-                  <template v-if="resultatInvit.envoye">
-                    Email envoyé à {{ resultatInvit.email }}. Lien&nbsp;:
-                  </template>
-                  <template v-else>
-                    Email non envoyé — copiez le lien sécurisé pour
-                    {{ resultatInvit.email }}&nbsp;:
-                  </template>
-                </p>
-                <p class="text-xs break-all text-muted-foreground">
-                  {{ resultatInvit.lien }}
-                </p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  class="justify-self-start"
-                  @click="copierTexte(resultatInvit.lien, 'Lien sécurisé copié.')"
-                >
-                  Copier le lien sécurisé
-                </Button>
               </div>
             </CardContent>
           </Card>

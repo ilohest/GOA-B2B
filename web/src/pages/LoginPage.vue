@@ -26,6 +26,7 @@ const submitting = ref(false)
 const resetting = ref(false)
 const motDePasseVisible = ref(false)
 const erreurConnexion = ref('')
+const compteRevoque = ref(false)
 
 const redirectTo = computed(() => {
   const r = route.query.redirect
@@ -45,6 +46,8 @@ function messageFirebase(code: string): string {
     case 'auth/wrong-password':
     case 'auth/user-not-found':
       return 'Email ou mot de passe incorrect.'
+    case 'auth/user-disabled':
+      return 'Votre compte a été révoqué. Vous ne pouvez plus accéder à la plateforme.'
     case 'auth/too-many-requests':
       return 'Trop de tentatives — réessayez dans quelques minutes.'
     case 'auth/network-request-failed':
@@ -54,10 +57,16 @@ function messageFirebase(code: string): string {
   }
 }
 
+function effacerErreurConnexion() {
+  erreurConnexion.value = ''
+  compteRevoque.value = false
+}
+
 async function onSubmit() {
   fieldErrors.email = undefined
   fieldErrors.password = undefined
   erreurConnexion.value = ''
+  compteRevoque.value = false
   const parsed = schema.safeParse(form)
   if (!parsed.success) {
     for (const issue of parsed.error.issues) {
@@ -71,7 +80,9 @@ async function onSubmit() {
     await login(parsed.data.email, parsed.data.password)
     router.push(redirectTo.value)
   } catch (e) {
-    erreurConnexion.value = messageFirebase((e as { code?: string }).code ?? '')
+    const code = (e as { code?: string }).code ?? ''
+    compteRevoque.value = code === 'auth/user-disabled'
+    erreurConnexion.value = messageFirebase(code)
   } finally {
     submitting.value = false
   }
@@ -120,7 +131,7 @@ async function onResetPassword() {
               inputmode="email"
               placeholder="vous@exemple.fr"
               :aria-invalid="Boolean(fieldErrors.email)"
-              @input="erreurConnexion = ''"
+              @input="effacerErreurConnexion"
             />
             <p v-if="fieldErrors.email" class="text-sm text-destructive">{{ fieldErrors.email }}</p>
           </div>
@@ -134,7 +145,7 @@ async function onResetPassword() {
                 autocomplete="current-password"
                 class="pr-10"
                 :aria-invalid="Boolean(fieldErrors.password)"
-                @input="erreurConnexion = ''"
+                @input="effacerErreurConnexion"
               />
               <button
                 type="button"
@@ -156,13 +167,18 @@ async function onResetPassword() {
           >
             <p class="font-medium">{{ erreurConnexion }}</p>
             <p class="mt-1 text-xs text-destructive/80">
-              Vérifiez votre saisie ou utilisez “Mot de passe oublié ?”.
+              {{
+                compteRevoque
+                  ? "Contactez la Brasserie de GOA pour demander la réactivation de votre accès."
+                  : "Vérifiez votre saisie ou utilisez “Mot de passe oublié ?”."
+              }}
             </p>
           </div>
           <Button type="submit" class="w-full" :disabled="submitting">
             {{ submitting ? 'Connexion…' : 'Se connecter' }}
           </Button>
           <Button
+            v-if="!compteRevoque"
             type="button"
             variant="link"
             class="h-auto justify-self-center p-0 text-sm text-muted-foreground"

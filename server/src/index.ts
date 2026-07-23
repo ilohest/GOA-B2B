@@ -50,6 +50,7 @@ import {
   type SyncReport,
 } from './sync.js'
 import {
+  AccountRevocationBodySchema,
   ActivationBodySchema,
   BulkParamsSchema,
   CommandeBodySchema,
@@ -75,7 +76,12 @@ import {
   lignesSansRemises,
   type RemisesCommandeLocales,
 } from './remisesCommande.js'
-import { creerInvitation, lireInvitation, consommerInvitation } from './invitations.js'
+import {
+  creerInvitation,
+  derniereInvitationClient,
+  lireInvitation,
+  consommerInvitation,
+} from './invitations.js'
 import { emailActif, envoyerInvitationEmail } from './email.js'
 import { cloudTasksConfigure, planifierSynchronisationEasybeer, requeteCloudTasksAutorisee } from './tasks.js'
 
@@ -1249,17 +1255,22 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
 // ---- Admin : invitations (flux §5 du brief) ----
 
 /** Statuts des comptes plateforme par idClient (collection users, petite). */
-async function comptesParClient(): Promise<Record<number, { statut: 'invited' | 'active'; emails: string[] }>> {
-  const comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }> = {}
+type StatutCompte = 'invited' | 'active' | 'revoked'
+
+async function comptesParClient(): Promise<Record<number, { statut: StatutCompte; emails: string[] }>> {
+  const comptes: Record<number, { statut: StatutCompte; emails: string[] }> = {}
   const db = getDb()
   if (!db) return comptes
   const snap = await db.collection('users').where('easybeerIdClient', '!=', null).get()
+  const priorite: Record<StatutCompte, number> = { revoked: 0, invited: 1, active: 2 }
   for (const doc of snap.docs) {
     const d = doc.data()
     const id = d.easybeerIdClient as number
-    const entry = (comptes[id] ??= { statut: 'invited', emails: [] })
+    const statut: StatutCompte =
+      d.status === 'active' || d.status === 'revoked' ? d.status : 'invited'
+    const entry = (comptes[id] ??= { statut, emails: [] })
     if (d.email) entry.emails.push(d.email as string)
-    if (d.status === 'active') entry.statut = 'active'
+    if (priorite[statut] > priorite[entry.statut]) entry.statut = statut
   }
   return comptes
 }
@@ -1298,6 +1309,7 @@ async function inviterEtEnvoyer(
   adminUid: string,
   easybeerIdClient: number,
   emailOverride?: string,
+  envoyerParEmail = true,
 ): Promise<
   | {
       ok: true
@@ -1308,7 +1320,7 @@ async function inviterEtEnvoyer(
       expiresAt: number
       client: { idClient?: number; nom?: string; numero?: string }
     }
-  | { ok: false; erreur: string; dejaActif?: boolean }
+  | { ok: false; erreur: string; dejaActif?: boolean; compteExistant?: boolean }
 > {
   const res = await creerInvitation(db, adminAuth, adminUid, easybeerIdClient, emailOverride)
   if (!res.ok) return res
@@ -1316,7 +1328,7 @@ async function inviterEtEnvoyer(
 
   let envoye = false
   let erreurEmail: string | undefined
-  if (emailActif()) {
+  if (envoyerParEmail && emailActif()) {
     try {
       await envoyerInvitationEmail({
         nom: invitation.client.nom || invitation.email,
@@ -1349,10 +1361,69 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
   const parse = parserBody(InvitationBodySchema, await c.req.json().catch(() => null))
   if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
 
-  const res = await inviterEtEnvoyer(db, adminAuth, c.get('user').uid, parse.data.easybeerIdClient, parse.data.email)
-  // Compte déjà actif → 409 (pas de nouveau lien, cf. décision produit).
-  if (!res.ok) return c.json({ error: res.erreur, dejaActif: res.dejaActif ?? false }, res.dejaActif ? 409 : 400)
+  const res = await inviterEtEnvoyer(
+    db,
+    adminAuth,
+    c.get('user').uid,
+    parse.data.easybeerIdClient,
+    parse.data.email,
+    parse.data.envoyerEmail !== false,
+  )
+  // Un compte existant se gère depuis sa fiche : aucun nouveau lien.
+  if (!res.ok) {
+    return c.json(
+      { error: res.erreur, dejaActif: res.dejaActif ?? false },
+      res.compteExistant ? 409 : 400,
+    )
+  }
   return c.json(res)
+})
+
+/** Révoque ou réactive un compte client existant. */
+app.put('/api/admin/accounts/:uid/status', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  const adminAuth = getAdminAuth()
+  if (!db || !adminAuth) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const uid = (c.req.param('uid') ?? '').trim()
+  if (!uid || uid.length > 128) return c.json({ error: 'Compte invalide' }, 400)
+  const parse = parserBody(AccountRevocationBodySchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+
+  const ref = db.collection('users').doc(uid)
+  const snap = await ref.get()
+  if (!snap.exists) return c.json({ error: 'Compte introuvable' }, 404)
+  const compte = snap.data()!
+  if (compte.role === 'admin' || compte.easybeerIdClient == null) {
+    return c.json({ error: 'Seuls les comptes clients peuvent être modifiés ici' }, 403)
+  }
+
+  const maintenant = Date.now()
+  await adminAuth.updateUser(uid, { disabled: parse.data.revoked })
+  if (parse.data.revoked) {
+    await adminAuth.revokeRefreshTokens(uid)
+    await ref.set(
+      {
+        status: 'revoked',
+        revokedAt: maintenant,
+        revokedBy: c.get('user').uid,
+      },
+      { merge: true },
+    )
+  } else {
+    await ref.set(
+      {
+        status: 'active',
+        reactivatedAt: maintenant,
+        reactivatedBy: c.get('user').uid,
+        revokedAt: null,
+        revokedBy: null,
+      },
+      { merge: true },
+    )
+  }
+
+  return c.json({ ok: true, status: parse.data.revoked ? 'revoked' : 'active' })
 })
 
 /**
@@ -1439,7 +1510,8 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
     }))
     .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
 
-  const comptes: { email: string; status: string }[] = []
+  const comptes: { uid: string; email: string; status: StatutCompte }[] = []
+  let invitation: Awaited<ReturnType<typeof derniereInvitationClient>> = null
   const db = getDb()
   const typesClient = await listeTypesClient().catch(() => [])
   const clientAvecRemises = allegerClient(client, typesClient)
@@ -1454,10 +1526,16 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
   if (db) {
     await db.doc(`cacheClients/${idClient}`).set({ client: clientAvecRemises, clientUpdatedAt: Date.now() }, { merge: true })
 
-    const snap = await db.collection('users').where('easybeerIdClient', '==', idClient).get()
+    const [snap, invitationRecente] = await Promise.all([
+      db.collection('users').where('easybeerIdClient', '==', idClient).get(),
+      derniereInvitationClient(db, idClient),
+    ])
+    invitation = invitationRecente
     for (const doc of snap.docs) {
       const d = doc.data()
-      comptes.push({ email: (d.email as string) ?? '?', status: (d.status as string) ?? 'invited' })
+      const status: StatutCompte =
+        d.status === 'active' || d.status === 'revoked' ? d.status : 'invited'
+      comptes.push({ uid: doc.id, email: (d.email as string) ?? '?', status })
     }
   }
 
@@ -1487,6 +1565,7 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
     },
     commandes,
     comptes,
+    invitation,
     easybeerAppUrl: config.easybeer.appUrl,
   })
 })

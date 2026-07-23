@@ -28,6 +28,15 @@ export interface InvitationCreee {
 
 export type InvitationEtat = 'valide' | 'introuvable' | 'expire' | 'utilise' | 'revoque'
 
+export interface InvitationAdminResume {
+  etat: Exclude<InvitationEtat, 'introuvable'>
+  lien: string
+  email: string
+  createdAt: number | null
+  expiresAt: number
+  usedAt: number | null
+}
+
 function nouveauToken(): string {
   return randomBytes(32).toString('hex')
 }
@@ -36,6 +45,35 @@ function lienInvitation(token: string, email: string): string {
   const base = config.invite.baseUrl
   const sep = base.includes('?') ? '&' : '?'
   return `${base}${sep}token=${token}&email=${encodeURIComponent(email)}`
+}
+
+function etatInvitation(d: Record<string, unknown>): InvitationAdminResume['etat'] {
+  if (d.revoked) return 'revoque'
+  if (d.usedAt) return 'utilise'
+  if (Date.now() > Number(d.expiresAt)) return 'expire'
+  return 'valide'
+}
+
+/** Dernier lien d'invitation d'un client, destiné à sa fiche admin. */
+export async function derniereInvitationClient(
+  db: Firestore,
+  easybeerIdClient: number,
+): Promise<InvitationAdminResume | null> {
+  const snap = await db.collection(COLL).where('easybeerIdClient', '==', easybeerIdClient).get()
+  const doc = [...snap.docs].sort(
+    (a, b) => Number(b.data().createdAt ?? 0) - Number(a.data().createdAt ?? 0),
+  )[0]
+  if (!doc) return null
+  const d = doc.data()
+  const email = String(d.email ?? '')
+  return {
+    etat: etatInvitation(d),
+    lien: lienInvitation(doc.id, email),
+    email,
+    createdAt: typeof d.createdAt === 'number' ? d.createdAt : null,
+    expiresAt: Number(d.expiresAt),
+    usedAt: typeof d.usedAt === 'number' ? d.usedAt : null,
+  }
 }
 
 /**
@@ -48,7 +86,10 @@ export async function creerInvitation(
   adminUid: string,
   easybeerIdClient: number,
   emailOverride?: string,
-): Promise<{ ok: true; invitation: InvitationCreee } | { ok: false; erreur: string; dejaActif?: boolean }> {
+): Promise<
+  | { ok: true; invitation: InvitationCreee }
+  | { ok: false; erreur: string; dejaActif?: boolean; compteExistant?: boolean }
+> {
   const client = await getClient(easybeerIdClient)
   if (!client) return { ok: false, erreur: `Client Easybeer ${easybeerIdClient} introuvable` }
 
@@ -65,7 +106,15 @@ export async function creerInvitation(
     return {
       ok: false,
       dejaActif: true,
+      compteExistant: true,
       erreur: `${email} a déjà un compte actif — il peut utiliser « Mot de passe oublié » pour se reconnecter.`,
+    }
+  }
+  if (prev.status === 'revoked') {
+    return {
+      ok: false,
+      compteExistant: true,
+      erreur: `${email} possède un compte révoqué — réactivez-le depuis la fiche client.`,
     }
   }
 
@@ -81,8 +130,28 @@ export async function creerInvitation(
     { merge: true },
   )
 
-  // Un seul lien valide : révoquer les tokens précédents non consommés de ce compte.
+  // Réutiliser le lien courant tant qu'il reste valable : copier le lien après
+  // un envoi par email ne doit jamais invalider celui que le client a reçu.
   const anciens = await db.collection(COLL).where('uid', '==', uid).get()
+  const invitationValide = [...anciens.docs]
+    .filter((d) => etatInvitation(d.data()) === 'valide')
+    .sort((a, b) => Number(b.data().createdAt ?? 0) - Number(a.data().createdAt ?? 0))[0]
+  if (invitationValide) {
+    const d = invitationValide.data()
+    return {
+      ok: true,
+      invitation: {
+        token: invitationValide.id,
+        lien: lienInvitation(invitationValide.id, email),
+        email,
+        uid,
+        expiresAt: Number(d.expiresAt),
+        client: { idClient: client.idClient, nom: client.nom, numero: client.numero },
+      },
+    }
+  }
+
+  // Un seul nouveau lien valide : révoquer les précédents non consommés.
   const batch = db.batch()
   for (const d of anciens.docs) {
     const data = d.data()

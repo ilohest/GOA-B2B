@@ -44,7 +44,7 @@ export interface AuthUser {
   uid: string
   email?: string
   role: 'client' | 'admin'
-  status?: 'invited' | 'active'
+  status?: 'invited' | 'active' | 'revoked'
   easybeerIdClient?: number
 }
 
@@ -61,7 +61,10 @@ export interface ClientResume {
 
 export interface AdminClientsResponse {
   clients: ClientResume[]
-  comptes: Record<number, { statut: 'invited' | 'active'; emails: string[] }>
+  comptes: Record<
+    number,
+    { statut: 'invited' | 'active' | 'revoked'; emails: string[] }
+  >
   syncedAt: number | null
   indisponible?: boolean
   revalidationEnCours?: boolean
@@ -340,7 +343,19 @@ export interface AdminClientDetail {
     totalTTC: number | null
     dateCreation: number | null
   }[]
-  comptes: { email: string; status: string }[]
+  comptes: {
+    uid: string
+    email: string
+    status: 'invited' | 'active' | 'revoked'
+  }[]
+  invitation: {
+    etat: 'valide' | 'utilise' | 'expire' | 'revoque'
+    lien: string
+    email: string
+    createdAt: number | null
+    expiresAt: number
+    usedAt: number | null
+  } | null
   easybeerAppUrl: string
 }
 

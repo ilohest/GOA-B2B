@@ -1,7 +1,9 @@
 import { computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
+import { useAuth } from '@/composables/useAuth'
 
-const CLE_STOCKAGE_CLIENT = 'goa-panier-v1'
+const CLE_STOCKAGE_CLIENT_HISTORIQUE = 'goa-panier-v1'
+const CLE_STOCKAGE_APERCU_ADMIN = 'goa-panier-apercu-admin-v1'
 type ModificationPanier = {
   idCommande: number
   numero: number | null
@@ -60,6 +62,17 @@ type EtatPanier = {
 }
 
 const etatsPaniers = new Map<string, EtatPanier>()
+let ancienPanierGlobalNettoye = false
+
+function nettoyerAncienPanierGlobal() {
+  if (ancienPanierGlobalNettoye || typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(CLE_STOCKAGE_CLIENT_HISTORIQUE)
+  } catch {
+    // Stockage indisponible : le panier courant reste utilisable en mémoire.
+  }
+  ancienPanierGlobalNettoye = true
+}
 
 function obtenirEtatPanier(cleStockage: string) {
   const existant = etatsPaniers.get(cleStockage)
@@ -80,7 +93,16 @@ function obtenirEtatPanier(cleStockage: string) {
 
 /** Panier client par défaut, ou panier isolé pour l'aperçu administrateur. */
 export function usePanier(portee: 'client' | 'apercu-admin' = 'client') {
-  const cleStockage = portee === 'apercu-admin' ? 'goa-panier-apercu-admin-v1' : CLE_STOCKAGE_CLIENT
+  let cleStockage = CLE_STOCKAGE_APERCU_ADMIN
+  if (portee === 'client') {
+    const { user } = useAuth()
+    const uid = user.value?.uid
+    if (!uid) {
+      throw new Error('Le panier client ne peut pas être initialisé sans compte connecté.')
+    }
+    nettoyerAncienPanierGlobal()
+    cleStockage = `goa-panier-client-${uid}-v1`
+  }
   const { quantites, modification } = obtenirEtatPanier(cleStockage)
   const changer = (idStockBouteille: number, delta: number) => {
     const actuel = quantites.value[idStockBouteille] ?? 0
