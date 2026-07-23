@@ -26,6 +26,7 @@ import { usePanier } from "@/composables/usePanier";
 import ProduitCard from "@/components/catalogue/ProduitCard.vue";
 import PanierRecap from "@/components/catalogue/PanierRecap.vue";
 import RecommanderDialog from "@/components/catalogue/RecommanderDialog.vue";
+import ToastAnnulationPanier from "@/components/catalogue/ToastAnnulationPanier.vue";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -408,7 +409,46 @@ function annulerModification() {
 }
 
 function supprimerLignePanier(idStockBouteille: number) {
+  const quantiteSupprimee = quantites.value[idStockBouteille] ?? 0;
+  if (!quantiteSupprimee) return;
+  const libelle = produitsParId.value.get(idStockBouteille)?.libelle ?? "Produit";
   fixer(idStockBouteille, 0);
+  toast.info(`${libelle} retiré du panier.`, {
+    class: "panier-toast-annulation overflow-hidden",
+    description: ToastAnnulationPanier,
+    duration: 7000,
+    action: {
+      label: "Annuler",
+      onClick: () =>
+        fixer(
+          idStockBouteille,
+          (quantites.value[idStockBouteille] ?? 0) + quantiteSupprimee,
+        ),
+    },
+  });
+}
+
+function viderPanierAvecAnnulation() {
+  const quantitesSupprimees = { ...quantites.value };
+  const nbLignes = Object.keys(quantitesSupprimees).length;
+  if (!nbLignes) return;
+  for (const id of Object.keys(quantitesSupprimees)) fixer(Number(id), 0);
+  toast.info("Panier vidé.", {
+    class: "panier-toast-annulation overflow-hidden",
+    description: ToastAnnulationPanier,
+    componentProps: {
+      texte: `${nbLignes} produit${nbLignes > 1 ? "s" : ""} retiré${nbLignes > 1 ? "s" : ""}.`,
+    },
+    duration: 7000,
+    action: {
+      label: "Annuler",
+      onClick: () => {
+        for (const [id, quantite] of Object.entries(quantitesSupprimees)) {
+          fixer(Number(id), (quantites.value[Number(id)] ?? 0) + quantite);
+        }
+      },
+    },
+  });
 }
 </script>
 
@@ -695,12 +735,15 @@ function supprimerLignePanier(idStockBouteille: number) {
         class="hidden min-h-0 flex-[0_1_auto] flex-col overflow-hidden lg:flex"
       >
         <CardHeader class="shrink-0">
-          <CardTitle class="text-lg">
-            {{
+          <CardTitle class="flex items-baseline gap-1.5 text-lg">
+            <span>{{
               modification
                 ? `Modification #${modification.numero ?? modification.idCommande}`
                 : "Votre commande"
-            }}
+            }}</span>
+            <span class="text-sm font-normal text-muted-foreground">
+              ({{ nbCartons }} article{{ nbCartons === 1 ? "" : "s" }})
+            </span>
           </CardTitle>
           <CardDescription v-if="modification"> </CardDescription>
         </CardHeader>
@@ -718,6 +761,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             editable
             @changer="changer"
             @supprimer="supprimerLignePanier"
+            @vider="viderPanierAvecAnnulation"
           >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
               Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
@@ -761,11 +805,13 @@ function supprimerLignePanier(idStockBouteille: number) {
           v-if="barreDepliee"
           class="flex min-h-0 flex-1 flex-col border-b p-4"
         >
-          <div class="mb-3 flex shrink-0 items-baseline justify-between gap-3">
-            <h2 class="font-semibold">Votre commande</h2>
-            <span class="text-xs text-muted-foreground">
-              {{ nbCartons }} carton{{ nbCartons > 1 ? "s" : "" }}
-            </span>
+          <div class="mb-3 flex shrink-0 items-baseline gap-3">
+            <h2 class="flex items-baseline gap-1.5 font-semibold">
+              Votre commande
+              <span class="text-xs font-normal text-muted-foreground">
+                ({{ nbCartons }} article{{ nbCartons === 1 ? "" : "s" }})
+              </span>
+            </h2>
           </div>
           <p v-if="modification" class="mb-2 text-xs font-medium text-primary">
             Modification de la commande
@@ -785,6 +831,7 @@ function supprimerLignePanier(idStockBouteille: number) {
             editable
             @changer="changer"
             @supprimer="supprimerLignePanier"
+            @vider="viderPanierAvecAnnulation"
           >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
               Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.

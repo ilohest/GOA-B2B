@@ -50,6 +50,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   changer: [idStockBouteille: number, delta: number];
   supprimer: [idStockBouteille: number];
+  vider: [];
 }>();
 
 const aRemise = computed(() => (props.remiseMontant ?? 0) > 0);
@@ -161,11 +162,20 @@ onMounted(async () => {
     <p v-if="!lignes.length" class="text-sm text-muted-foreground">
       Votre panier est vide — ajoutez des cartons depuis le catalogue.
     </p>
+    <div v-if="editable && lignes.length" class="flex shrink-0 justify-end">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        @click="emit('vider')"
+      >
+        <Trash2 class="size-3.5" />
+        Vider le panier
+      </button>
+    </div>
     <div
-      v-else
       class="relative min-w-0"
       :class="
-        defilementContraint
+        lignes.length && defilementContraint
           ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
           : ''
       "
@@ -174,17 +184,18 @@ onMounted(async () => {
         ref="listeProduits"
         class="grid min-w-0 pr-1 text-sm"
         :class="
-          defilementContraint
+          lignes.length && defilementContraint
             ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain'
             : ''
         "
         @scroll="mesurerScrollProduits"
       >
-        <li
-          v-for="l in lignes"
-          :key="l.idStockBouteille"
-          class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
-        >
+        <TransitionGroup name="panier-ligne">
+          <li
+            v-for="l in lignes"
+            :key="l.idStockBouteille"
+            class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
+          >
           <div class="flex items-start justify-between gap-3">
             <span class="min-w-0 flex-1">
               <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
@@ -289,7 +300,8 @@ onMounted(async () => {
             Ce produit n'est plus proposé actuellement : sa quantité peut être
             réduite, mais pas augmentée.
           </p>
-        </li>
+          </li>
+        </TransitionGroup>
       </ul>
       <div
         v-if="defilementContraint && listeDeborde && !listeEnBas"
@@ -381,3 +393,27 @@ onMounted(async () => {
     <slot />
   </div>
 </template>
+
+<style scoped>
+.panier-ligne-enter-active,
+.panier-ligne-leave-active,
+.panier-ligne-move {
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.panier-ligne-enter-from,
+.panier-ligne-leave-to {
+  opacity: 0;
+  transform: translateX(10px) scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panier-ligne-enter-active,
+  .panier-ligne-leave-active,
+  .panier-ligne-move {
+    transition: none;
+  }
+}
+</style>
