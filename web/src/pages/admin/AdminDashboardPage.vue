@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { LayoutDashboard } from '@lucide/vue'
+import { Droplets, LayoutDashboard } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 const queryClient = useQueryClient()
 const SYNC_ATTENTION_MS = 30 * 60 * 60 * 1000
 const TOAST_SYNC_ID = 'admin-sync'
+const formatLitres = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 })
 
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'dashboard'],
@@ -163,6 +164,7 @@ const stats = computed(() => {
       lien: '/admin/clients',
       easybeer: easybeerLien.clients(),
       action: 'Gérer les clients',
+      volumeLitres: null,
     },
     {
       titre: 'Commandes (30 j)',
@@ -172,6 +174,7 @@ const stats = computed(() => {
       lien: '/admin/commandes',
       easybeer: easybeerLien.commandes(),
       action: 'Voir les commandes',
+      volumeLitres: d.commandes30j.volumeLitres,
     },
     {
       titre: 'Catalogue',
@@ -183,6 +186,7 @@ const stats = computed(() => {
       lien: '/admin/catalogue',
       easybeer: easybeerLien.grilleTarifaire(),
       action: 'Gérer le catalogue',
+      volumeLitres: null,
     },
   ]
 })
@@ -270,6 +274,16 @@ const stats = computed(() => {
           </CardHeader>
           <CardContent class="flex flex-1 flex-col gap-3">
             <p class="text-sm text-muted-foreground">{{ s.detail }}</p>
+            <div
+              v-if="s.volumeLitres != null"
+              class="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm text-blue-950"
+            >
+              <Droplets class="mt-0.5 size-4 shrink-0 text-blue-600" />
+              <p>
+                <strong>{{ formatLitres.format(s.volumeLitres) }} L de nectar divin</strong>
+                commandés ces 30 derniers jours ✨
+              </p>
+            </div>
             <div v-if="s.statuts?.length" class="flex flex-wrap gap-2">
               <div
                 v-for="statut in s.statuts"

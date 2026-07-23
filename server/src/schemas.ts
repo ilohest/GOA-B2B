@@ -28,6 +28,7 @@ export const InvitationsBulkSchema = z.object({
 })
 
 export const ActivationBodySchema = z.object({
+  email: z.email('Adresse email invalide').optional(),
   password: z.string().min(6, 'Mot de passe : 6 caractères minimum').max(200),
 })
 

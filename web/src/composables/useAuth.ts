@@ -6,9 +6,14 @@
  */
 import { computed, ref } from 'vue'
 import {
+  GoogleAuthProvider,
+  isSignInWithEmailLink,
   onAuthStateChanged,
+  sendSignInLinkToEmail,
   sendPasswordResetEmail,
+  signInWithEmailLink,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   type User,
 } from 'firebase/auth'
@@ -52,6 +57,19 @@ export function useAuth() {
     waitForAuth: ensureListener,
     login: (email: string, password: string) =>
       signInWithEmailAndPassword(requireAuthInstance(), email, password),
+    loginWithGoogle: () => signInWithPopup(requireAuthInstance(), new GoogleAuthProvider()),
+    sendLoginLink: (email: string, redirect = '/') => {
+      const url = new URL('/login', window.location.origin)
+      url.searchParams.set('emailSignIn', '1')
+      if (redirect.startsWith('/')) url.searchParams.set('redirect', redirect)
+      return sendSignInLinkToEmail(requireAuthInstance(), email, {
+        url: url.toString(),
+        handleCodeInApp: true,
+      })
+    },
+    isLoginLink: (url = window.location.href) => isSignInWithEmailLink(requireAuthInstance(), url),
+    loginWithEmailLink: (email: string, url = window.location.href) =>
+      signInWithEmailLink(requireAuthInstance(), email, url),
     resetPassword: (email: string) => sendPasswordResetEmail(requireAuthInstance(), email),
     logout: () => signOut(requireAuthInstance()),
   }

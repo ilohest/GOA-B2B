@@ -1,5 +1,5 @@
 /**
- * Template de l'email d'invitation « créez votre mot de passe » envoyé aux
+ * Template de l'email d'activation de compte envoyé aux
  * clients pros de GOA (remplace la copie manuelle du lien). HTML compatible
  * emails (tables + styles inline), accent émeraude de la charte GOA.
  *
@@ -12,7 +12,7 @@ export interface InvitationEmailInput {
   nom: string
   /** Lien sécurisé vers /activer (token d'invitation). */
   lien: string
-  /** Email destinataire (affiché comme identifiant de connexion). */
+  /** Email utilisé uniquement pour la livraison du message. */
   email: string
   /** Durée de validité du lien, en jours (défaut 14). */
   expiresInDays?: number
@@ -31,7 +31,7 @@ export function renderInvitationEmail(input: InvitationEmailInput): {
   html: string
   text: string
 } {
-  const { nom, lien, email, expiresInDays = 14, logoUrl } = input
+  const { nom, lien, expiresInDays = 14, logoUrl } = input
   const subject = 'Votre accès à la plateforme de commande GOA'
 
   const entete = logoUrl
@@ -53,7 +53,7 @@ export function renderInvitationEmail(input: InvitationEmailInput): {
             GOA passe à une <strong>plateforme de commande en ligne</strong> pour ses clients professionnels.
           </p>
           <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:${TEXTE};">
-            Pour activer votre accès, créez votre mot de passe&nbsp;:
+            Pour activer votre accès, choisissez librement votre adresse de connexion, ou continuez simplement avec Google — aucun mot de passe à retenir.
           </p>
         </td></tr>
         <tr><td align="center" style="padding:0 32px 24px;">
@@ -66,9 +66,6 @@ export function renderInvitationEmail(input: InvitationEmailInput): {
           </tr></table>
         </td></tr>
         <tr><td style="padding:0 32px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
-          <p style="margin:0 0 6px;font-size:13px;color:${GRIS};">
-            Votre identifiant de connexion&nbsp;: <span style="color:${TEXTE};font-weight:600;">${escapeHtml(email)}</span>
-          </p>
           <p style="margin:0 0 20px;font-size:13px;color:${GRIS};">
             Ce lien est <strong>personnel</strong>, valable <strong>${expiresInDays} jours</strong> et utilisable une seule fois.
             S'il a expiré, demandez-nous un nouveau lien.
@@ -91,10 +88,9 @@ export function renderInvitationEmail(input: InvitationEmailInput): {
     `Bonjour ${nom},`,
     ``,
     `GOA passe à une plateforme de commande en ligne pour ses clients professionnels.`,
-    `Pour activer votre accès, créez votre mot de passe via ce lien :`,
+    `Pour activer votre accès, choisissez librement votre adresse de connexion, continuez avec Google (sans mot de passe) ou créez un mot de passe via ce lien :`,
     lien,
     ``,
-    `Identifiant de connexion : ${email}`,
     `Lien personnel, valable ${expiresInDays} jours, utilisable une seule fois.`,
     ``,
     `La Brasserie de GOA — Kombucha artisanal`,

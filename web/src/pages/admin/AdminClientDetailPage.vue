@@ -50,7 +50,7 @@ const invitation = useMutation({
       toast.success(`Invitation envoyée à ${res.email}.`);
     } else if (envoyerEmail) {
       toast.message(
-        `Lien créé, mais l’email n’a pas pu être envoyé à ${res.email}.`,
+        `Lien créé, mais l’email n’a pas pu être envoyé${res.email ? ` à ${res.email}` : ""}.`,
       );
     } else if (await copierDansPressePapiers(res.lien)) {
       toast.success("Lien sécurisé copié.");
@@ -839,10 +839,7 @@ function periodeRemiseCiblee(
                   type="button"
                   size="sm"
                   variant="outline"
-                  :disabled="
-                    invitation.isPending.value ||
-                    (!client?.emailPrincipal && data?.invitation?.etat !== 'valide')
-                  "
+                  :disabled="invitation.isPending.value"
                   @click="copierLienInvitation"
                 >
                   <Copy aria-hidden="true" />
@@ -853,10 +850,11 @@ function periodeRemiseCiblee(
                   }}
                 </Button>
                 <span
-                  v-if="!client?.emailPrincipal"
-                  class="text-xs text-destructive"
+                  class="basis-full text-xs text-muted-foreground"
                 >
-                  Pas d'email sur la fiche Easybeer.
+                  Le client choisira toujours son adresse email à l’activation.
+                  L’adresse Easybeer sert uniquement à recevoir l’invitation.
+                  Le lien est personnel, expirant et utilisable une seule fois.
                 </span>
               </div>
             </CardContent>

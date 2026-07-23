@@ -81,6 +81,7 @@ import {
   derniereInvitationClient,
   lireInvitation,
   consommerInvitation,
+  consommerInvitationAvecFournisseur,
 } from './invitations.js'
 import { emailActif, envoyerInvitationEmail } from './email.js'
 import { cloudTasksConfigure, planifierSynchronisationEasybeer, requeteCloudTasksAutorisee } from './tasks.js'
@@ -1305,15 +1306,15 @@ app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
  */
 async function inviterEtEnvoyer(
   db: NonNullable<ReturnType<typeof getDb>>,
-  adminAuth: NonNullable<ReturnType<typeof getAdminAuth>>,
   adminUid: string,
   easybeerIdClient: number,
   emailOverride?: string,
   envoyerParEmail = true,
+  autoriserSansEmail = false,
 ): Promise<
   | {
       ok: true
-      email: string
+      email: string | null
       lien: string
       envoye: boolean
       erreurEmail?: string
@@ -1322,13 +1323,19 @@ async function inviterEtEnvoyer(
     }
   | { ok: false; erreur: string; dejaActif?: boolean; compteExistant?: boolean }
 > {
-  const res = await creerInvitation(db, adminAuth, adminUid, easybeerIdClient, emailOverride)
+  const res = await creerInvitation(
+    db,
+    adminUid,
+    easybeerIdClient,
+    emailOverride,
+    autoriserSansEmail,
+  )
   if (!res.ok) return res
   const { invitation } = res
 
   let envoye = false
   let erreurEmail: string | undefined
-  if (envoyerParEmail && emailActif()) {
+  if (envoyerParEmail && invitation.email && emailActif()) {
     try {
       await envoyerInvitationEmail({
         nom: invitation.client.nom || invitation.email,
@@ -1363,11 +1370,11 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
 
   const res = await inviterEtEnvoyer(
     db,
-    adminAuth,
     c.get('user').uid,
     parse.data.easybeerIdClient,
     parse.data.email,
     parse.data.envoyerEmail !== false,
+    parse.data.envoyerEmail === false,
   )
   // Un compte existant se gère depuis sa fiche : aucun nouveau lien.
   if (!res.ok) {
@@ -1442,7 +1449,7 @@ app.post('/api/admin/invitations/bulk', requireAuth, requireAdmin, async (c) => 
   const resultats = []
   for (const inv of parse.data.invitations) {
     try {
-      const res = await inviterEtEnvoyer(db, adminAuth, adminUid, inv.easybeerIdClient, inv.email)
+      const res = await inviterEtEnvoyer(db, adminUid, inv.easybeerIdClient, inv.email)
       resultats.push({ easybeerIdClient: inv.easybeerIdClient, ...res })
     } catch (e) {
       resultats.push({ easybeerIdClient: inv.easybeerIdClient, ok: false as const, erreur: (e as Error).message })
@@ -1464,6 +1471,29 @@ app.get('/api/invitations/:token', async (c) => {
   return c.json(await lireInvitation(db, c.req.param('token')))
 })
 
+/** Active l'invitation avec une session Google correspondant au compte invité. */
+app.post('/api/invitations/:token/consume-provider', requireAuth, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const user = c.get('user')
+  const res = await consommerInvitationAvecFournisseur(
+    db,
+    c.req.param('token') ?? '',
+    user.uid,
+    user.email,
+  )
+  if (!res.ok) return c.json({ error: res.erreur, etat: res.etat }, 400)
+
+  if (res.easybeerIdClient != null) {
+    const idClient = res.easybeerIdClient
+    remplirCacheClientCible(db, idClient).catch((e) =>
+      console.warn(`[sync] remplissage à l'activation Google (client ${idClient}) : ${(e as Error).message}`),
+    )
+  }
+  return c.json(res)
+})
+
 /** Consomme le token : pose le mot de passe et active le compte. PUBLIC. */
 app.post('/api/invitations/:token/consume', async (c) => {
   const db = getDb()
@@ -1473,7 +1503,13 @@ app.post('/api/invitations/:token/consume', async (c) => {
   const parse = parserBody(ActivationBodySchema, await c.req.json().catch(() => null))
   if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
 
-  const res = await consommerInvitation(db, adminAuth, c.req.param('token'), parse.data.password)
+  const res = await consommerInvitation(
+    db,
+    adminAuth,
+    c.req.param('token'),
+    parse.data.password,
+    parse.data.email,
+  )
   if (!res.ok) return c.json({ error: res.erreur, etat: res.etat }, 400)
 
   // Prépare le cache du client en tâche de fond (fiche + prix des unités
@@ -1875,6 +1911,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     totalTTC: number | null
     dateCreation: number | null
     etat: { code: string; libelle: string; couleur: string | null }
+    volumeLitres?: number | null
   }[]
   const produits = (catalogueSnap.data()?.produits ?? []) as unknown[]
   const clientsSyncedAt = (clientsSnap.data()?.syncedAt as number | undefined) ?? null
@@ -1927,6 +1964,10 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     0,
   )
   const caTTC30j = commandes30j.reduce((somme, cmd) => somme + (cmd.totalTTC ?? 0), 0)
+  const volumes30jComplets = commandes30j.every((commande) => typeof commande.volumeLitres === 'number')
+  const volumeLitres30j = volumes30jComplets
+    ? commandes30j.reduce((somme, commande) => somme + (commande.volumeLitres ?? 0), 0)
+    : null
 
   const statutsComptes = Object.values(comptes)
   let visibles = 0
@@ -1944,6 +1985,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
       statuts: statutsCommandes30j,
       caHT: caHT30j,
       caTTC: caTTC30j,
+      volumeLitres: volumeLitres30j,
     },
     catalogue: { produits: produits.length, visibles, ruptures },
     cache: {

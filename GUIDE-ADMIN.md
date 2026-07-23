@@ -206,8 +206,13 @@ clients de ce type.
   Sur mobile et tablette, les remises sont présentées verticalement pour que le
   détail du client individuel et de son type reste entièrement lisible.
 - **Inviter un client** : depuis la liste (bouton « Inviter » / « Inviter la
-  sélection ») ou depuis sa fiche. Un **email** « créez votre mot de passe » lui
-  est envoyé automatiquement ; un **lien** est copiable si besoin.
+  sélection ») ou depuis sa fiche. Un email d'activation lui est envoyé
+  automatiquement ; un **lien** est copiable si besoin. Le client peut activer
+  son compte avec Google (recommandé, sans mot de passe) ou créer un mot de
+  passe classique.
+- À la connexion, le client peut ensuite utiliser Google, recevoir un lien de
+  connexion à usage unique par email, ou saisir son mot de passe. En cas de
+  perte de mot de passe, Google et le lien email restent disponibles.
 - Les liens d'invitation sont **valables 14 jours**, **à usage unique**. Si un
   client a déjà un compte actif, on ne régénère pas de lien — il utilise « Mot de
   passe oublié ». Tant que le compte n'est pas actif, vous pouvez **renvoyer** une

@@ -79,6 +79,8 @@ export interface AdminDashboardResponse {
     statuts: { etat: EtatCommande; nombre: number }[]
     caHT: number
     caTTC: number
+    /** Null tant que les lignes des commandes n'ont pas toutes été enrichies. */
+    volumeLitres: number | null
   }
   catalogue: { produits: number; visibles: number; ruptures: number }
   cache: {
@@ -205,7 +207,7 @@ export interface SyncStatusResponse {
 
 export interface InvitationResponse {
   ok: boolean
-  email: string
+  email: string | null
   lien: string
   /** true si l'email a bien été envoyé via SMTP (sinon : lien à copier). */
   envoye: boolean
@@ -216,7 +218,6 @@ export interface InvitationResponse {
 
 export interface InvitationValidation {
   etat: 'valide' | 'introuvable' | 'expire' | 'utilise' | 'revoque'
-  email?: string
   nom?: string
 }
 
@@ -351,7 +352,7 @@ export interface AdminClientDetail {
   invitation: {
     etat: 'valide' | 'utilise' | 'expire' | 'revoque'
     lien: string
-    email: string
+    email: string | null
     createdAt: number | null
     expiresAt: number
     usedAt: number | null

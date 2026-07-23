@@ -20,7 +20,9 @@ localisation doit être validé avant de créer la base.
 
 1. Passer le projet du client sur Blaze et configurer une alerte de budget.
 2. Créer Firestore, Auth et Storage dans les régions européennes retenues.
-3. Dans Auth, activer **Adresse e-mail/Mot de passe**.
+3. Dans Auth > Modes de connexion, activer **Adresse e-mail/Mot de passe**,
+   l'option **Lien envoyé par e-mail (connexion sans mot de passe)** et **Google**.
+   Pour Google, choisir l'adresse d'assistance publique de la brasserie.
 4. Créer une application Web et relever : API key, App ID et Auth domain.
 5. Relever le nom exact du bucket Storage. Un nouveau projet utilise normalement
    `PROJECT_ID.firebasestorage.app`, tandis qu'un ancien peut utiliser `appspot.com`.
@@ -115,7 +117,8 @@ La file limite la concurrence à 1 et retente au maximum 3 fois avec backoff.
 
 ## 8. Recette avant commandes réelles
 
-1. Tester connexion, mot de passe oublié et invitation.
+1. Tester connexion Google, lien sans mot de passe, mot de passe oublié et
+   activation d'une invitation avec Google puis avec un mot de passe.
 2. Tester catalogue, remises et tarifs personnalisés.
 3. Créer, modifier et consulter un devis Easybeer.
 4. Tester les boutons d'actualisation et la synchronisation globale.
