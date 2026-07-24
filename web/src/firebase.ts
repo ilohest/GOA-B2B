@@ -10,7 +10,15 @@
  * Si rien n'est configuré, `firebaseAuth` reste null (l'app le signale).
  */
 import { initializeApp, type FirebaseApp } from 'firebase/app'
-import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth'
+import {
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+  browserSessionPersistence,
+  connectAuthEmulator,
+  inMemoryPersistence,
+  initializeAuth,
+  type Auth,
+} from 'firebase/auth'
 
 const useEmulator = import.meta.env.VITE_FIREBASE_EMULATOR === 'true'
 
@@ -31,10 +39,26 @@ const cfg = useEmulator
 export const firebaseConfigured = Boolean(cfg.apiKey && cfg.projectId)
 
 let app: FirebaseApp | null = null
-export const firebaseAuth: Auth | null = firebaseConfigured ? getAuth((app = initializeApp(cfg))) : null
+if (firebaseConfigured) app = initializeApp(cfg)
+export const firebaseAuth: Auth | null = app
+  ? initializeAuth(app, {
+      // Évite IndexedDB, qui peut bloquer Firebase Auth avant toute requête
+      // réseau dans Safari iOS. Les replis gardent la connexion utilisable
+      // même si le stockage local est restreint (navigation privée, etc.).
+      persistence: [browserLocalPersistence, browserSessionPersistence, inMemoryPersistence],
+      popupRedirectResolver: browserPopupRedirectResolver,
+    })
+  : null
 
 if (firebaseAuth && useEmulator) {
-  const host = import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL ?? 'http://localhost:9100'
+  const configuredHost = import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL ?? 'http://localhost:9100'
+  const configuredUrl = new URL(configuredHost)
+  const pageIsLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  const emulatorIsLocal = ['localhost', '127.0.0.1'].includes(configuredUrl.hostname)
+  // Un localhost injecté par erreur dans un build public désignerait le
+  // téléphone ou le poste du visiteur. Le proxy Firebase est servi par la
+  // même origine que GOA sur le VPS.
+  const host = emulatorIsLocal && !pageIsLocal ? window.location.origin : configuredHost
   connectAuthEmulator(firebaseAuth, host, { disableWarnings: true })
 }
 
