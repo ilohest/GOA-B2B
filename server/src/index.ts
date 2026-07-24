@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { randomUUID } from 'node:crypto'
 import { config, validerConfigurationProduction } from './config.js'
-import { requireAuth, requireAdmin } from './auth.js'
+import { comptePlateformeAutorise, requireAuth, requireAdmin, requireFirebaseIdentity } from './auth.js'
 import { getDb, getAdminAuth, getBucket } from './firebase.js'
 import {
   getClient,
@@ -282,7 +282,7 @@ function normaliserRemisesCiblees(remises: Record<string, unknown>[] | undefined
 app.get('/api/health', (c) => c.json({ ok: true, authDisabled: config.authDisabled }))
 
 /** Profil de l'utilisateur connecté + données client Easybeer + grille tarifaire résolue. */
-app.get('/api/me', requireAuth, async (c) => {
+app.get('/api/me', requireFirebaseIdentity, async (c) => {
   const user = c.get('user')
 
   // Premier login après invitation : le compte devient actif.
@@ -1674,6 +1674,10 @@ async function traiterEmailAuth(
   }
   const user = await adminAuth.getUserByEmail(email).catch(() => null)
   if (!user || user.disabled) return
+  const db = getDb()
+  if (!db) return
+  const profil = (await db.collection('users').doc(user.uid).get()).data()
+  if (!comptePlateformeAutorise(profil)) return
 
   if (type === 'connexion') {
     const red = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
@@ -1734,7 +1738,7 @@ app.get('/api/invitations/:token', async (c) => {
 })
 
 /** Active l'invitation avec une session Google correspondant au compte invité. */
-app.post('/api/invitations/:token/consume-provider', requireAuth, async (c) => {
+app.post('/api/invitations/:token/consume-provider', requireFirebaseIdentity, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
 

@@ -199,14 +199,17 @@ async function onSendLoginLink() {
   sendingLink.value = true;
   try {
     // Le backend renvoie une réponse générique (aucune énumération) : on affiche
-    // toujours l'écran « consultez votre email », que le compte existe ou non.
+    // toujours le même écran de confirmation, que le compte existe ou non.
     await api.post("/auth/login-link", {
       email: email.data,
       redirect: redirectTo.value,
     });
     window.localStorage.setItem(EMAIL_STORAGE_KEY, email.data);
     lienEnvoyeA.value = email.data;
-    toast.success("Lien de connexion envoyé.");
+    toast.success("Demande prise en compte.", {
+      description:
+        "Si un compte actif correspond à cette adresse, vous recevrez un lien de connexion.",
+    });
   } catch (e) {
     afficherErreur(e);
   } finally {
@@ -305,16 +308,16 @@ async function onSubmit() {
             class="rounded-lg border border-primary/20 bg-brand-50 p-4 text-center"
           >
             <MailIcon class="mx-auto mb-2 size-5 text-primary" />
-            <p class="text-sm font-medium">Consultez votre boîte email</p>
+            <p class="text-sm font-medium">Demande prise en compte</p>
             <p class="mt-1 text-xs text-muted-foreground">
-              Cliquez sur le lien envoyé à {{ lienEnvoyeA }}. Aucun mot de passe
-              nécessaire.
+              Si un compte actif correspond à {{ lienEnvoyeA }}, vous recevrez
+              un lien de connexion. Pensez à vérifier vos courriers indésirables.
             </p>
             <Button
               variant="link"
               class="mt-2 h-auto p-0 text-xs"
               @click="lienEnvoyeA = ''"
-              >Renvoyer un lien</Button
+              >Faire une nouvelle demande</Button
             >
           </div>
 

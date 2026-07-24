@@ -19,17 +19,37 @@ export interface AuthUser {
   easybeerIdClient?: number
 }
 
+export interface ProfilPlateforme {
+  role?: 'client' | 'admin'
+  status?: 'invited' | 'active' | 'revoked'
+  easybeerIdClient?: number | null
+}
+
+/** Un compte Firebase seul ne constitue jamais une autorisation plateforme. */
+export function comptePlateformeAutorise(profil: ProfilPlateforme | null | undefined): boolean {
+  if (!profil || profil.status === 'revoked') return false
+  if (profil.role === 'admin') return true
+  return (
+    profil.role === 'client' &&
+    typeof profil.easybeerIdClient === 'number' &&
+    Number.isFinite(profil.easybeerIdClient) &&
+    profil.easybeerIdClient > 0
+  )
+}
+
 declare module 'hono' {
   interface ContextVariableMap {
     user: AuthUser
   }
 }
 
-async function resolveUser(uid: string, email?: string): Promise<AuthUser> {
+async function resolveUser(uid: string, email?: string): Promise<AuthUser | null> {
   const db = getDb()
-  if (!db) return { uid, email, role: 'client' }
+  if (!db) return null
   const snap = await db.collection('users').doc(uid).get()
+  if (!snap.exists) return null
   const data = snap.data() ?? {}
+  if (!comptePlateformeAutorise(data as ProfilPlateforme)) return null
   return {
     uid,
     email: email ?? (data.email as string | undefined),
@@ -39,7 +59,7 @@ async function resolveUser(uid: string, email?: string): Promise<AuthUser> {
   }
 }
 
-export async function requireAuth(c: Context, next: Next) {
+async function authentifier(c: Context, next: Next, autoriserIdentiteSeule: boolean) {
   if (config.authDisabled) {
     c.set('user', {
       uid: 'dev-user',
@@ -57,12 +77,27 @@ export async function requireAuth(c: Context, next: Next) {
   try {
     const decoded = await verifyIdToken(token)
     const user = await resolveUser(decoded.uid, decoded.email)
-    if (user.status === 'revoked') return c.json({ error: 'Ce compte a été révoqué' }, 401)
-    c.set('user', user)
+    if (!user && !autoriserIdentiteSeule) {
+      return c.json({ error: 'Compte non autorisé' }, 403)
+    }
+    c.set('user', user ?? { uid: decoded.uid, email: decoded.email, role: 'client' })
     return next()
   } catch {
     return c.json({ error: 'Token invalide' }, 401)
   }
+}
+
+/** Authentification + compte GOA autorisé pour toutes les routes applicatives. */
+export async function requireAuth(c: Context, next: Next) {
+  return authentifier(c, next, false)
+}
+
+/**
+ * Identité Firebase suffisante uniquement pendant l'activation : l'invitation
+ * valide associera ensuite cette identité à un véritable compte GOA.
+ */
+export async function requireFirebaseIdentity(c: Context, next: Next) {
+  return authentifier(c, next, true)
 }
 
 export async function requireAdmin(c: Context, next: Next) {
