@@ -9,6 +9,7 @@ import { dateFr, dateHeureFr, prixFr } from '@/lib/format'
 import { easybeerLien } from '@/lib/easybeer'
 import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
 import { useTriPersistant } from '@/composables/useTriPersistant'
+import { useSyncEnCours } from '@/composables/useSyncEnCours'
 import EtatBadge from '@/components/EtatBadge.vue'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import CommandeDetailDialog from '@/components/CommandeDetailDialog.vue'
@@ -43,6 +44,8 @@ const { data, isPending, isError, error } = useQuery({
 watch(data, (d) => {
   if (d?.indisponible && d.retryAfterSeconds) signalerBanEasybeer(d.retryAfterSeconds)
 })
+
+const { syncEnCours } = useSyncEnCours()
 
 const actualisation = useMutation({
   mutationFn: () => api.get<AdminCommandesResponse>('/admin/commandes?refresh=1'),
@@ -185,7 +188,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
             <div class="flex items-center gap-2">
               <Skeleton v-if="isPending" class="h-3 w-36" />
               <p v-else-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
-                À jour : {{ dateHeureFr(data.syncedAt) }}
+                Dernière mise à jour : {{ dateHeureFr(data.syncedAt) }}
             </p>
             <EasybeerLink
               :href="easybeerLien.commandes(data?.easybeerAppUrl)"
@@ -195,7 +198,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
           </div>
           <BoutonActualiser
             label="Actualiser les commandes"
-            :pending="actualisation.isPending.value"
+            :pending="actualisation.isPending.value || syncEnCours"
             @click="actualisation.mutate()"
           />
         </div>
@@ -248,7 +251,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
 
       <EasybeerIndisponible
         v-else-if="data?.indisponible"
-        :pending="actualisation.isPending.value"
+        :pending="actualisation.isPending.value || syncEnCours"
         @reessayer="actualisation.mutate()"
       />
 

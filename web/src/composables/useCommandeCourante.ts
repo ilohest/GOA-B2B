@@ -82,8 +82,14 @@ export function useCommandeCourante(modeApercu: MaybeRefOrGetter<boolean>) {
     lignesDetail.value.reduce((total, ligne) => total + ligne.sousTotal, 0),
   )
   const minimum = computed(() => profil.data.value?.client?.minimumCommande ?? null)
+  // Sous le minimum uniquement quand le panier contient déjà au moins un
+  // article : inutile d'alerter sur un panier vide (le bouton commander est de
+  // toute façon désactivé tant que nbCartons === 0).
   const sousMinimum = computed(
-    () => minimum.value != null && totalHT.value < minimum.value,
+    () =>
+      minimum.value != null &&
+      lignesDetail.value.length > 0 &&
+      totalHT.value < minimum.value,
   )
   const remisesDetail = computed(() =>
     estimerRemisesCommande(lignesDetail.value, profil.data.value?.client),

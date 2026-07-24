@@ -4,9 +4,10 @@ import { LayoutDashboard } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
-import type { AdminDashboardResponse, SyncReport, SyncStatusResponse } from '@/lib/types'
+import type { AdminDashboardResponse, SyncReport } from '@/lib/types'
 import { dateHeureFr, prixFr } from '@/lib/format'
 import { easybeerLien } from '@/lib/easybeer'
+import { useSyncEnCours } from '@/composables/useSyncEnCours'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import EasybeerLink from '@/components/admin/EasybeerLink.vue'
 import EtatBadge from '@/components/EtatBadge.vue'
@@ -23,15 +24,10 @@ const { data, isPending, isError, error } = useQuery({
   queryFn: () => api.get<AdminDashboardResponse>('/admin/dashboard'),
 })
 
-const statutSync = useQuery({
-  queryKey: ['admin', 'sync-status'],
-  queryFn: () => api.get<SyncStatusResponse>('/admin/sync/status'),
-  refetchInterval: 10_000,
-})
+const { statutSync, syncEnCours } = useSyncEnCours()
 
 type SyncStartResponse = { demarree: true } | { enCours: true } | { ok: boolean; report: SyncReport }
 
-const syncEnCours = computed(() => statutSync.data.value?.verrou?.actif === true)
 const syncGlobaleEnCours = computed(
   () => statutSync.data.value?.verrou?.actif === true && statutSync.data.value.verrou.kind === 'sync',
 )
@@ -207,7 +203,7 @@ const stats = computed(() => {
             Dernière tentative : {{ dateHeureFr(derniereTentativePartielle.syncedAt) }} · partielle
           </p>
           <p v-else-if="data?.cache.plusAncienAt" class="text-xs whitespace-nowrap text-muted-foreground">
-            Cache le plus ancien : {{ dateHeureFr(data.cache.plusAncienAt) }}
+            Dernière mise à jour : {{ dateHeureFr(data.cache.plusAncienAt) }}
           </p>
           <p v-else class="text-xs whitespace-nowrap text-muted-foreground">
             Aucune synchronisation

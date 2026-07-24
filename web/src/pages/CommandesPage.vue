@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ClipboardList, RotateCcw } from "@lucide/vue";
+import { ClipboardList, RotateCcw, Store } from "@lucide/vue";
 import { useQuery } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
@@ -101,7 +101,7 @@ async function modifier(commande: CommandeResume) {
     }
     if (!edition.lignes.length || edition.lignes.some((ligne) => ligne.idStockBouteille == null)) {
       toast.error("Cette commande ne peut pas être chargée dans le panier.", {
-        description: "Un produit de la commande n'est plus identifiable dans Easybeer.",
+        description: "Un produit de cette commande n'est plus disponible au catalogue.",
       });
       return;
     }
@@ -160,23 +160,32 @@ async function modifier(commande: CommandeResume) {
           v-if="data?.indisponible && data.source === 'local'"
           class="mb-3 text-xs text-muted-foreground"
         >
-          Historique Easybeer temporairement indisponible. Affichage des
-          commandes envoyées depuis cette plateforme.
+          Vos commandes les plus récentes s’affichent. La liste complète se met
+          à jour dans un instant.
         </p>
 
-        <p
-          v-if="data?.indisponible && !data.commandes.length"
-          class="text-sm text-muted-foreground"
+        <div
+          v-if="!data?.commandes.length"
+          class="grid justify-items-center gap-4 py-10 text-center"
         >
-          Votre historique sera disponible dès qu'Easybeer répondra à nouveau.
-        </p>
-
-        <p
-          v-else-if="!data?.commandes.length"
-          class="text-sm text-muted-foreground"
-        >
-          Aucune commande pour l'instant.
-        </p>
+          <span
+            class="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground"
+          >
+            <ClipboardList class="size-6" />
+          </span>
+          <div class="grid gap-1">
+            <p class="font-medium">Aucune commande pour l’instant.</p>
+            <p class="text-sm text-muted-foreground">
+              Parcourez la boutique et composez votre première commande.
+            </p>
+          </div>
+          <Button as-child>
+            <RouterLink :to="{ name: 'boutique' }">
+              <Store aria-hidden="true" />
+              Découvrir la boutique
+            </RouterLink>
+          </Button>
+        </div>
 
         <ul v-else class="divide-y">
           <li v-for="cmd in data.commandes" :key="cmd.idCommande" class="py-3">

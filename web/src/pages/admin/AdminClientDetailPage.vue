@@ -55,7 +55,9 @@ const invitation = useMutation({
     } else if (await copierDansPressePapiers(res.lien)) {
       toast.success("Lien sécurisé copié.");
     } else {
-      toast.error("Lien créé, mais impossible de le copier dans le presse-papiers.");
+      toast.error(
+        "Lien créé, mais impossible de le copier dans le presse-papiers.",
+      );
     }
     queryClient.invalidateQueries({ queryKey: ["admin", "client", idClient] });
     queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
@@ -312,7 +314,10 @@ function periodeRemiseCiblee(
                 class="grid gap-1.5 sm:grid-cols-[12rem_1fr] sm:items-center"
               >
                 <Skeleton class="h-3.5 w-28" />
-                <Skeleton class="h-4" :class="i % 3 === 0 ? 'w-4/5' : 'w-2/3'" />
+                <Skeleton
+                  class="h-4"
+                  :class="i % 3 === 0 ? 'w-4/5' : 'w-2/3'"
+                />
               </div>
             </CardContent>
           </Card>
@@ -447,7 +452,9 @@ function periodeRemiseCiblee(
                         type="button"
                         class="group -mx-2 -my-1 flex min-h-7 w-[calc(100%+1rem)] cursor-pointer items-center gap-1.5 rounded-sm px-2 text-left outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         :aria-label="`Copier ${i.label.toLowerCase()}`"
-                        @click="copierTexte(i.valeur, i.confirmationCopie, i.label)"
+                        @click="
+                          copierTexte(i.valeur, i.confirmationCopie, i.label)
+                        "
                       >
                         <span class="min-w-0 break-words">{{ i.valeur }}</span>
                         <Check
@@ -462,7 +469,9 @@ function periodeRemiseCiblee(
                         />
                       </button>
                     </IconTooltip>
-                    <span v-else class="min-w-0 break-words">{{ i.valeur || "—" }}</span>
+                    <span v-else class="min-w-0 break-words">{{
+                      i.valeur || "—"
+                    }}</span>
                   </dd>
                 </div>
                 <div
@@ -500,28 +509,40 @@ function periodeRemiseCiblee(
                     </button>
                   </IconTooltip>
                 </div>
-                <Badge variant="secondary">{{ tarifsPersonnalises.length }}</Badge>
+                <Badge variant="secondary">{{
+                  tarifsPersonnalises.length
+                }}</Badge>
               </div>
             </CardHeader>
             <CardContent class="grid gap-3">
-              <p v-if="!tarifsPersonnalises.length" class="text-sm text-muted-foreground">
+              <p
+                v-if="!tarifsPersonnalises.length"
+                class="text-sm text-muted-foreground"
+              >
                 Aucun tarif personnalisé pour ce client.
               </p>
               <ul v-else class="grid gap-2">
                 <li
                   v-for="tarif in tarifsPersonnalises"
-                  :key="tarif.id ?? `${tarif.idProduit}-${tarif.idContenant}-${tarif.idLot}`"
+                  :key="
+                    tarif.id ??
+                    `${tarif.idProduit}-${tarif.idContenant}-${tarif.idLot}`
+                  "
                   class="flex flex-wrap items-start justify-between gap-3 rounded-lg border bg-background p-3"
                 >
                   <div class="grid min-w-0 gap-1.5">
-                    <p class="text-sm font-medium">{{ tarif.produit || "Produit" }}</p>
+                    <p class="text-sm font-medium">
+                      {{ tarif.produit || "Produit" }}
+                    </p>
                     <ProduitFormat
                       :contenant="tarif.contenant"
                       :packaging="tarif.packaging"
                     />
                   </div>
                   <div class="text-right">
-                    <p class="font-semibold tabular-nums">{{ prixFr(tarif.prixHT) }}</p>
+                    <p class="font-semibold tabular-nums">
+                      {{ prixFr(tarif.prixHT) }}
+                    </p>
                     <p class="text-xs text-muted-foreground">HT</p>
                   </div>
                 </li>
@@ -571,7 +592,9 @@ function periodeRemiseCiblee(
                       Commande
                     </div>
                     <div class="border-b px-3 py-3 xl:border-r xl:border-b-0">
-                      <p class="mb-2 text-xs font-medium text-muted-foreground xl:hidden">
+                      <p
+                        class="mb-2 text-xs font-medium text-muted-foreground xl:hidden"
+                      >
                         Client individuel
                       </p>
                       <Badge
@@ -583,7 +606,9 @@ function periodeRemiseCiblee(
                       <span v-else class="text-muted-foreground">—</span>
                     </div>
                     <div class="grid gap-2 px-3 py-3">
-                      <p class="text-xs font-medium text-muted-foreground xl:hidden">
+                      <p
+                        class="text-xs font-medium text-muted-foreground xl:hidden"
+                      >
                         Type de client
                       </p>
                       <template
@@ -618,8 +643,12 @@ function periodeRemiseCiblee(
                     >
                       Produit
                     </div>
-                    <div class="grid gap-2 border-b px-3 py-3 xl:border-r xl:border-b-0">
-                      <p class="text-xs font-medium text-muted-foreground xl:hidden">
+                    <div
+                      class="grid gap-2 border-b px-3 py-3 xl:border-r xl:border-b-0"
+                    >
+                      <p
+                        class="text-xs font-medium text-muted-foreground xl:hidden"
+                      >
                         Client individuel
                       </p>
                       <template v-if="remisesCiblees.length">
@@ -666,7 +695,9 @@ function periodeRemiseCiblee(
                       <span v-else class="text-muted-foreground">—</span>
                     </div>
                     <div class="grid gap-2 px-3 py-3">
-                      <p class="text-xs font-medium text-muted-foreground xl:hidden">
+                      <p
+                        class="text-xs font-medium text-muted-foreground xl:hidden"
+                      >
                         Type de client
                       </p>
                       <template
@@ -781,9 +812,13 @@ function periodeRemiseCiblee(
                       size="xs"
                       variant="destructive"
                       :disabled="compteEnModification(c.uid)"
-                      @click="statutCompte.mutate({ uid: c.uid, revoked: true })"
+                      @click="
+                        statutCompte.mutate({ uid: c.uid, revoked: true })
+                      "
                     >
-                      {{ compteEnModification(c.uid) ? "Révocation…" : "Révoquer" }}
+                      {{
+                        compteEnModification(c.uid) ? "Révocation…" : "Révoquer"
+                      }}
                     </Button>
                     <Button
                       v-else-if="c.status === 'revoked'"
@@ -791,9 +826,15 @@ function periodeRemiseCiblee(
                       size="xs"
                       variant="outline"
                       :disabled="compteEnModification(c.uid)"
-                      @click="statutCompte.mutate({ uid: c.uid, revoked: false })"
+                      @click="
+                        statutCompte.mutate({ uid: c.uid, revoked: false })
+                      "
                     >
-                      {{ compteEnModification(c.uid) ? "Réactivation…" : "Réactiver" }}
+                      {{
+                        compteEnModification(c.uid)
+                          ? "Réactivation…"
+                          : "Réactiver"
+                      }}
                     </Button>
                   </div>
                 </li>
@@ -825,7 +866,9 @@ function periodeRemiseCiblee(
                 <Button
                   type="button"
                   size="sm"
-                  :disabled="invitation.isPending.value || !client?.emailPrincipal"
+                  :disabled="
+                    invitation.isPending.value || !client?.emailPrincipal
+                  "
                   @click="invitation.mutate(true)"
                 >
                   <Mail aria-hidden="true" />
@@ -849,11 +892,7 @@ function periodeRemiseCiblee(
                       : "Copier le lien sécurisé"
                   }}
                 </Button>
-                <span
-                  class="basis-full text-xs text-muted-foreground"
-                >
-                  Le client choisira toujours son adresse email à l’activation.
-                  L’adresse Easybeer sert uniquement à recevoir l’invitation.
+                <span class="basis-full text-xs text-muted-foreground">
                   Le lien est personnel, expirant et utilisable une seule fois.
                 </span>
               </div>
@@ -907,7 +946,9 @@ function periodeRemiseCiblee(
     <CommandeDetailDialog
       v-model:id-commande="commandeOuverte"
       :easybeer-app-url="data?.easybeerAppUrl"
-      :ids-commandes="data?.commandes.map((commande) => commande.idCommande) ?? []"
+      :ids-commandes="
+        data?.commandes.map((commande) => commande.idCommande) ?? []
+      "
     />
   </div>
 </template>

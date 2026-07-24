@@ -9,6 +9,7 @@ import { dateHeureFr, prixFr } from '@/lib/format'
 import { easybeerLien } from '@/lib/easybeer'
 import { useHeaderSaveBar } from '@/composables/useHeaderSaveBar'
 import { signalerBanEasybeer } from '@/composables/useEasybeerBan'
+import { useSyncEnCours } from '@/composables/useSyncEnCours'
 import PhotoUpload from '@/components/admin/PhotoUpload.vue'
 import BoutonActualiser from '@/components/admin/BoutonActualiser.vue'
 import EasybeerLink from '@/components/admin/EasybeerLink.vue'
@@ -29,6 +30,8 @@ const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'catalogue'],
   queryFn: () => api.get<CatalogueAdminResponse>('/admin/catalogue'),
 })
+
+const { syncEnCours } = useSyncEnCours()
 
 // Actualisation SCOPÉE : ne resynchronise que le catalogue (produits + grille),
 // pas les prix par client — pour ça, c'est la synchro complète du dashboard.
@@ -307,7 +310,7 @@ async function retirerPhoto(idStockBouteille: number) {
             <div class="flex items-center gap-2">
               <Skeleton v-if="isPending" class="h-3 w-36" />
               <p v-else-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
-                À jour : {{ dateHeureFr(data.syncedAt) }}
+                Dernière mise à jour : {{ dateHeureFr(data.syncedAt) }}
               </p>
               <EasybeerLink
                 :href="easybeerLien.grilleTarifaire()"
@@ -317,7 +320,7 @@ async function retirerPhoto(idStockBouteille: number) {
             </div>
             <BoutonActualiser
               label="Actualiser le catalogue"
-              :pending="actualisation.isPending.value"
+              :pending="actualisation.isPending.value || syncEnCours"
               @click="actualisation.mutate()"
             />
           </div>

@@ -25,6 +25,7 @@ import EasybeerLink from "@/components/admin/EasybeerLink.vue";
 import EasybeerIndisponible from "@/components/admin/EasybeerIndisponible.vue";
 import { signalerBanEasybeer } from "@/composables/useEasybeerBan";
 import { useTriPersistant } from "@/composables/useTriPersistant";
+import { useSyncEnCours } from "@/composables/useSyncEnCours";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,6 +79,8 @@ watch(data, (d) => {
   if (d?.indisponible && d.retryAfterSeconds)
     signalerBanEasybeer(d.retryAfterSeconds);
 });
+
+const { syncEnCours } = useSyncEnCours();
 
 const actualisation = useMutation({
   mutationFn: () => api.get<AdminClientsResponse>("/admin/clients?refresh=1"),
@@ -518,7 +521,7 @@ function ouvrirFiche(client: ClientResume) {
             <div class="flex items-center gap-2">
               <Skeleton v-if="isPending" class="h-3 w-36" />
               <p v-else-if="data?.syncedAt" class="text-xs whitespace-nowrap text-muted-foreground">
-                À jour : {{ dateHeureFr(data.syncedAt) }}
+                Dernière mise à jour : {{ dateHeureFr(data.syncedAt) }}
               </p>
               <EasybeerLink
                 :href="easybeerLien.clients()"
@@ -528,7 +531,7 @@ function ouvrirFiche(client: ClientResume) {
             </div>
             <BoutonActualiser
               label="Actualiser les clients"
-              :pending="actualisation.isPending.value"
+              :pending="actualisation.isPending.value || syncEnCours"
               @click="actualisation.mutate()"
             />
           </div>
@@ -626,7 +629,7 @@ function ouvrirFiche(client: ClientResume) {
 
         <EasybeerIndisponible
           v-else-if="data?.indisponible"
-          :pending="actualisation.isPending.value"
+          :pending="actualisation.isPending.value || syncEnCours"
           @reessayer="actualisation.mutate()"
         />
 

@@ -160,7 +160,7 @@ onMounted(async () => {
     :class="defilementContraint ? 'overflow-hidden' : ''"
   >
     <p v-if="!lignes.length" class="text-sm text-muted-foreground">
-      Votre panier est vide — ajoutez des cartons depuis le catalogue.
+      Votre panier est vide — ajoutez des articles depuis le catalogue.
     </p>
     <div v-if="editable && lignes.length" class="flex shrink-0 justify-end">
       <button
@@ -196,111 +196,120 @@ onMounted(async () => {
             :key="l.idStockBouteille"
             class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
           >
-          <div class="grid min-w-0 gap-1">
-            <div class="flex items-start justify-between gap-3">
-              <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
-              <span
-                class="grid shrink-0 justify-items-end gap-0.5 whitespace-nowrap tabular-nums"
+            <div class="grid min-w-0 gap-1">
+              <div class="flex items-start justify-between gap-3">
+                <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
+                <span
+                  class="grid shrink-0 justify-items-end gap-0.5 whitespace-nowrap tabular-nums"
+                >
+                  <template v-if="remisePour(l.idStockBouteille)">
+                    <span class="text-xs text-muted-foreground line-through">
+                      {{ prixFr(l.sousTotal) }}
+                    </span>
+                    <span class="font-semibold text-primary">
+                      {{
+                        prixFr(
+                          l.sousTotal - remisePour(l.idStockBouteille)!.montant,
+                        )
+                      }}
+                    </span>
+                  </template>
+                  <span v-else class="font-medium">{{
+                    prixFr(l.sousTotal)
+                  }}</span>
+                </span>
+              </div>
+              <ProduitFormat
+                class="mt-0.5"
+                :contenant="l.contenant"
+                :packaging="l.packaging"
+                nowrap
+              />
+              <Badge
+                v-if="l.historique"
+                variant="secondary"
+                class="mt-0.5 w-fit"
               >
-                <template v-if="remisePour(l.idStockBouteille)">
-                  <span class="text-xs text-muted-foreground line-through">
-                    {{ prixFr(l.sousTotal) }}
-                  </span>
-                  <span class="font-semibold text-primary">
-                    {{
-                      prixFr(
-                        l.sousTotal - remisePour(l.idStockBouteille)!.montant,
-                      )
-                    }}
-                  </span>
-                </template>
-                <span v-else class="font-medium">{{ prixFr(l.sousTotal) }}</span>
+                Hors catalogue
+              </Badge>
+              <span class="text-muted-foreground">
+                {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
               </span>
             </div>
-            <ProduitFormat
-              class="mt-0.5"
-              :contenant="l.contenant"
-              :packaging="l.packaging"
-              nowrap
-            />
-            <Badge v-if="l.historique" variant="secondary" class="mt-0.5 w-fit">
-              Hors catalogue
-            </Badge>
-            <span class="text-muted-foreground">
-              {{ l.quantite }} × {{ prixFr(l.prixUnitaireHT) }} HT
-            </span>
-          </div>
 
-          <div
-            v-if="remisePour(l.idStockBouteille)"
-            class="flex items-center justify-between gap-3 rounded-md bg-primary/5 px-2.5 py-2 text-xs text-primary"
-          >
-            <Badge
-              variant="secondary"
-              class="border border-primary/15 bg-background text-primary"
-            >
-              Remise {{ remisePour(l.idStockBouteille)!.remiseLabel }}
-            </Badge>
-            <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">
-              − {{ prixFr(remisePour(l.idStockBouteille)!.montant) }}
-            </span>
-          </div>
-
-          <div v-if="editable" class="flex items-center justify-between gap-2">
             <div
-              class="inline-grid h-8 grid-cols-[2rem_2.5rem_2rem] items-center rounded-full border bg-background"
+              v-if="remisePour(l.idStockBouteille)"
+              class="flex items-center justify-between gap-3 rounded-md bg-primary/5 px-2.5 py-2 text-xs text-primary"
             >
+              <Badge
+                variant="secondary"
+                class="border border-primary/15 bg-background text-primary"
+              >
+                Remise {{ remisePour(l.idStockBouteille)!.remiseLabel }}
+              </Badge>
+              <span class="shrink-0 whitespace-nowrap font-medium tabular-nums">
+                − {{ prixFr(remisePour(l.idStockBouteille)!.montant) }}
+              </span>
+            </div>
+
+            <div
+              v-if="editable"
+              class="flex items-center justify-between gap-2"
+            >
+              <div
+                class="inline-grid h-8 grid-cols-[2rem_2.5rem_2rem] items-center rounded-full border bg-background"
+              >
+                <button
+                  type="button"
+                  class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  :aria-label="`Retirer ${l.pas ?? 1} de ${l.libelle}`"
+                  @click="emit('changer', l.idStockBouteille, -(l.pas ?? 1))"
+                >
+                  {{ (l.pas ?? 1) > 1 ? `−${l.pas}` : "−" }}
+                </button>
+                <span class="text-center font-semibold tabular-nums">{{
+                  l.quantite
+                }}</span>
+                <button
+                  type="button"
+                  class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  :aria-label="`Ajouter ${l.pas ?? 1} à ${l.libelle}`"
+                  :disabled="
+                    l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum
+                  "
+                  :class="
+                    l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum
+                      ? 'cursor-not-allowed opacity-35'
+                      : ''
+                  "
+                  @click="emit('changer', l.idStockBouteille, l.pas ?? 1)"
+                >
+                  {{ (l.pas ?? 1) > 1 ? `+${l.pas}` : "+" }}
+                </button>
+              </div>
               <button
                 type="button"
-                class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                :aria-label="`Retirer ${l.pas ?? 1} de ${l.libelle}`"
-                @click="emit('changer', l.idStockBouteille, -(l.pas ?? 1))"
+                class="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                :aria-label="`Supprimer ${l.libelle}`"
+                @click="emit('supprimer', l.idStockBouteille)"
               >
-                {{ (l.pas ?? 1) > 1 ? `−${l.pas}` : "−" }}
-              </button>
-              <span class="text-center font-semibold tabular-nums">{{
-                l.quantite
-              }}</span>
-              <button
-                type="button"
-                class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                :aria-label="`Ajouter ${l.pas ?? 1} à ${l.libelle}`"
-                :disabled="
-                  l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum
-                "
-                :class="
-                  l.quantiteMaximum != null && l.quantite >= l.quantiteMaximum
-                    ? 'cursor-not-allowed opacity-35'
-                    : ''
-                "
-                @click="emit('changer', l.idStockBouteille, l.pas ?? 1)"
-              >
-                {{ (l.pas ?? 1) > 1 ? `+${l.pas}` : "+" }}
+                <Trash2 class="size-4" />
               </button>
             </div>
-            <button
-              type="button"
-              class="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              :aria-label="`Supprimer ${l.libelle}`"
-              @click="emit('supprimer', l.idStockBouteille)"
-            >
-              <Trash2 class="size-4" />
-            </button>
-          </div>
 
-          <div
-            v-if="editable && (l.pas ?? 1) > 1"
-            class="text-xs text-muted-foreground"
-          >
-            Par {{ l.pas }} cartons
-          </div>
-          <p
-            v-if="editable && l.quantiteMaximum != null"
-            class="text-xs text-muted-foreground"
-          >
-            Ce produit n'est plus proposé actuellement : sa quantité peut être
-            réduite, mais pas augmentée.
-          </p>
+            <div
+              v-if="editable && (l.pas ?? 1) > 1"
+              class="text-xs text-muted-foreground"
+            >
+              Par {{ l.pas }} cartons
+            </div>
+            <p
+              v-if="editable && l.quantiteMaximum != null"
+              class="text-xs text-muted-foreground"
+            >
+              Ce produit n'est plus proposé actuellement : sa quantité peut être
+              réduite, mais pas augmentée.
+            </p>
           </li>
         </TransitionGroup>
       </ul>

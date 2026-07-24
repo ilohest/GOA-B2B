@@ -216,10 +216,10 @@ watch(
         </div>
       </div>
 
-      <!-- Ban Easybeer : message doux + réessai, plutôt qu'une erreur rouge -->
+      <!-- Détail momentanément indisponible : message doux + réessai, plutôt qu'une erreur rouge -->
       <div v-else-if="isError && banni" class="grid justify-items-center gap-3 py-4 text-center">
         <p class="text-sm text-muted-foreground">
-          Le détail est lu en direct dans Easybeer, momentanément saturé.
+          Le détail de la commande n’est pas disponible pour le moment.
           Réessayez dans {{ secondesRestantes }} s.
         </p>
         <Button variant="outline" size="sm" :disabled="isFetching || banni" @click="refetch()">
