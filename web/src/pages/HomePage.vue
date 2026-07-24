@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { RotateCcw, Store } from "@lucide/vue";
+import { Loader2, RotateCcw, Store } from "@lucide/vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useMediaQuery, useScrollLock } from "@vueuse/core";
 import { toast } from "vue-sonner";
@@ -167,7 +167,8 @@ const scrollPageVerrouille = useScrollLock(() =>
   typeof document === "undefined" ? null : document.body,
 );
 watchEffect(() => {
-  scrollPageVerrouille.value = barreDepliee.value && affichageMobile.value;
+  scrollPageVerrouille.value =
+    comptePreparation.value || (barreDepliee.value && affichageMobile.value);
 });
 
 function ouvrirRecap() {
@@ -249,23 +250,32 @@ function viderPanierAvecAnnulation() {
         </Button>
       </div>
 
-      <!-- Compte fraîchement activé : les prix se préparent -->
+      <!-- Compte fraîchement activé : overlay bloquant tant que les prix se
+           préparent. Il se ferme seul dès que le cache client est prêt (la
+           requête /me & catalogue rafraîchit automatiquement). -->
       <div
         v-if="comptePreparation"
-        class="flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        class="fixed inset-0 z-50 grid place-items-center bg-background/85 p-4 backdrop-blur-sm"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
       >
-        <span
-          class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-amber-700 shadow-xs"
+        <div
+          class="grid max-w-sm justify-items-center gap-4 rounded-2xl border bg-card px-6 py-8 text-center shadow-lg"
         >
-          <Store class="size-4" />
-        </span>
-        <div class="grid gap-0.5">
-          <p class="font-medium">Votre compte se prépare…</p>
-          <p>
-            Vos tarifs sont en cours de chargement. Patientez quelques instants
-            : la page se met à jour automatiquement. Si rien ne change,
-            rafraîchissez la page.
-          </p>
+          <span
+            class="grid size-14 place-items-center rounded-full bg-primary/10 text-primary"
+          >
+            <Loader2 class="size-7 animate-spin" />
+          </span>
+          <div class="grid gap-1.5">
+            <p class="text-base font-semibold">Votre compte se prépare…</p>
+            <p class="text-sm text-muted-foreground">
+              Nous chargeons vos tarifs personnalisés. Votre boutique s’ouvre
+              dans un instant — inutile de rafraîchir, la page se met à jour
+              toute seule.
+            </p>
+          </div>
         </div>
       </div>
 

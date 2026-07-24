@@ -21,7 +21,6 @@ import { randomUUID } from 'node:crypto'
 import { config } from './config.js'
 import {
   EasybeerBanError,
-  detailCommande,
   getClient,
   getPrix,
   listeClients,
@@ -30,7 +29,6 @@ import {
   listeDocumentsFacturesRecentes,
   listeProduitsAutocomplete,
   listeTypesClient,
-  idStockBouteilleElementCommande,
   matriceGrille,
   resoudreGrilleRacine,
   type CommandeResume,
@@ -41,7 +39,6 @@ import {
   type ModeleClientType,
   type ProduitAutocomplete,
 } from './easybeer.js'
-import { litresParArticle } from './volumeCommande.js'
 
 // NB : l'espacement des appels est garanti globalement par la file d'attente
 // du client easybeer.ts — pas de délai à gérer ici.
@@ -503,8 +500,6 @@ export interface CommandeResumeCache {
   totalHT: number | null
   totalTTC: number | null
   dateCreation: number | null
-  /** Volume total commandé, calculé depuis les lignes du détail Easybeer. */
-  volumeLitres: number | null
 }
 
 export interface CommandeClientCache {
@@ -568,64 +563,6 @@ function resumerCommande(
     totalHT: r.totalHT ?? null,
     totalTTC: r.totalTTC ?? null,
     dateCreation: r.dateCreation == null ? null : new Date(r.dateCreation).getTime() || null,
-    volumeLitres: null,
-  }
-}
-
-async function enrichirVolumesCommandes(
-  db: Firestore,
-  commandes: CommandeResumeCache[],
-  anciennes: CommandeResumeCache[],
-) {
-  const ancienneParId = new Map(anciennes.map((commande) => [commande.idCommande, commande]))
-  for (const commande of commandes) {
-    commande.volumeLitres = ancienneParId.get(commande.idCommande)?.volumeLitres ?? null
-  }
-  const grille = await lireGrilleTarifaire(db)
-  const litresParStock = new Map<number, number>()
-  for (const ligne of grille.lignes) {
-    if (ligne.idStockBouteille == null || litresParStock.has(ligne.idStockBouteille)) continue
-    const litres = litresParArticle(ligne.contenant, ligne.quantite, ligne.packaging)
-    if (litres != null) litresParStock.set(ligne.idStockBouteille, litres)
-  }
-
-  for (const commande of commandes) {
-    if (commande.idCommande == null) continue
-    const ancienne = ancienneParId.get(commande.idCommande)
-    if (
-      ancienne?.volumeLitres != null &&
-      ancienne.totalHT === commande.totalHT &&
-      ancienne.totalTTC === commande.totalTTC
-    ) {
-      commande.volumeLitres = ancienne.volumeLitres
-      continue
-    }
-    try {
-      const detail = await avecRetry(
-        `volume commande ${commande.idCommande}`,
-        () => detailCommande(commande.idCommande!),
-        (valeur) => Array.isArray(valeur.elementsBouteilles),
-        2,
-      )
-      const elements = (detail.elementsBouteilles as Record<string, unknown>[] | undefined) ?? []
-      let volume = 0
-      let complet = true
-      for (const element of elements) {
-        const quantite = Number(element.quantite)
-        const idStockBouteille = idStockBouteilleElementCommande(element)
-        const litres = idStockBouteille == null ? null : litresParStock.get(idStockBouteille)
-        if (!Number.isFinite(quantite) || quantite <= 0) continue
-        if (litres == null) {
-          complet = false
-          break
-        }
-        volume += quantite * litres
-      }
-      commande.volumeLitres = complet ? Math.round(volume * 1000) / 1000 : null
-    } catch (erreur) {
-      commande.volumeLitres = ancienne?.volumeLitres ?? null
-      if (erreur instanceof EasybeerBanError) break
-    }
   }
 }
 
@@ -671,7 +608,6 @@ export async function syncCommandesRecentes(db: Firestore): Promise<CommandeResu
     // on conserve le cache commandes sans bloquer la synchro principale.
   }
   const resumees = commandes.map((cmd) => resumerCommande(cmd, facturesParCommande))
-  await enrichirVolumesCommandes(db, resumees, anciennes)
   await db.doc('cache/commandesRecentes').set({
     commandes: resumees,
     syncedAt: Date.now(),
@@ -805,8 +741,10 @@ async function lancerRafraichissementCacheSimple(
 
 /**
  * Lecture stale-while-revalidate des listes. Une valeur fraîche est rendue
- * sans toucher Easybeer. Une valeur ancienne ou absente est renouvelée sous
- * verrou ; si Easybeer échoue, le dernier snapshot reste disponible.
+ * sans toucher Easybeer. Une valeur ancienne est rendue **immédiatement** et la
+ * revalidation part en arrière-plan : la réponse n'attend jamais Easybeer tant
+ * qu'un cache existe. Seuls un premier remplissage (aucun cache) ou un refresh
+ * explicite (bouton « Actualiser ») attendent le résultat de la synchro.
  */
 async function lireCacheOuRemplir(
   db: Firestore,
@@ -825,6 +763,17 @@ async function lireCacheOuRemplir(
     (options.ageRefreshMs != null && cacheEstAncien(syncedAt, options.ageRefreshMs))
   if (!doitRafraichir) return { items: (cache?.[cle] as unknown[]) ?? [], syncedAt }
 
+  // Cache ancien mais présent, sur une lecture automatique : on ne bloque pas.
+  // On renvoie la valeur ancienne et on lance la revalidation en fond (le bail
+  // Firestore et le cooldown évitent les rafales et les doublons).
+  if (cache && !options.forcerRefresh) {
+    void lancerRafraichissementCacheSimple(db, cleVerrou, remplir, true).catch((e) => {
+      console.warn(`[cache] revalidation en fond échouée (${cleVerrou}) :`, (e as Error).message)
+    })
+    return { items: (cache[cle] as unknown[]) ?? [], syncedAt, revalidationEnCours: true }
+  }
+
+  // Premier remplissage (aucun cache) ou refresh explicite : on attend Easybeer.
   try {
     const resultat = await lancerRafraichissementCacheSimple(db, cleVerrou, remplir, !options.forcerRefresh)
     if ('enCours' in resultat) {

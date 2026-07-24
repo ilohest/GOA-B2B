@@ -79,8 +79,6 @@ export interface AdminDashboardResponse {
     statuts: { etat: EtatCommande; nombre: number }[]
     caHT: number
     caTTC: number
-    /** Null tant que les lignes des commandes n'ont pas toutes été enrichies. */
-    volumeLitres: number | null
   }
   catalogue: { produits: number; visibles: number; ruptures: number }
   cache: {

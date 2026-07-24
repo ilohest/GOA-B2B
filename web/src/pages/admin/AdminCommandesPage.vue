@@ -34,6 +34,9 @@ const commandeOuverte = ref<number | null>(null)
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'commandes'],
   queryFn: () => api.get<AdminCommandesResponse>('/admin/commandes'),
+  // La liste ancienne est rendue tout de suite pendant que le serveur revalide
+  // en fond ; on refetch tant que la synchro n'a pas produit une donnée fraîche.
+  refetchInterval: (query) => (query.state.data?.revalidationEnCours ? 30000 : false),
 })
 
 // Alimente le compte à rebours partagé quand la donnée n'est pas dispo.

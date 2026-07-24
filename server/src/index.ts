@@ -1383,6 +1383,13 @@ app.post('/api/admin/invitations', requireAuth, requireAdmin, async (c) => {
       res.compteExistant ? 409 : 400,
     )
   }
+  // Préchauffe le cache client dès l'invitation : au moment où le client
+  // cliquera son lien (souvent bien plus tard), sa boutique aura déjà ses prix,
+  // sans écran « compte en préparation ». Anti-rafale et cooldown intégrés.
+  const idClient = parse.data.easybeerIdClient
+  remplirCacheClientCible(db, idClient).catch((e) =>
+    console.warn(`[sync] préchauffage à l'invitation (client ${idClient}) : ${(e as Error).message}`),
+  )
   return c.json(res)
 })
 
@@ -1451,6 +1458,13 @@ app.post('/api/admin/invitations/bulk', requireAuth, requireAdmin, async (c) => 
     try {
       const res = await inviterEtEnvoyer(db, adminUid, inv.easybeerIdClient, inv.email)
       resultats.push({ easybeerIdClient: inv.easybeerIdClient, ...res })
+      // Préchauffage du cache client (voir invitation unitaire) : les appels
+      // Easybeer sont sérialisés par la file du client, donc pas de rafale.
+      if (res.ok) {
+        remplirCacheClientCible(db, inv.easybeerIdClient).catch((e) =>
+          console.warn(`[sync] préchauffage à l'invitation groupée (client ${inv.easybeerIdClient}) : ${(e as Error).message}`),
+        )
+      }
     } catch (e) {
       resultats.push({ easybeerIdClient: inv.easybeerIdClient, ok: false as const, erreur: (e as Error).message })
     }
@@ -1911,7 +1925,6 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     totalTTC: number | null
     dateCreation: number | null
     etat: { code: string; libelle: string; couleur: string | null }
-    volumeLitres?: number | null
   }[]
   const produits = (catalogueSnap.data()?.produits ?? []) as unknown[]
   const clientsSyncedAt = (clientsSnap.data()?.syncedAt as number | undefined) ?? null
@@ -1964,10 +1977,6 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     0,
   )
   const caTTC30j = commandes30j.reduce((somme, cmd) => somme + (cmd.totalTTC ?? 0), 0)
-  const volumes30jComplets = commandes30j.every((commande) => typeof commande.volumeLitres === 'number')
-  const volumeLitres30j = volumes30jComplets
-    ? commandes30j.reduce((somme, commande) => somme + (commande.volumeLitres ?? 0), 0)
-    : null
 
   const statutsComptes = Object.values(comptes)
   let visibles = 0
@@ -1985,7 +1994,6 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
       statuts: statutsCommandes30j,
       caHT: caHT30j,
       caTTC: caTTC30j,
-      volumeLitres: volumeLitres30j,
     },
     catalogue: { produits: produits.length, visibles, ruptures },
     cache: {

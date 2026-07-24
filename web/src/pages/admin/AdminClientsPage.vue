@@ -69,6 +69,9 @@ const queryClient = useQueryClient();
 const { data, isPending, isError, error } = useQuery({
   queryKey: ["admin", "clients"],
   queryFn: () => api.get<AdminClientsResponse>("/admin/clients"),
+  // Liste ancienne rendue tout de suite pendant que le serveur revalide en fond.
+  refetchInterval: (query) =>
+    query.state.data?.revalidationEnCours ? 30000 : false,
 });
 
 watch(data, (d) => {
