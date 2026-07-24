@@ -478,20 +478,6 @@ async function retirerPhoto(idStockBouteille: number) {
                   <div class="mt-2 flex flex-wrap gap-1.5">
                     <Badge variant="outline">{{ u.contenant }}</Badge>
                     <Badge variant="outline">{{ u.packaging }}</Badge>
-                    <Badge
-                      variant="secondary"
-                      :class="overrideAffiche(u).rupture
-                        ? 'border border-destructive/20 bg-destructive/10 text-destructive'
-                        : 'border border-primary/20 bg-primary/10 text-primary'"
-                    >
-                      <PackageX v-if="overrideAffiche(u).rupture" class="size-3" />
-                      <PackageCheck v-else class="size-3" />
-                      {{ overrideAffiche(u).rupture ? 'Rupture' : 'Disponible' }}
-                    </Badge>
-                    <Badge v-if="!overrideAffiche(u).visible" variant="secondary" class="border border-border bg-muted text-foreground">
-                      <EyeOff class="size-3" />
-                      Masqué
-                    </Badge>
                   </div>
                 </div>
               </div>
