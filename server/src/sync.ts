@@ -138,8 +138,12 @@ export function normaliserTarifsPersonnalises(
 
 /** Fiche client réduite aux champs exploités par la plateforme. */
 export function allegerClient(c: ModeleClient, types: ModeleClientType[] = []) {
-  const remiseType = premiereRemiseType(c.type?.idClientType, types)
-  const remisesCibleesSegment = remisesCibleesTypes(c.type?.idClientType, types)
+  const remiseIndividuelle = c.remise?.trim() || null
+  const typeAvecRemise = typesClientEnCascade(c.type?.idClientType, types).find((type) => type.remise?.trim())
+  const remiseType = typeAvecRemise?.remise?.trim() || null
+  const remisesCibleesSegment = typesClientEnCascade(c.type?.idClientType, types).flatMap((type) =>
+    (type.listeRemises ?? []).map((remise) => ({ remise, segmentLibelle: type.libelle?.trim() || null })),
+  )
   return {
     idClient: c.idClient ?? null,
     nom: c.nom ?? null,
@@ -149,7 +153,9 @@ export function allegerClient(c: ModeleClient, types: ModeleClientType[] = []) {
     type: c.type ? { idClientType: c.type.idClientType ?? null, libelle: c.type.libelle ?? null } : null,
     minimumCommande: c.minimumCommande ?? c.minimumCommandeAutorise ?? null,
     fraisLivraisonHT: c.fraisLivraisonHT ?? null,
-    remise: c.remise ?? remiseType ?? null,
+    remise: remiseIndividuelle ?? remiseType,
+    remiseScope: remiseIndividuelle ? ('client' as const) : remiseType ? ('segment' as const) : null,
+    remiseScopeLibelle: remiseIndividuelle ? null : typeAvecRemise?.libelle?.trim() || null,
     remise2: c.remise2 ?? null,
     typeRemise2: c.typeRemise2 ?? null,
     // La PORTÉE est conservée : Easybeer applique en priorité la remise produit
@@ -158,7 +164,13 @@ export function allegerClient(c: ModeleClient, types: ModeleClientType[] = []) {
     // 20 %). Le champ `scope` porte cette distinction pour la résolution.
     remisesCiblees: [
       ...normaliserRemisesCibleesCache(c.listeRemises).map((r) => ({ ...r, scope: 'client' as const })),
-      ...normaliserRemisesCibleesCache(remisesCibleesSegment).map((r) => ({ ...r, scope: 'segment' as const })),
+      ...remisesCibleesSegment.flatMap(({ remise, segmentLibelle }) =>
+        normaliserRemisesCibleesCache([remise]).map((r) => ({
+          ...r,
+          scope: 'segment' as const,
+          scopeLibelle: segmentLibelle,
+        })),
+      ),
     ],
     typeLivraisonFav: c.typeLivraisonFav ?? null,
     tags: c.tags ?? null,
@@ -193,6 +205,16 @@ function nombreDepuis(record: Record<string, unknown> | null, cles: string[]) {
   return null
 }
 
+function dateIsoDepuis(record: Record<string, unknown>, cles: string[]) {
+  for (const cle of cles) {
+    const valeur = record[cle]
+    if (typeof valeur !== 'string' && typeof valeur !== 'number') continue
+    const date = new Date(valeur)
+    if (!Number.isNaN(date.getTime())) return date.toISOString()
+  }
+  return null
+}
+
 function normaliserRemisesCibleesCache(remises: Record<string, unknown>[] | undefined) {
   return (remises ?? []).map((remise) => {
     const produit = sousObjet(remise, ['produit', 'modeleProduit', 'stockProduit'])
@@ -208,6 +230,13 @@ function normaliserRemisesCibleesCache(remises: Record<string, unknown>[] | unde
       quantite: nombreDepuis(remise, ['quantite', 'quantiteMin', 'minimum']),
       remise: texteDepuis(remise, ['remise', 'valeur', 'montant']),
       type: texteDepuis(remise, ['type', 'typeRemise']),
+      produit: texteDepuis(produit, ['libelle', 'nom', 'designation']) ?? texteDepuis(remise, ['produit', 'libelleProduit']),
+      contenant:
+        texteDepuis(contenant, ['libelleAvecContenance', 'libelle', 'nom']) ??
+        texteDepuis(remise, ['contenant', 'libelleContenant']),
+      packaging: texteDepuis(lot, ['libelle', 'nom']) ?? texteDepuis(remise, ['lot', 'packaging', 'libelleLot']),
+      dateDebut: dateIsoDepuis(remise, ['dateDebut', 'debut']),
+      dateFin: dateIsoDepuis(remise, ['dateFin', 'fin']),
     }
   })
 }

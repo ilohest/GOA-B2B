@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ArrowDown, ArrowUp, ArrowUpDown, FileText, ReceiptText } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
@@ -30,6 +31,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 const queryClient = useQueryClient()
+const route = useRoute()
 const commandeOuverte = ref<number | null>(null)
 
 const { data, isPending, isError, error } = useQuery({
@@ -115,8 +117,26 @@ function basculerDirectionTri() {
   pageCourante.value = 1
 }
 
+const filtreStatut = computed(() =>
+  typeof route.query.statut === 'string' && route.query.statut.trim()
+    ? route.query.statut
+    : null,
+)
+const commandesFiltrees = computed(() =>
+  filtreStatut.value
+    ? (data.value?.commandes ?? []).filter(
+        (commande) => String(commande.etat.code) === filtreStatut.value,
+      )
+    : (data.value?.commandes ?? []),
+)
+const etatFiltre = computed(() =>
+  data.value?.commandes.find(
+    (commande) => String(commande.etat.code) === filtreStatut.value,
+  )?.etat,
+)
+
 const commandesTriees = computed(() =>
-  [...(data.value?.commandes ?? [])].sort((a, b) => {
+  [...commandesFiltrees.value].sort((a, b) => {
     const va = valeurTri(a, tri.value.cle)
     const vb = valeurTri(b, tri.value.cle)
     const resultat =
@@ -141,6 +161,9 @@ const commandesAffichees = computed(() => {
 
 watch(totalPages, (pages) => {
   if (pageCourante.value > pages) pageCourante.value = pages
+})
+watch(filtreStatut, () => {
+  pageCourante.value = 1
 })
 
 function changerLignesParPage(valeur: unknown) {
@@ -256,6 +279,22 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
       />
 
       <template v-else>
+        <div
+          v-if="filtreStatut"
+          class="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2"
+        >
+          <span class="text-xs font-medium text-muted-foreground">Filtre actif</span>
+          <EtatBadge
+            v-if="etatFiltre"
+            :etat="etatFiltre"
+            :nombre="totalCommandes"
+          />
+          <span v-else class="text-sm font-medium">Statut {{ filtreStatut }}</span>
+          <Button variant="ghost" size="sm" class="ml-auto h-7" as-child>
+            <RouterLink :to="{ name: 'admin-commandes' }">Afficher toutes</RouterLink>
+          </Button>
+        </div>
+
         <div class="grid gap-3 md:hidden">
           <div class="grid gap-2 rounded-lg border bg-muted/30 p-3">
             <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Trier par</span>

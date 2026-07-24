@@ -19,6 +19,10 @@ const queryClient = useQueryClient()
 const SYNC_ATTENTION_MS = 30 * 60 * 60 * 1000
 const TOAST_SYNC_ID = 'admin-sync'
 
+function accord(nombre: number, singulier: string, pluriel: string) {
+  return nombre === 1 ? singulier : pluriel
+}
+
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'dashboard'],
   queryFn: () => api.get<AdminDashboardResponse>('/admin/dashboard'),
@@ -43,7 +47,7 @@ function notifierRapportSync(report: SyncReport) {
   if (report.reussi) {
     toast.success('Synchronisation réussie.', {
       id: TOAST_SYNC_ID,
-      description: `${report.produits} produit(s), ${report.listeClients} client(s) et ${report.commandesRecentes} commande(s) actualisés (${duree} s).`,
+      description: `${report.produits} ${accord(report.produits, 'produit', 'produits')}, ${report.listeClients} ${accord(report.listeClients, 'client', 'clients')} et ${report.commandesRecentes} ${accord(report.commandesRecentes, 'commande', 'commandes')} actualisés (${duree} s).`,
     })
     return
   }
@@ -52,7 +56,7 @@ function notifierRapportSync(report: SyncReport) {
   toast.warning('Synchronisation partielle.', {
     id: TOAST_SYNC_ID,
     description: nbErreurs > 0
-      ? `${nbErreurs} erreur(s) rencontrée(s) — le dernier cache valide est conservé (${duree} s).`
+      ? `${nbErreurs} ${accord(nbErreurs, 'erreur rencontrée', 'erreurs rencontrées')} — le dernier cache valide est conservé (${duree} s).`
       : `Certaines données n’ont pas pu être actualisées — le dernier cache valide est conservé (${duree} s).`,
   })
 }
@@ -148,14 +152,48 @@ const diagnosticSync = computed(() => {
   return 'Aucun ban local actif détecté.'
 })
 
-const stats = computed(() => {
+type CarteStatistique = {
+  titre: string
+  valeur: string
+  libelle: string
+  indicateurs: Array<{
+    valeur: string
+    libelle: string
+    principal?: boolean
+    complement?: string
+    lien?: string | { name: string; query: Record<string, string> }
+  }>
+  statuts?: AdminDashboardResponse['commandes30j']['statuts']
+  lien: string
+  lienPrincipal?: string | { name: string; query: Record<string, string> }
+  easybeer: string
+  action: string
+}
+
+const stats = computed<CarteStatistique[]>(() => {
   const d = data.value
   if (!d) return []
   return [
     {
       titre: 'Clients',
       valeur: String(d.clients.total),
-      detail: `${d.clients.avecCompte} avec compte, dont ${d.clients.actifs} actif(s)`,
+      libelle: accord(d.clients.total, 'client synchronisé', 'clients synchronisés'),
+      indicateurs: [
+        {
+          valeur: String(d.clients.actifs),
+          libelle: accord(d.clients.actifs, 'client actif', 'clients actifs'),
+          lien: { name: 'admin-clients', query: { compte: 'actif' } },
+        },
+        {
+          valeur: String(Math.max(0, d.clients.total - d.clients.actifs)),
+          libelle: accord(
+            Math.max(0, d.clients.total - d.clients.actifs),
+            'client inactif',
+            'clients inactifs',
+          ),
+          lien: { name: 'admin-clients', query: { compte: 'inactif' } },
+        },
+      ],
       lien: '/admin/clients',
       easybeer: easybeerLien.clients(),
       action: 'Gérer les clients',
@@ -163,7 +201,15 @@ const stats = computed(() => {
     {
       titre: 'Commandes (30 j)',
       valeur: String(d.commandes30j.nombre),
-      detail: `${prixFr(d.commandes30j.caHT)} HT · ${prixFr(d.commandes30j.caTTC)} TTC`,
+      libelle: accord(d.commandes30j.nombre, 'commande enregistrée', 'commandes enregistrées'),
+      indicateurs: [
+        {
+          valeur: prixFr(d.commandes30j.caHT),
+          libelle: 'Chiffre d’affaires HT',
+          principal: true,
+          complement: `${prixFr(d.commandes30j.caTTC)} TTC`,
+        },
+      ],
       statuts: d.commandes30j.statuts,
       lien: '/admin/commandes',
       easybeer: easybeerLien.commandes(),
@@ -171,12 +217,21 @@ const stats = computed(() => {
     },
     {
       titre: 'Catalogue',
-      valeur: `${d.catalogue.visibles}/${d.catalogue.produits}`,
-      detail:
-        d.catalogue.ruptures > 0
-          ? `produits visibles — ${d.catalogue.ruptures} en rupture`
-          : 'produits visibles',
+      valeur: String(d.catalogue.visibles),
+      libelle: accord(d.catalogue.visibles, 'produit visible', 'produits visibles'),
+      indicateurs: [
+        {
+          valeur: String(d.catalogue.produits),
+          libelle: accord(d.catalogue.produits, 'produit référencé', 'produits référencés'),
+        },
+        {
+          valeur: String(d.catalogue.ruptures),
+          libelle: accord(d.catalogue.ruptures, 'produit en rupture', 'produits en rupture'),
+          lien: { name: 'admin-catalogue', query: { rupture: '1' } },
+        },
+      ],
       lien: '/admin/catalogue',
+      lienPrincipal: { name: 'admin-catalogue', query: { visible: '1' } },
       easybeer: easybeerLien.grilleTarifaire(),
       action: 'Gérer le catalogue',
     },
@@ -228,10 +283,15 @@ const stats = computed(() => {
         <Skeleton class="absolute top-3 right-3 size-8 rounded-full" />
         <CardHeader class="gap-2 pb-2">
           <Skeleton class="h-3.5 w-28" />
-          <Skeleton class="h-9 w-20" />
+          <div class="flex items-end gap-2">
+            <Skeleton class="h-9 w-20" />
+            <Skeleton class="mb-1 h-3 w-32" />
+          </div>
         </CardHeader>
         <CardContent class="grid gap-3">
-          <Skeleton class="h-4 w-4/5" />
+          <div class="grid grid-cols-2 gap-2">
+            <Skeleton v-for="j in 2" :key="j" class="h-16 rounded-lg" />
+          </div>
           <Skeleton class="h-8 w-32 rounded-md" />
         </CardContent>
       </Card>
@@ -262,17 +322,51 @@ const stats = computed(() => {
           />
           <CardHeader class="pb-2">
             <CardDescription>{{ s.titre }}</CardDescription>
-            <CardTitle class="text-3xl tracking-tight">{{ s.valeur }}</CardTitle>
+            <RouterLink
+              :to="s.lienPrincipal ?? s.lien"
+              class="-m-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md p-1 outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              <CardTitle class="text-3xl tracking-tight">{{ s.valeur }}</CardTitle>
+              <p class="text-sm font-medium text-muted-foreground">{{ s.libelle }}</p>
+            </RouterLink>
           </CardHeader>
           <CardContent class="flex flex-1 flex-col gap-3">
-            <p class="text-sm text-muted-foreground">{{ s.detail }}</p>
+            <div class="grid grid-cols-2 gap-2">
+              <RouterLink
+                v-for="indicateur in s.indicateurs"
+                :key="indicateur.libelle"
+                :to="indicateur.lien ?? s.lien"
+                class="rounded-lg bg-muted/45 px-3 py-2.5 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                :class="indicateur.principal ? 'col-span-2' : ''"
+                :aria-label="`${indicateur.libelle} : ${indicateur.valeur}. Ouvrir la liste.`"
+              >
+                <p class="text-[11px] font-medium text-muted-foreground">
+                  {{ indicateur.libelle }}
+                </p>
+                <p
+                  class="mt-1 tabular-nums"
+                  :class="indicateur.principal ? 'text-xl font-semibold tracking-tight text-foreground' : 'text-base font-semibold text-foreground'"
+                >
+                  {{ indicateur.valeur }}
+                </p>
+                <p
+                  v-if="indicateur.complement"
+                  class="mt-0.5 text-xs tabular-nums text-muted-foreground/70"
+                >
+                  {{ indicateur.complement }}
+                </p>
+              </RouterLink>
+            </div>
             <div v-if="s.statuts?.length" class="flex flex-wrap gap-2">
-              <div
+              <RouterLink
                 v-for="statut in s.statuts"
                 :key="statut.etat.code"
+                :to="{ name: 'admin-commandes', query: { statut: String(statut.etat.code) } }"
+                class="rounded-full outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                :aria-label="`${statut.etat.libelle} : ${statut.nombre} commandes. Filtrer la liste.`"
               >
                 <EtatBadge :etat="statut.etat" :nombre="statut.nombre" />
-              </div>
+              </RouterLink>
             </div>
             <Button variant="outline" size="sm" class="mt-auto self-start" as-child>
               <RouterLink :to="s.lien">{{ s.action }}</RouterLink>

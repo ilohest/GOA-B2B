@@ -4,12 +4,14 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Check,
   CheckCircle2,
+  Copy,
   Info,
   MailX,
   Users,
 } from "@lucide/vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import {
   FlexRender,
@@ -19,6 +21,7 @@ import {
 } from "@tanstack/vue-table";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
+import { copierDansPressePapiers } from "@/lib/clipboard";
 import type {
   AdminClientsResponse,
   ClientResume,
@@ -70,7 +73,21 @@ import {
 } from "@/components/ui/table";
 
 const router = useRouter();
+const route = useRoute();
 const queryClient = useQueryClient();
+const emailCopie = ref<string | null>(null);
+
+async function copierEmail(email: string) {
+  if (!(await copierDansPressePapiers(email))) {
+    toast.error("Impossible de copier l’adresse e-mail.");
+    return;
+  }
+  emailCopie.value = email;
+  toast.success("Adresse e-mail copiée.");
+  window.setTimeout(() => {
+    if (emailCopie.value === email) emailCopie.value = null;
+  }, 2000);
+}
 
 // --- Clients : servis depuis le CACHE serveur (recherche/pagination locales) ---
 
@@ -122,15 +139,26 @@ const tri = useTriPersistant<CleTriClient>(
   clesTriClient,
 );
 
+const filtreCompte = computed<"actif" | "inactif" | null>(() => {
+  const filtre = route.query.compte;
+  return filtre === "actif" || filtre === "inactif" ? filtre : null;
+});
+
 const clientsFiltres = computed(() => {
   const q = recherche.value.trim().toLowerCase();
   const tous = data.value?.clients ?? [];
-  if (!q) return tous;
-  return tous.filter((c) =>
-    [c.nom, c.raisonSociale, c.numero, c.emailPrincipal, c.categorie].some(
-      (v) => v?.toLowerCase().includes(q),
-    ),
-  );
+  return tous.filter((c) => {
+    const actif = compteDe(c)?.statut === "active";
+    const correspondCompte =
+      filtreCompte.value == null ||
+      (filtreCompte.value === "actif" ? actif : !actif);
+    const correspondRecherche =
+      !q ||
+      [c.nom, c.raisonSociale, c.numero, c.emailPrincipal, c.categorie].some(
+        (v) => v?.toLowerCase().includes(q),
+      );
+    return correspondCompte && correspondRecherche;
+  });
 });
 
 function valeurTriClient(client: ClientResume, cle: CleTriClient) {
@@ -184,6 +212,9 @@ const clientsAffiches = computed(() => {
 
 watch(totalPages, (pages) => {
   if (page.value > pages) page.value = pages;
+});
+watch(filtreCompte, () => {
+  page.value = 1;
 });
 
 function surRecherche() {
@@ -485,12 +516,38 @@ const columns: ColumnDef<ClientResume>[] = [
   {
     id: "email",
     header: () => enteteTri("email", "Email"),
-    cell: ({ row }) =>
-      h(
-        "span",
-        { class: "text-sm text-muted-foreground" },
-        row.original.emailPrincipal || "—",
-      ),
+    cell: ({ row }) => {
+      const email = row.original.emailPrincipal;
+      if (!email)
+        return h("span", { class: "text-sm text-muted-foreground" }, "—");
+      const copie = emailCopie.value === email;
+      const Icone = copie ? Check : Copy;
+      return h(
+        "button",
+        {
+          type: "button",
+          class:
+            "group -mx-2 flex min-h-8 max-w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          title: copie ? "Adresse copiée" : "Copier l’adresse e-mail",
+          "aria-label": copie
+            ? `${email}, adresse copiée`
+            : `Copier l’adresse e-mail ${email}`,
+          onClick: (event: Event) => {
+            event.stopPropagation();
+            copierEmail(email);
+          },
+        },
+        [
+          h("span", { class: "min-w-0 break-all" }, email),
+          h(Icone, {
+            class: copie
+              ? "size-3.5 shrink-0 text-primary"
+              : "size-3.5 shrink-0 opacity-60 transition-opacity group-hover:opacity-100",
+            "aria-hidden": "true",
+          }),
+        ],
+      );
+    },
   },
   {
     id: "categorie",
@@ -570,6 +627,20 @@ function ouvrirFiche(client: ClientResume) {
             class="max-w-xs"
             @input="surRecherche"
           />
+          <div
+            v-if="filtreCompte"
+            class="inline-flex h-9 items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm"
+          >
+            <span class="font-medium">
+              {{ filtreCompte === "actif" ? "Clients actifs" : "Clients inactifs" }}
+            </span>
+            <RouterLink
+              :to="{ name: 'admin-clients' }"
+              class="rounded-sm text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Effacer
+            </RouterLink>
+          </div>
         </div>
 
         <!-- Barre d'actions en masse -->

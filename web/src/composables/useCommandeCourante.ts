@@ -91,6 +91,9 @@ export function useCommandeCourante(modeApercu: MaybeRefOrGetter<boolean>) {
       lignesDetail.value.length > 0 &&
       totalHT.value < minimum.value,
   )
+  const montantRestantMinimum = computed(() =>
+    minimum.value == null ? 0 : Math.max(0, minimum.value - totalHT.value),
+  )
   const remisesDetail = computed(() =>
     estimerRemisesCommande(lignesDetail.value, profil.data.value?.client),
   )
@@ -132,6 +135,7 @@ export function useCommandeCourante(modeApercu: MaybeRefOrGetter<boolean>) {
     totalHT,
     minimum,
     sousMinimum,
+    montantRestantMinimum,
     remisesDetail,
     remiseMontant,
     commandeBloqueeParPrix,

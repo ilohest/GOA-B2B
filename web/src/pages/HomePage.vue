@@ -1,21 +1,31 @@
 <script setup lang="ts">
-import { computed, markRaw, ref, watchEffect } from "vue";
+import { computed, nextTick, ref, watchEffect } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { Loader2, RotateCcw, Store } from "@lucide/vue";
+import {
+  BadgePercent,
+  ChevronRight,
+  ClipboardList,
+  Loader2,
+  Pencil,
+  RotateCcw,
+  Store,
+} from "@lucide/vue";
 import { useQuery } from "@tanstack/vue-query";
 import { useMediaQuery, useScrollLock } from "@vueuse/core";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
 import type {
+  CommandeEdition,
   CommandeResume,
   CommandesClientResponse,
 } from "@/lib/types";
 import { dateFr, prixFr } from "@/lib/format";
+import { resumeConditionsCommerciales } from "@/lib/conditionsCommerciales";
 import { useCommandeCourante } from "@/composables/useCommandeCourante";
 import ProduitCard from "@/components/catalogue/ProduitCard.vue";
 import PanierRecap from "@/components/catalogue/PanierRecap.vue";
+import CommandeDetailDialog from "@/components/CommandeDetailDialog.vue";
 import RecommanderDialog from "@/components/catalogue/RecommanderDialog.vue";
-import ToastAnnulationPanier from "@/components/catalogue/ToastAnnulationPanier.vue";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -35,8 +45,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const ToastAnnulationPanierRaw = markRaw(ToastAnnulationPanier);
-
 const router = useRouter();
 const route = useRoute();
 const modeApercu = computed(() => route.name === "admin-boutique-apercu");
@@ -51,6 +59,7 @@ const {
   changer,
   fixer,
   vider,
+  chargerCommande,
   modification,
   nbCartons,
   produitsParId,
@@ -58,12 +67,17 @@ const {
   totalHT,
   minimum,
   sousMinimum,
+  montantRestantMinimum,
   remisesDetail,
   remiseMontant,
   commandeBloqueeParPrix,
   erreursConditionnementPostal,
   commandeBloqueeParConditionnement,
 } = useCommandeCourante(modeApercu);
+
+const conditionsCommerciales = computed(() =>
+  modeApercu.value ? null : resumeConditionsCommerciales(data.value?.client),
+);
 
 // Hors route d'aperçu explicite, l'admin reste dans son espace.
 watchEffect(() => {
@@ -91,6 +105,66 @@ const derniereCommande = computed<CommandeResume | null>(() => {
 });
 
 const recommandeOuvert = ref(false);
+const commandeARecommander = ref<CommandeResume | null>(null);
+const commandeOuverte = ref<number | null>(null);
+const chargementCommande = ref<number | null>(null);
+const commandeSelectionnee = computed(() =>
+  commandes.data.value?.commandes.find(
+    (commande) => commande.idCommande === commandeOuverte.value,
+  ),
+);
+
+async function ouvrirRecommande(
+  commande: CommandeResume,
+  fermerDetail = false,
+) {
+  if (modification.value) {
+    toast.info(
+      `Vous modifiez la commande #${modification.value.numero ?? modification.value.idCommande}.`,
+      {
+        description:
+          "Validez ou annulez cette modification avant d'en recommander une autre.",
+      },
+    );
+    return;
+  }
+  if (fermerDetail) {
+    commandeOuverte.value = null;
+    await nextTick();
+  }
+  commandeARecommander.value = commande;
+  recommandeOuvert.value = true;
+}
+
+async function modifierDepuisDetail(commande: CommandeResume) {
+  chargementCommande.value = commande.idCommande;
+  try {
+    const edition = await api.get<CommandeEdition>(
+      `/commandes/${commande.idCommande}/edition`,
+    );
+    if (!edition.modifiable) {
+      toast.error("Cette commande ne peut plus être modifiée.");
+      return;
+    }
+    if (
+      !edition.lignes.length ||
+      edition.lignes.some((ligne) => ligne.idStockBouteille == null)
+    ) {
+      toast.error("Cette commande ne peut pas être chargée dans le panier.", {
+        description:
+          "Un produit de cette commande n'est plus disponible au catalogue.",
+      });
+      return;
+    }
+    chargerCommande(edition);
+    commandeOuverte.value = null;
+    toast.info("Commande chargée dans le panier — ajustez puis validez.");
+  } catch (e) {
+    toast.error((e as Error).message);
+  } finally {
+    chargementCommande.value = null;
+  }
+}
 // Le raccourci ne s'affiche que sur un panier vierge : dès qu'une quantité est
 // saisie, ou en pleine modification de commande, il disparaît.
 const rappelDerniereCommande = computed(
@@ -113,7 +187,9 @@ const normaliserRecherche = (valeur: string) =>
     .toLocaleLowerCase("fr")
     .trim();
 const produitsCatalogue = computed(() =>
-  (catalogue.data.value?.produits ?? []).filter((produit) => !produit.historique),
+  (catalogue.data.value?.produits ?? []).filter(
+    (produit) => !produit.historique,
+  ),
 );
 const contenantsDisponibles = computed(() =>
   [
@@ -189,11 +265,10 @@ function annulerModification() {
 function supprimerLignePanier(idStockBouteille: number) {
   const quantiteSupprimee = quantites.value[idStockBouteille] ?? 0;
   if (!quantiteSupprimee) return;
-  const libelle = produitsParId.value.get(idStockBouteille)?.libelle ?? "Produit";
+  const libelle =
+    produitsParId.value.get(idStockBouteille)?.libelle ?? "Produit";
   fixer(idStockBouteille, 0);
   toast.info(`${libelle} retiré du panier.`, {
-    class: "panier-toast-annulation overflow-hidden",
-    description: ToastAnnulationPanierRaw,
     duration: 7000,
     action: {
       label: "Annuler",
@@ -212,11 +287,7 @@ function viderPanierAvecAnnulation() {
   if (!nbLignes) return;
   for (const id of Object.keys(quantitesSupprimees)) fixer(Number(id), 0);
   toast.info("Panier vidé.", {
-    class: "panier-toast-annulation overflow-hidden",
-    description: ToastAnnulationPanierRaw,
-    componentProps: {
-      texte: `${nbLignes} produit${nbLignes > 1 ? "s" : ""} retiré${nbLignes > 1 ? "s" : ""}.`,
-    },
+    description: `${nbLignes} produit${nbLignes > 1 ? "s" : ""} retiré${nbLignes > 1 ? "s" : ""}.`,
     duration: 7000,
     action: {
       label: "Annuler",
@@ -244,10 +315,18 @@ function viderPanierAvecAnnulation() {
           <Store class="mt-0.5 size-4 shrink-0 text-blue-600" />
           <p>
             <span class="font-semibold">Mode aperçu de la boutique</span>
-            <span class="text-blue-800"> — le panier peut être testé, mais aucune commande ne sera envoyée.</span>
+            <span class="text-blue-800">
+              — le panier peut être testé, mais aucune commande ne sera
+              envoyée.</span
+            >
           </p>
         </div>
-        <Button variant="outline" size="sm" class="border-blue-200 bg-white" @click="router.push('/admin')">
+        <Button
+          variant="outline"
+          size="sm"
+          class="border-blue-200 bg-white"
+          @click="router.push('/admin')"
+        >
           Quitter l’aperçu
         </Button>
       </div>
@@ -288,8 +367,9 @@ function viderPanierAvecAnnulation() {
       >
         <p class="min-w-0 flex-1 text-sm">
           <span class="font-semibold text-primary">
-            Modification de la commande
-            #{{ modification.numero ?? modification.idCommande }}
+            Modification de la commande #{{
+              modification.numero ?? modification.idCommande
+            }}
           </span>
           <span class="text-muted-foreground">
             — ajustez les quantités ci-dessous puis validez. La nouvelle version
@@ -325,6 +405,34 @@ function viderPanierAvecAnnulation() {
             Produits
           </h1>
         </div>
+
+        <RouterLink
+          v-if="conditionsCommerciales"
+          :to="{ name: 'compte', hash: '#conditions-commerciales' }"
+          class="group mb-5 flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/[0.035] px-4 py-3 outline-none transition-colors hover:border-primary/35 hover:bg-primary/[0.06] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <span
+            class="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-primary"
+          >
+            <BadgePercent class="size-4" />
+          </span>
+          <span class="grid min-w-0 flex-1 gap-0.5">
+            <span class="text-sm font-semibold"
+              >Vos conditions commerciales</span
+            >
+            <span class="text-xs leading-relaxed text-muted-foreground">
+              {{ conditionsCommerciales.libelle }}
+            </span>
+          </span>
+          <span
+            class="hidden shrink-0 items-center gap-1 text-xs font-medium text-primary sm:flex"
+          >
+            Voir le détail
+            <ChevronRight
+              class="size-4 transition-transform group-hover:translate-x-0.5"
+            />
+          </span>
+        </RouterLink>
 
         <div
           v-if="catalogue.isPending.value || isPending"
@@ -389,7 +497,10 @@ function viderPanierAvecAnnulation() {
             class="mb-5 grid gap-3 rounded-xl border bg-muted/20 p-3 sm:flex sm:flex-wrap sm:items-end"
           >
             <div class="grid gap-1.5 sm:min-w-64 sm:flex-1">
-              <Label for="recherche-produit" class="text-xs text-muted-foreground">
+              <Label
+                for="recherche-produit"
+                class="text-xs text-muted-foreground"
+              >
                 Rechercher un produit
               </Label>
               <Input
@@ -506,13 +617,18 @@ function viderPanierAvecAnnulation() {
         v-if="rappelDerniereCommande && derniereCommande"
         class="grid gap-3 rounded-xl border bg-muted/30 px-4 py-3 text-sm"
       >
-        <div class="flex min-w-0 items-start gap-3">
+        <button
+          type="button"
+          class="group -m-2 flex min-w-0 items-start gap-3 rounded-lg p-2 text-left outline-none transition-colors hover:bg-background/70 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          aria-label="Voir le détail de la dernière commande"
+          @click="commandeOuverte = derniereCommande.idCommande"
+        >
           <span
-            class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-muted-foreground shadow-xs"
+            class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-background text-muted-foreground shadow-xs transition-colors group-hover:text-primary"
           >
-            <RotateCcw class="size-4" />
+            <ClipboardList class="size-4" />
           </span>
-          <p class="grid min-w-0 gap-0.5">
+          <span class="grid min-w-0 flex-1 gap-0.5">
             <span class="font-medium text-foreground">
               Votre dernière commande
             </span>
@@ -522,13 +638,20 @@ function viderPanierAvecAnnulation() {
                 · {{ prixFr(derniereCommande.totalTTC) }} TTC
               </template>
             </span>
-          </p>
-        </div>
+            <span class="mt-1 text-xs font-medium text-primary"
+              >Voir le détail</span
+            >
+          </span>
+          <ChevronRight
+            class="mt-2 size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+            aria-hidden="true"
+          />
+        </button>
         <Button
           variant="outline"
           size="sm"
           class="w-full"
-          @click="recommandeOuvert = true"
+          @click="ouvrirRecommande(derniereCommande)"
         >
           Recommander
         </Button>
@@ -586,7 +709,13 @@ function viderPanierAvecAnnulation() {
               "
               @click="ouvrirRecap"
             >
-              {{ modeApercu ? "Voir le récapitulatif" : modification ? "Mettre à jour" : "Commander" }}
+              {{
+                modeApercu
+                  ? "Voir le récapitulatif"
+                  : modification
+                    ? "Mettre à jour"
+                    : "Commander"
+              }}
             </Button>
             <Button
               v-if="modification"
@@ -622,9 +751,10 @@ function viderPanierAvecAnnulation() {
             </h2>
           </div>
           <p v-if="modification" class="mb-2 text-xs font-medium text-primary">
-            Modification de la commande
-            #{{ modification.numero ?? modification.idCommande }} — la nouvelle
-            version annule et remplace la précédente.
+            Modification de la commande #{{
+              modification.numero ?? modification.idCommande
+            }}
+            — la nouvelle version annule et remplace la précédente.
           </p>
           <PanierRecap
             class="min-h-0 flex-1"
@@ -670,8 +800,8 @@ function viderPanierAvecAnnulation() {
                 barreDepliee ? "▾" : "▴"
               }}</span>
             </p>
-            <p v-if="sousMinimum" class="text-xs text-destructive">
-              Minimum : {{ prixFr(minimum!) }} HT
+            <p v-if="sousMinimum" class="text-xs font-medium text-amber-700">
+              Encore {{ prixFr(montantRestantMinimum) }} HT pour commander
             </p>
             <p
               v-if="commandeBloqueeParConditionnement"
@@ -691,7 +821,13 @@ function viderPanierAvecAnnulation() {
             "
             @click="ouvrirRecap"
           >
-            {{ modeApercu ? "Voir le récapitulatif" : modification ? "Mettre à jour" : "Commander" }}
+            {{
+              modeApercu
+                ? "Voir le récapitulatif"
+                : modification
+                  ? "Mettre à jour"
+                  : "Commander"
+            }}
           </Button>
         </div>
       </div>
@@ -699,9 +835,52 @@ function viderPanierAvecAnnulation() {
 
     <RecommanderDialog
       v-model:open="recommandeOuvert"
-      :commande="derniereCommande"
+      :commande="commandeARecommander"
       sur-catalogue
     />
+
+    <CommandeDetailDialog
+      v-model:id-commande="commandeOuverte"
+      contexte="client"
+      :ids-commandes="
+        commandes.data.value?.commandes.map(
+          (commande) => commande.idCommande,
+        ) ?? []
+      "
+    >
+      <template v-if="commandeSelectionnee" #actions>
+        <div class="grid gap-2 sm:flex sm:justify-end">
+          <div class="grid gap-2 sm:flex">
+            <Button
+              class="transition-transform duration-200 active:scale-[0.97]"
+              :disabled="modification != null"
+              :title="
+                modification
+                  ? 'Terminez la modification en cours pour recommander'
+                  : 'Remettre cette commande dans le panier'
+              "
+              @click="ouvrirRecommande(commandeSelectionnee, true)"
+            >
+              <RotateCcw class="size-4" />
+              Recommander
+            </Button>
+            <Button
+              v-if="commandeSelectionnee.modifiable"
+              variant="secondary"
+              :disabled="chargementCommande === commandeSelectionnee.idCommande"
+              @click="modifierDepuisDetail(commandeSelectionnee)"
+            >
+              <Pencil class="size-4" />
+              {{
+                chargementCommande === commandeSelectionnee.idCommande
+                  ? "Chargement…"
+                  : "Modifier"
+              }}
+            </Button>
+          </div>
+        </div>
+      </template>
+    </CommandeDetailDialog>
   </div>
 </template>
 

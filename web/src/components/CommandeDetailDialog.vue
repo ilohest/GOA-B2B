@@ -4,7 +4,7 @@
  * documents téléchargeables. Le contexte sélectionne les routes admin/client.
  */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { ChevronLeft, ChevronRight } from '@lucide/vue'
+import { ChevronLeft, ChevronRight, Download } from '@lucide/vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useResizeObserver } from '@vueuse/core'
 import { toast } from 'vue-sonner'
@@ -214,6 +214,19 @@ watch(
             <Skeleton class="h-4 w-24" />
           </div>
         </div>
+        <div class="grid gap-3 border-t pt-4">
+          <Skeleton class="h-3 w-20" />
+          <div class="flex flex-wrap justify-end gap-2">
+            <Skeleton class="h-9 w-52 rounded-md" />
+            <Skeleton class="h-9 w-36 rounded-md" />
+          </div>
+        </div>
+        <div v-if="$slots.actions" class="grid gap-2 border-t pt-4 sm:flex sm:justify-end">
+          <div class="grid gap-2 sm:flex">
+            <Skeleton class="h-9 w-full rounded-md sm:w-32" />
+            <Skeleton class="h-9 w-full rounded-md sm:w-28" />
+          </div>
+        </div>
       </div>
 
       <!-- Détail momentanément indisponible : message doux + réessai, plutôt qu'une erreur rouge -->
@@ -385,17 +398,27 @@ watch(
           « {{ data.commentaire }} »
         </p>
 
-        <div v-if="data.documents.length" class="flex flex-wrap justify-end gap-2 border-t pt-3">
-          <Button
-            v-for="doc in data.documents"
-            :key="doc.idCommandeDocument"
-            variant="outline"
-            size="sm"
-            :disabled="telechargementEnCours === doc.idCommandeDocument"
-            @click="telecharger(doc)"
-          >
-            ⤓ {{ doc.libelle }} {{ doc.code }}
-          </Button>
+        <div v-if="data.documents.length" class="grid gap-2 border-t pt-4">
+          <p class="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            Documents
+          </p>
+          <div class="flex flex-wrap gap-2 sm:justify-end">
+            <Button
+              v-for="doc in data.documents"
+              :key="doc.idCommandeDocument"
+              variant="outline"
+              size="sm"
+              :disabled="telechargementEnCours === doc.idCommandeDocument"
+              @click="telecharger(doc)"
+            >
+              <Download class="size-4" aria-hidden="true" />
+              {{ doc.libelle }} {{ doc.code }}
+            </Button>
+          </div>
+        </div>
+
+        <div v-if="$slots.actions" class="border-t pt-4">
+          <slot name="actions" :commande="data" />
         </div>
       </div>
     </DialogContent>

@@ -1,10 +1,25 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth'
-import { EyeIcon, EyeOffIcon, UserRound } from '@lucide/vue'
+import {
+  BadgePercent,
+  CalendarDays,
+  EyeIcon,
+  EyeOffIcon,
+  ShoppingCart,
+  UserRound,
+} from '@lucide/vue'
 import { toast } from 'vue-sonner'
 import { useMe } from '@/composables/useMe'
 import { firebaseAuth } from '@/firebase'
+import {
+  etatAvantage,
+  formatRemiseCommerciale,
+  remisesProduitVisibles,
+} from '@/lib/conditionsCommerciales'
+import { dateFr, prixFr } from '@/lib/format'
+import type { RemiseCibleeClient } from '@/lib/types'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -22,6 +37,67 @@ const lignes = computed(() => {
     { label: 'Email du compte', valeur: data.value?.user.email },
   ]
 })
+
+const client = computed(() => data.value?.client)
+const remiseCommande = computed(() => formatRemiseCommerciale(client.value?.remise))
+const remisesProduit = computed(() => remisesProduitVisibles(client.value))
+const aDesConditionsCommerciales = computed(
+  () =>
+    client.value?.minimumCommande != null ||
+    remiseCommande.value != null ||
+    remisesProduit.value.length > 0,
+)
+
+function statutAvantage(remise: RemiseCibleeClient) {
+  switch (etatAvantage(remise)) {
+    case 'a-venir':
+      return { libelle: 'À venir', classes: 'border-blue-200 bg-blue-50 text-blue-700' }
+    case 'expire-bientot':
+      return {
+        libelle: 'Expire bientôt',
+        classes: 'border-amber-200 bg-amber-50 text-amber-800',
+      }
+    default:
+      return {
+        libelle: 'Active',
+        classes: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      }
+  }
+}
+
+function dateRemise(date: string | null | undefined) {
+  if (!date) return null
+  const valeur = new Date(date).getTime()
+  return Number.isNaN(valeur) ? null : dateFr(valeur)
+}
+
+function periodeRemise(remise: RemiseCibleeClient) {
+  const debut = dateRemise(remise.dateDebut)
+  const fin = dateRemise(remise.dateFin)
+  if (debut && fin) return `Du ${debut} au ${fin}`
+  if (debut) return `À partir du ${debut}`
+  if (fin) return `Jusqu’au ${fin}`
+  return null
+}
+
+function conditionQuantite(quantite: number | null | undefined) {
+  if (quantite == null || quantite <= 0) return null
+  return `À partir de ${quantite} ${quantite === 1 ? 'carton' : 'cartons'}`
+}
+
+function libellePortee(scope: string | null | undefined) {
+  return scope === 'segment' ? 'Catégorie professionnelle' : 'Condition individuelle'
+}
+
+function valeurPortee(scope: string | null | undefined, libelle: string | null | undefined) {
+  return scope === 'segment' ? libelle || 'Votre catégorie' : 'Votre établissement'
+}
+
+function classesCarteRemise(scope: string | null | undefined) {
+  return scope === 'segment'
+    ? 'border-sky-200/80 bg-sky-50/45'
+    : 'border-emerald-200/80 bg-emerald-50/45'
+}
 
 const motDePasseActuel = ref('')
 const nouveauMotDePasse = ref('')
@@ -154,6 +230,149 @@ function effacerRetourMotDePasse(champ: keyof typeof erreursMotDePasse.value) {
       <p v-else class="text-sm text-muted-foreground">
         Votre compte n'est pas encore relié à une fiche client — contactez GOA.
       </p>
+      </CardContent>
+    </Card>
+
+    <Card id="conditions-commerciales" class="scroll-mt-24">
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2 text-lg">
+          <BadgePercent class="size-5 text-primary" />
+          Vos conditions commerciales
+        </CardTitle>
+        <p class="text-sm text-muted-foreground">
+          Les conditions rattachées à votre établissement sont appliquées automatiquement dans la
+          boutique et lors de la validation de vos commandes.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div
+          v-if="isPending"
+          class="grid gap-3 sm:grid-cols-3"
+          aria-label="Chargement des conditions commerciales"
+          aria-busy="true"
+        >
+          <Skeleton v-for="i in 3" :key="i" class="h-24 rounded-xl" />
+        </div>
+
+        <p v-else-if="isError" class="text-sm text-destructive">
+          Impossible de charger vos conditions commerciales.
+        </p>
+
+        <div v-else-if="aDesConditionsCommerciales" class="grid gap-6">
+          <div v-if="client?.minimumCommande != null" class="rounded-xl border bg-muted/20 p-4">
+            <ShoppingCart class="size-4 text-primary" />
+            <p class="mt-3 text-xs font-medium text-muted-foreground">Minimum de commande</p>
+            <p class="mt-1 text-xl font-semibold tabular-nums">
+              {{ prixFr(client.minimumCommande) }}
+              <span class="text-sm font-medium text-muted-foreground">HT</span>
+            </p>
+          </div>
+
+          <section v-if="remiseCommande" class="grid gap-2.5">
+            <div>
+              <h3 class="font-semibold">Remise sur la commande</h3>
+              <p class="mt-0.5 text-sm text-muted-foreground">
+                Appliquée à l’ensemble de la commande, sauf lorsqu’un produit bénéficie de sa propre
+                remise.
+              </p>
+            </div>
+            <article
+              class="rounded-xl border p-4"
+              :class="classesCarteRemise(client?.remiseScope)"
+            >
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                <div class="min-w-0">
+                  <p
+                    class="text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                  >
+                    {{ libellePortee(client?.remiseScope) }}
+                  </p>
+                  <p class="mt-1 font-medium">
+                    {{
+                      valeurPortee(
+                        client?.remiseScope,
+                        client?.remiseScopeLibelle || client?.type?.libelle,
+                      )
+                    }}
+                  </p>
+                </div>
+                <Badge class="text-sm tabular-nums">{{ remiseCommande }}</Badge>
+              </div>
+            </article>
+          </section>
+
+          <section v-if="remisesProduit.length" class="grid gap-2.5">
+            <div>
+              <h3 class="font-semibold">Remises sur les produits</h3>
+              <p class="mt-0.5 text-sm text-muted-foreground">
+                Limitées aux produits, formats et quantités indiqués.
+              </p>
+            </div>
+            <div class="grid gap-3 lg:grid-cols-2">
+              <article
+                v-for="(remise, index) in remisesProduit"
+                :key="`${remise.scope ?? 'client'}-${remise.idStockBouteille ?? remise.idProduit ?? index}`"
+                class="rounded-xl border p-4"
+                :class="classesCarteRemise(remise.scope)"
+              >
+                <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                  <div class="min-w-0">
+                    <p
+                      class="text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                    >
+                      {{ libellePortee(remise.scope) }}
+                    </p>
+                    <p class="mt-1 font-medium">
+                      {{ valeurPortee(remise.scope, remise.scopeLibelle) }}
+                    </p>
+                  </div>
+                  <Badge class="text-sm tabular-nums">
+                    {{ formatRemiseCommerciale(remise.remise) }}
+                  </Badge>
+                </div>
+
+                <h4 class="mt-3 font-semibold leading-snug">
+                  {{ remise.produit || 'Produit ou format ciblé' }}
+                </h4>
+
+                <div v-if="remise.contenant || remise.packaging" class="mt-3 flex flex-wrap gap-1.5">
+                  <Badge v-if="remise.contenant" variant="outline">{{ remise.contenant }}</Badge>
+                  <Badge v-if="remise.packaging" variant="outline">{{ remise.packaging }}</Badge>
+                </div>
+
+                <div
+                  v-if="
+                    etatAvantage(remise) !== 'actif' || conditionQuantite(remise.quantite)
+                  "
+                  class="mt-4 flex flex-wrap items-center gap-2 border-t pt-3"
+                >
+                  <Badge
+                    v-if="etatAvantage(remise) !== 'actif'"
+                    variant="outline"
+                    :class="statutAvantage(remise).classes"
+                  >
+                    {{ statutAvantage(remise).libelle }}
+                  </Badge>
+                  <span v-if="conditionQuantite(remise.quantite)" class="text-sm font-medium">
+                    {{ conditionQuantite(remise.quantite) }}
+                  </span>
+                </div>
+
+                <p
+                  v-if="periodeRemise(remise)"
+                  class="mt-3 flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm"
+                >
+                  <CalendarDays class="size-4 shrink-0 text-primary" />
+                  <span>{{ periodeRemise(remise) }}</span>
+                </p>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <div v-else class="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">
+          Aucune condition commerciale particulière n’est actuellement rattachée à votre compte.
+        </div>
       </CardContent>
     </Card>
 

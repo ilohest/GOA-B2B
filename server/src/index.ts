@@ -302,7 +302,7 @@ app.get('/api/me', requireAuth, async (c) => {
     // Mode dev sans Firebase (AUTH_DISABLED) : lecture directe, jamais en prod.
     const [client, types] = await Promise.all([getClient(user.easybeerIdClient), listeTypesClient()])
     const idGrilleTarifaire = resoudreGrilleRacine(client?.type?.idClientType, types)
-    return c.json({ user, client, idGrilleTarifaire })
+    return c.json({ user, client: client ? allegerClient(client, types) : null, idGrilleTarifaire })
   }
 
   // Lecture CACHE — jamais Easybeer en direct depuis une requête client.
@@ -1529,8 +1529,12 @@ async function traiterEmailAuth(
     if (emailActif()) await envoyerLoginLinkEmail(email, lien)
     else console.warn(`[auth][dev] lien de connexion pour ${email} : ${lien}`)
   } else {
-    const lien = await adminAuth.generatePasswordResetLink(email, { url: `${config.webBaseUrl}/login` })
-    if (emailActif()) await envoyerResetPasswordEmail(email, lien)
+    const lienFirebase = await adminAuth.generatePasswordResetLink(email, { url: `${config.webBaseUrl}/login` })
+    const actionCode = new URL(lienFirebase).searchParams.get('oobCode')
+    if (!actionCode) throw new Error('Code de réinitialisation Firebase absent')
+    const lien = new URL('/reinitialiser-mot-de-passe', config.webBaseUrl)
+    lien.searchParams.set('oobCode', actionCode)
+    if (emailActif()) await envoyerResetPasswordEmail(email, lien.toString())
     else console.warn(`[auth][dev] lien de réinitialisation pour ${email} : ${lien}`)
   }
 }

@@ -68,7 +68,7 @@ const emit = defineEmits<{
         </div>
         <div
           v-if="produit.rupture"
-          class="flex h-10 w-full items-center justify-center rounded-full border border-destructive/20 bg-destructive/10 px-3 text-xs font-semibold text-destructive"
+          class="flex h-10 w-full items-center justify-center rounded-full border border-amber-300/80 bg-amber-50 px-3 text-xs font-semibold text-amber-800"
         >
           Victime de son succès
         </div>

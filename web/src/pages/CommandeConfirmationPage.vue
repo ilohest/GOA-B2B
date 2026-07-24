@@ -32,6 +32,7 @@ const {
   totalHT,
   minimum,
   sousMinimum,
+  montantRestantMinimum,
   remisesDetail,
   remiseMontant,
   commandeBloqueeParPrix,
@@ -212,7 +213,7 @@ const validationBloquee = computed(
               Un ou plusieurs tarifs doivent être vérifiés avant l’envoi.
             </p>
             <p v-if="sousMinimum && minimum != null" class="text-sm text-amber-700">
-              Minimum de commande : {{ prixFr(minimum) }} HT.
+              Encore {{ prixFr(montantRestantMinimum) }} HT pour commander.
             </p>
             <div
               v-if="erreurEnvoi"

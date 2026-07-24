@@ -23,6 +23,8 @@ export interface ClientEasybeer {
   // Paramètres commerciaux (fiche allégée du cache serveur)
   minimumCommande?: number | null
   remise?: string | null
+  remiseScope?: 'client' | 'segment' | null
+  remiseScopeLibelle?: string | null
   remise2?: string | null
   typeRemise2?: string | null
   remisesCiblees?: RemiseCibleeClient[]
@@ -38,6 +40,13 @@ export interface RemiseCibleeClient {
   quantite?: number | null
   remise?: string | null
   type?: string | null
+  scope?: 'client' | 'segment' | string | null
+  scopeLibelle?: string | null
+  produit?: string | null
+  contenant?: string | null
+  packaging?: string | null
+  dateDebut?: string | null
+  dateFin?: string | null
 }
 
 export interface AuthUser {

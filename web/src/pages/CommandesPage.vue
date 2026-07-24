@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { CircleCheck, ClipboardList, RotateCcw, Store } from "@lucide/vue";
+import {
+  ChevronRight,
+  CircleCheck,
+  ClipboardList,
+  Pencil,
+  RotateCcw,
+  Store,
+} from "@lucide/vue";
 import { useQuery } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
@@ -73,14 +80,19 @@ const commandeARecommander = ref<CommandeResume | null>(null);
 // ferait écraser la commande éditée par une reprise d'historique.
 const recommandeBloquee = computed(() => modification.value != null);
 
-function recommander(commande: CommandeResume) {
+async function recommander(commande: CommandeResume) {
   if (recommandeBloquee.value) {
     toast.info(
       `Vous modifiez la commande #${modification.value?.numero ?? modification.value?.idCommande}.`,
-      { description: "Validez ou annulez cette modification avant d'en recommander une autre." },
+      {
+        description:
+          "Validez ou annulez cette modification avant d'en recommander une autre.",
+      },
     );
     return;
   }
+  commandeOuverte.value = null;
+  await nextTick();
   commandeARecommander.value = commande;
   recommandeOuvert.value = true;
 }
@@ -88,6 +100,11 @@ function recommander(commande: CommandeResume) {
 // --- Détail en popup, identique à l'administration ---
 
 const commandeOuverte = ref<number | null>(null);
+const commandeSelectionnee = computed(() =>
+  data.value?.commandes.find(
+    (commande) => commande.idCommande === commandeOuverte.value,
+  ),
+);
 
 async function modifier(commande: CommandeResume) {
   chargement.value = commande.idCommande;
@@ -99,13 +116,18 @@ async function modifier(commande: CommandeResume) {
       toast.error("Cette commande ne peut plus être modifiée.");
       return;
     }
-    if (!edition.lignes.length || edition.lignes.some((ligne) => ligne.idStockBouteille == null)) {
+    if (
+      !edition.lignes.length ||
+      edition.lignes.some((ligne) => ligne.idStockBouteille == null)
+    ) {
       toast.error("Cette commande ne peut pas être chargée dans le panier.", {
-        description: "Un produit de cette commande n'est plus disponible au catalogue.",
+        description:
+          "Un produit de cette commande n'est plus disponible au catalogue.",
       });
       return;
     }
     chargerCommande(edition);
+    commandeOuverte.value = null;
     toast.info("Commande chargée dans le panier — ajustez puis validez.");
     router.push("/");
   } catch (e) {
@@ -217,33 +239,11 @@ async function modifier(commande: CommandeResume) {
                     cmd.totalTTC != null ? `${prixFr(cmd.totalTTC)} TTC` : "—"
                   }}
                 </span>
-                <Button
+                <ChevronRight
                   v-if="data?.source !== 'local'"
-                  variant="outline"
-                  size="sm"
-                  class="transition-transform duration-200 active:scale-[0.97]"
-                  :disabled="recommandeBloquee"
-                  :title="
-                    recommandeBloquee
-                      ? 'Terminez la modification en cours pour recommander'
-                      : 'Remettre cette commande dans le panier'
-                  "
-                  @click.stop="recommander(cmd)"
-                >
-                  <RotateCcw class="size-4" />
-                  Recommander
-                </Button>
-                <Button
-                  v-if="cmd.modifiable"
-                  variant="outline"
-                  size="sm"
-                  :disabled="chargement === cmd.idCommande"
-                  @click.stop="modifier(cmd)"
-                >
-                  {{
-                    chargement === cmd.idCommande ? "Chargement…" : "Modifier"
-                  }}
-                </Button>
+                  class="size-4 text-muted-foreground"
+                  aria-hidden="true"
+                />
                 <span
                   v-else-if="data?.source === 'local'"
                   class="text-xs text-muted-foreground"
@@ -261,8 +261,43 @@ async function modifier(commande: CommandeResume) {
   <CommandeDetailDialog
     v-model:id-commande="commandeOuverte"
     contexte="client"
-    :ids-commandes="data?.commandes.map((commande) => commande.idCommande) ?? []"
-  />
+    :ids-commandes="
+      data?.commandes.map((commande) => commande.idCommande) ?? []
+    "
+  >
+    <template v-if="commandeSelectionnee" #actions>
+      <div class="grid gap-2 sm:flex sm:justify-end">
+        <div class="grid gap-2 sm:flex">
+          <Button
+            class="transition-transform duration-200 active:scale-[0.97]"
+            :disabled="recommandeBloquee"
+            :title="
+              recommandeBloquee
+                ? 'Terminez la modification en cours pour recommander'
+                : 'Remettre cette commande dans le panier'
+            "
+            @click="recommander(commandeSelectionnee)"
+          >
+            <RotateCcw class="size-4" />
+            Recommander
+          </Button>
+          <Button
+            v-if="commandeSelectionnee.modifiable"
+            variant="secondary"
+            :disabled="chargement === commandeSelectionnee.idCommande"
+            @click="modifier(commandeSelectionnee)"
+          >
+            <Pencil class="size-4" />
+            {{
+              chargement === commandeSelectionnee.idCommande
+                ? "Chargement…"
+                : "Modifier"
+            }}
+          </Button>
+        </div>
+      </div>
+    </template>
+  </CommandeDetailDialog>
 
   <RecommanderDialog
     v-model:open="recommandeOuvert"

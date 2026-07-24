@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watchEffect } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, watchEffect } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, Eye, EyeOff, Package, PackageCheck, PackageX, Search } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
@@ -24,6 +25,8 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 
 const queryClient = useQueryClient()
+const route = useRoute()
+const router = useRouter()
 const { setSaveBar, clearSaveBar } = useHeaderSaveBar()
 
 const { data, isPending, isError, error } = useQuery({
@@ -55,8 +58,19 @@ const actualisation = useMutation({
 })
 
 const recherche = ref('')
-/** Filtre d'état partagé par les indicateurs de visibilité et de rupture. */
-const filtreEtat = ref<'tous' | 'visibles' | 'rupture'>('tous')
+/** Visibilité et rupture sont deux dimensions indépendantes et cumulables. */
+const filtreVisible = ref(false)
+const filtreRupture = ref(false)
+
+watch(
+  () => [route.query.visible, route.query.rupture, route.query.etat] as const,
+  ([visible, rupture, ancienEtat]) => {
+    // `etat` conserve la compatibilité avec les anciens liens déjà partagés.
+    filtreVisible.value = visible === '1' || ancienEtat === 'visibles'
+    filtreRupture.value = rupture === '1' || ancienEtat === 'rupture'
+  },
+  { immediate: true },
+)
 type BrouillonCatalogue = Partial<Pick<CatalogueOverride, 'displayName' | 'visible' | 'rupture' | 'photoUrl'>>
 const brouillons = ref<Record<number, BrouillonCatalogue>>({})
 
@@ -89,9 +103,8 @@ const unitesFiltrees = computed(() => {
       [u.produit, u.contenant, u.packaging, override.displayName, u.libelleEasybeer]
         .some((v) => v?.toLowerCase().includes(q))
     const correspondEtat =
-      filtreEtat.value === 'tous' ||
-      (filtreEtat.value === 'visibles' && override.visible) ||
-      (filtreEtat.value === 'rupture' && override.rupture)
+      (!filtreVisible.value || override.visible) &&
+      (!filtreRupture.value || override.rupture)
     const correspondColonnes =
       (filtresColonne.value.contenant === 'tous' || u.contenant === filtresColonne.value.contenant) &&
       (filtresColonne.value.packaging === 'tous' || u.packaging === filtresColonne.value.packaging)
@@ -99,22 +112,51 @@ const unitesFiltrees = computed(() => {
   })
 })
 
-function basculerFiltreEtat(cle: typeof filtreEtat.value) {
-  filtreEtat.value = filtreEtat.value === cle ? 'tous' : cle
+function mettreAJourFiltresUrl() {
+  void router.replace({
+    query: {
+      ...route.query,
+      etat: undefined,
+      visible: filtreVisible.value ? '1' : undefined,
+      rupture: filtreRupture.value ? '1' : undefined,
+    },
+  })
+}
+
+function basculerFiltreVisible() {
+  filtreVisible.value = !filtreVisible.value
+  mettreAJourFiltresUrl()
+}
+
+function basculerFiltreRupture() {
+  filtreRupture.value = !filtreRupture.value
+  mettreAJourFiltresUrl()
 }
 
 const filtresActifs = computed(
   () =>
     recherche.value.trim() !== '' ||
-    filtreEtat.value !== 'tous' ||
+    filtreVisible.value ||
+    filtreRupture.value ||
     filtresColonne.value.contenant !== 'tous' ||
     filtresColonne.value.packaging !== 'tous',
 )
 
 function reinitialiserFiltres() {
   recherche.value = ''
-  filtreEtat.value = 'tous'
+  filtreVisible.value = false
+  filtreRupture.value = false
   filtresColonne.value = { contenant: 'tous', packaging: 'tous' }
+  if (route.query.etat || route.query.visible || route.query.rupture) {
+    void router.replace({
+      query: {
+        ...route.query,
+        etat: undefined,
+        visible: undefined,
+        rupture: undefined,
+      },
+    })
+  }
 }
 
 const statsCatalogue = computed(() => {
@@ -394,8 +436,9 @@ async function retirerPhoto(idStockBouteille: number) {
             <button
               type="button"
               class="rounded-md border px-2.5 py-1 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
-              :class="filtreEtat === 'visibles' ? 'border-primary/50 bg-primary/10 text-foreground' : 'bg-muted/30'"
-              @click="basculerFiltreEtat('visibles')"
+              :class="filtreVisible ? 'border-primary/50 bg-primary/10 text-foreground' : 'bg-muted/30'"
+              :aria-pressed="filtreVisible"
+              @click="basculerFiltreVisible"
             >
               <strong class="font-semibold text-foreground">{{ statsCatalogue.visibles }}</strong>
               / {{ statsCatalogue.total }} produit{{ statsCatalogue.total > 1 ? 's' : '' }} visible{{ statsCatalogue.visibles > 1 ? 's' : '' }}
@@ -403,8 +446,9 @@ async function retirerPhoto(idStockBouteille: number) {
             <button
               type="button"
               class="rounded-md border px-2.5 py-1 text-left transition-colors hover:border-destructive/40 hover:bg-destructive/5 hover:text-foreground"
-              :class="filtreEtat === 'rupture' ? 'border-destructive/50 bg-destructive/10 text-foreground' : 'bg-muted/30'"
-              @click="basculerFiltreEtat('rupture')"
+              :class="filtreRupture ? 'border-destructive/50 bg-destructive/10 text-foreground' : 'bg-muted/30'"
+              :aria-pressed="filtreRupture"
+              @click="basculerFiltreRupture"
             >
               <strong class="font-semibold text-foreground">{{ statsCatalogue.ruptures }}</strong>
               / {{ statsCatalogue.total }} produit{{ statsCatalogue.total > 1 ? 's' : '' }} en rupture

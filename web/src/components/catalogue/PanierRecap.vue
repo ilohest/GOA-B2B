@@ -71,6 +71,9 @@ const totalApresRemise = computed(
 const tauxTVA = 0.055;
 const montantTVA = computed(() => totalApresRemise.value * tauxTVA);
 const totalTTC = computed(() => totalApresRemise.value + montantTVA.value);
+const montantRestantMinimum = computed(() =>
+  props.minimum == null ? 0 : Math.max(0, props.minimum - props.totalHT),
+);
 
 const formatNombre = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 2,
@@ -411,8 +414,20 @@ onMounted(async () => {
         </p>
       </div>
     </div>
-    <p v-if="sousMinimum && minimum != null" class="text-xs text-destructive">
-      Minimum de commande : {{ prixFr(minimum) }} HT
+    <p
+      v-if="sousMinimum && minimum != null"
+      class="flex items-baseline gap-1 text-xs font-medium text-amber-700"
+    >
+      <span>Encore</span>
+      <Transition name="panier-total" mode="out-in">
+        <strong
+          :key="montantRestantMinimum"
+          class="inline-block whitespace-nowrap tabular-nums"
+        >
+          {{ prixFr(montantRestantMinimum) }} HT
+        </strong>
+      </Transition>
+      <span>pour commander.</span>
     </p>
     <p
       v-for="erreur in erreursConditionnement"

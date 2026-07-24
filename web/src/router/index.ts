@@ -1,9 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useHeaderSaveBar } from '@/composables/useHeaderSaveBar'
+import { api } from '@/lib/api'
+import { queryClient } from '@/lib/queryClient'
+import type { MeResponse } from '@/lib/types'
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to) {
+    if (to.hash) {
+      return { el: to.hash, top: 80, behavior: 'smooth' }
+    }
+    return { top: 0 }
+  },
   routes: [
     {
       path: '/login',
@@ -18,8 +27,15 @@ const router = createRouter({
       meta: { public: true },
     },
     {
+      path: '/reinitialiser-mot-de-passe',
+      name: 'reinitialiser-mot-de-passe',
+      component: () => import('@/pages/ResetPasswordPage.vue'),
+      meta: { public: true },
+    },
+    {
       path: '/',
       component: () => import('@/layouts/ClientLayout.vue'),
+      meta: { role: 'client' },
       children: [
         {
           path: '',
@@ -41,11 +57,17 @@ const router = createRouter({
           name: 'compte',
           component: () => import('@/pages/ComptePage.vue'),
         },
+        {
+          path: 'contact',
+          name: 'contact',
+          component: () => import('@/pages/ContactPage.vue'),
+        },
       ],
     },
     {
       path: '/admin',
       component: () => import('@/layouts/AdminLayout.vue'),
+      meta: { role: 'admin' },
       children: [
         {
           path: '',
@@ -83,11 +105,13 @@ const router = createRouter({
       path: '/apercu-boutique',
       name: 'admin-boutique-apercu',
       component: () => import('@/pages/HomePage.vue'),
+      meta: { role: 'admin' },
     },
     {
       path: '/apercu-boutique/confirmer',
       name: 'admin-boutique-confirmation',
       component: () => import('@/pages/CommandeConfirmationPage.vue'),
+      meta: { role: 'admin' },
     },
     {
       path: '/:pathMatch(.*)*',
@@ -111,7 +135,23 @@ router.beforeEach(async (to, from) => {
   const { waitForAuth, isAuthenticated } = useAuth()
   await waitForAuth()
   if (!isAuthenticated.value) {
-    return { name: 'login', query: to.fullPath !== '/' ? { redirect: to.fullPath } : {} }
+    return {
+      name: 'login',
+      query: to.fullPath !== '/' ? { redirect: to.fullPath } : {},
+    }
+  }
+
+  const roleRequis = to.meta.role
+  if (roleRequis === 'admin' || roleRequis === 'client') {
+    const profil = await queryClient.ensureQueryData({
+      queryKey: ['me'],
+      queryFn: () => api.get<MeResponse>('/me'),
+    })
+    if (profil.user.role !== roleRequis) {
+      return profil.user.role === 'admin'
+        ? { name: 'admin-dashboard' }
+        : { name: 'boutique' }
+    }
   }
   return true
 })

@@ -43,6 +43,7 @@ const fieldErrors = reactive<{ email?: string; password?: string }>({});
 const submitting = ref(false);
 const googleLoading = ref(false);
 const sendingLink = ref(false);
+const sendingReset = ref(false);
 const completingLink = ref(false);
 const motDePasseVisible = ref(false);
 const erreurConnexion = ref("");
@@ -210,6 +211,22 @@ async function onSendLoginLink() {
     afficherErreur(e);
   } finally {
     sendingLink.value = false;
+  }
+}
+
+async function onResetPassword() {
+  erreurConnexion.value = "";
+  sendingReset.value = true;
+  try {
+    await api.post("/auth/reset-password", { email: form.email });
+    toast.success("Consultez votre boîte email", {
+      description:
+        "Si un compte correspond à cette adresse, vous recevrez un lien pour choisir un nouveau mot de passe.",
+    });
+  } catch (e) {
+    afficherErreur(e);
+  } finally {
+    sendingReset.value = false;
   }
 }
 
@@ -432,7 +449,17 @@ async function onSubmit() {
 
             <form class="grid gap-3" novalidate @submit.prevent="onSubmit">
               <div class="grid gap-1.5">
-                <Label for="password">Mot de passe</Label>
+                <div class="flex items-center justify-between gap-3">
+                  <Label for="password">Mot de passe</Label>
+                  <button
+                    type="button"
+                    class="text-[0.7rem] text-muted-foreground transition-colors hover:text-foreground hover:underline hover:underline-offset-2 disabled:pointer-events-none disabled:opacity-60"
+                    :disabled="sendingReset"
+                    @click="onResetPassword"
+                  >
+                    {{ sendingReset ? "Envoi…" : "Mot de passe oublié ?" }}
+                  </button>
+                </div>
                 <div class="relative">
                   <Input
                     id="password"

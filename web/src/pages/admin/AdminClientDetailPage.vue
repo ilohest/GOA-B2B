@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
-import { ArrowLeft, Check, Copy, Info, Mail, UserRound } from "@lucide/vue";
+import {
+  ArrowLeft,
+  CalendarDays,
+  Check,
+  Copy,
+  Info,
+  Mail,
+  UserRound,
+} from "@lucide/vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
@@ -231,6 +239,76 @@ function formatRemise(remise: string | null | undefined) {
   return prixFr(valeur);
 }
 
+const remisesCommandeAffichees = computed(() => {
+  const remises: {
+    id: string;
+    portee: "client" | "segment";
+    origine: string;
+    contexte: string;
+    valeur: string;
+  }[] = [];
+  const remiseIndividuelle = formatRemise(client.value?.remise);
+
+  if (remiseIndividuelle) {
+    remises.push({
+      id: "client",
+      portee: "client",
+      origine: "Condition individuelle",
+      contexte: "Appliquée à ce client",
+      valeur: remiseIndividuelle,
+    });
+  }
+
+  remisesType.value.forEach((type, index) => {
+    const valeur = formatRemise(type.remise);
+    if (!valeur) return;
+    remises.push({
+      id: `type-${type.idClientType ?? index}`,
+      portee: "segment",
+      origine: "Type de client",
+      contexte: type.libelle || "Type non renseigné",
+      valeur,
+    });
+  });
+
+  return remises;
+});
+
+const remisesProduitAffichees = computed(() => [
+  ...remisesCiblees.value.map((remise, index) => ({
+    id: `client-${index}`,
+    portee: "client" as const,
+    origine: "Condition individuelle",
+    contexte: "Appliquée à ce client",
+    remise,
+  })),
+  ...remisesType.value.flatMap((type, typeIndex) =>
+    type.remisesCiblees.map((remise, remiseIndex) => ({
+      id: `type-${type.idClientType ?? typeIndex}-${remiseIndex}`,
+      portee: "segment" as const,
+      origine: "Type de client",
+      contexte: type.libelle || "Type non renseigné",
+      remise,
+    })),
+  ),
+]);
+
+function classesCarteRemise(portee: "client" | "segment") {
+  return portee === "client"
+    ? "border-emerald-200/80 bg-emerald-50/55"
+    : "border-sky-200/80 bg-sky-50/55";
+}
+
+function classesLibelleRemise(portee: "client" | "segment") {
+  return portee === "client" ? "text-emerald-700" : "text-sky-700";
+}
+
+function classesValeurRemise(portee: "client" | "segment") {
+  return portee === "client"
+    ? "border-emerald-200 bg-emerald-100/80 text-emerald-800"
+    : "border-sky-200 bg-sky-100/80 text-sky-800";
+}
+
 const aDesRemises = computed(
   () =>
     Boolean(formatRemise(client.value?.remise)) ||
@@ -255,15 +333,23 @@ function metaRemiseCiblee(
   return elements.join(" · ");
 }
 
-function periodeRemiseCiblee(
+function datesRemiseCiblee(
   remise: AdminClientDetail["client"]["remisesCiblees"][number],
 ) {
-  if (!remise.dateDebut && !remise.dateFin) return null;
-  const debut = remise.dateDebut
-    ? dateFr(new Date(remise.dateDebut).getTime())
-    : "…";
-  const fin = remise.dateFin ? dateFr(new Date(remise.dateFin).getTime()) : "…";
-  return `${debut} → ${fin}`;
+  return [
+    remise.dateDebut
+      ? {
+          label: "Début",
+          valeur: dateFr(new Date(remise.dateDebut).getTime()),
+        }
+      : null,
+    remise.dateFin
+      ? {
+          label: "Fin",
+          valeur: dateFr(new Date(remise.dateFin).getTime()),
+        }
+      : null,
+  ].filter((date): date is { label: string; valeur: string } => Boolean(date));
 }
 </script>
 
@@ -293,7 +379,9 @@ function periodeRemiseCiblee(
         </div>
         <div v-else class="flex items-start gap-2.5">
           <UserRound class="mt-1 size-5 shrink-0 text-muted-foreground" />
-          <div class="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+          <div
+            class="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-baseline sm:gap-3"
+          >
             <h1 class="text-xl font-semibold leading-tight">
               {{ client?.nom ?? client?.raisonSociale ?? "…" }}
             </h1>
@@ -503,7 +591,8 @@ function periodeRemiseCiblee(
                       v-else
                       class="min-w-0 [overflow-wrap:anywhere]"
                       :class="i.valeur ? '' : 'text-muted-foreground/70'"
-                    >{{ i.valeur || "—" }}</span>
+                      >{{ i.valeur || "—" }}</span
+                    >
                   </dd>
                 </div>
                 <div
@@ -606,7 +695,9 @@ function periodeRemiseCiblee(
                   >
                     {{ c.label }}
                   </dt>
-                  <dd class="text-[0.95rem] font-medium leading-relaxed sm:text-sm sm:font-normal sm:leading-normal">
+                  <dd
+                    class="text-[0.95rem] font-medium leading-relaxed sm:text-sm sm:font-normal sm:leading-normal"
+                  >
                     {{ c.valeur || "—" }}
                   </dd>
                 </div>
@@ -621,201 +712,149 @@ function periodeRemiseCiblee(
                 >
                   Remises
                 </h3>
-                <span class="text-[0.95rem] font-medium text-muted-foreground/70 sm:text-sm sm:font-normal">—</span>
+                <span
+                  class="text-[0.95rem] font-medium text-muted-foreground/70 sm:text-sm sm:font-normal"
+                  >—</span
+                >
               </div>
 
-              <div v-else class="mt-4 grid gap-2">
-                <div>
-                  <h3 class="text-sm font-medium">Remises</h3>
-                </div>
-                <div class="overflow-hidden rounded-lg border text-sm">
-                  <div
-                    class="hidden grid-cols-[7rem_1fr_1fr] bg-muted/70 text-xs font-medium text-muted-foreground xl:grid"
-                  >
-                    <div class="border-r px-3 py-2"></div>
-                    <div class="border-r px-3 py-2">Client individuel</div>
-                    <div class="px-3 py-2">Type de client</div>
+              <div v-else class="mt-5 grid gap-5 text-sm">
+                <section
+                  v-if="remisesCommandeAffichees.length"
+                  class="grid gap-2.5"
+                >
+                  <div>
+                    <h3 class="font-semibold">Remise sur la commande</h3>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                      Réduction appliquée à l’ensemble de la commande.
+                    </p>
                   </div>
-
-                  <div class="grid border-t xl:grid-cols-[7rem_1fr_1fr]">
-                    <div
-                      class="border-b bg-muted/35 px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:border-r xl:border-b-0 xl:py-3 xl:text-sm xl:normal-case xl:tracking-normal"
+                  <div class="grid gap-2 sm:grid-cols-2">
+                    <article
+                      v-for="remise in remisesCommandeAffichees"
+                      :key="remise.id"
+                      class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-lg border p-3"
+                      :class="classesCarteRemise(remise.portee)"
                     >
-                      Commande
-                    </div>
-                    <div class="border-b px-3 py-3 xl:border-r xl:border-b-0">
-                      <p
-                        class="mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:hidden"
-                      >
-                        Client individuel
-                      </p>
+                      <div class="min-w-0">
+                        <p
+                          class="text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                          :class="classesLibelleRemise(remise.portee)"
+                        >
+                          {{ remise.origine }}
+                        </p>
+                        <p class="mt-1 font-medium">{{ remise.contexte }}</p>
+                      </div>
                       <Badge
-                        v-if="formatRemise(client.remise)"
-                        variant="secondary"
+                        variant="outline"
+                        class="text-sm tabular-nums"
+                        :class="classesValeurRemise(remise.portee)"
                       >
-                        {{ formatRemise(client.remise) }}
+                        {{ remise.valeur }}
                       </Badge>
-                      <span v-else class="text-muted-foreground">—</span>
-                    </div>
-                    <div class="grid gap-2 px-3 py-3">
-                      <p
-                        class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:hidden"
-                      >
-                        Type de client
-                      </p>
-                      <template
-                        v-if="
-                          remisesType.some((type) => formatRemise(type.remise))
-                        "
-                      >
-                        <div
-                          v-for="type in remisesType.filter((type) =>
-                            formatRemise(type.remise),
-                          )"
-                          :key="`commande-${type.idClientType ?? type.libelle ?? 'type'}`"
-                          class="flex flex-wrap items-center justify-between gap-2"
-                        >
-                          <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-medium">{{
-                              type.libelle || "Type de client"
-                            }}</span>
-                          </div>
-                          <Badge variant="secondary">{{
-                            formatRemise(type.remise)
-                          }}</Badge>
-                        </div>
-                      </template>
-                      <span v-else class="text-muted-foreground">—</span>
-                    </div>
+                    </article>
                   </div>
+                </section>
 
-                  <div class="grid border-t xl:grid-cols-[7rem_1fr_1fr]">
-                    <div
-                      class="border-b bg-muted/35 px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:border-r xl:border-b-0 xl:py-3 xl:text-sm xl:normal-case xl:tracking-normal"
+                <section
+                  v-if="remisesProduitAffichees.length"
+                  class="grid gap-2.5"
+                >
+                  <div>
+                    <h3 class="font-semibold">Remises sur les produits</h3>
+                    <p class="mt-0.5 text-xs text-muted-foreground">
+                      Réductions limitées aux produits et formats indiqués.
+                    </p>
+                  </div>
+                  <div class="grid gap-2.5 xl:grid-cols-2">
+                    <article
+                      v-for="item in remisesProduitAffichees"
+                      :key="item.id"
+                      class="rounded-lg border p-3"
+                      :class="classesCarteRemise(item.portee)"
                     >
-                      Produit
-                    </div>
-                    <div
-                      class="grid gap-2 border-b px-3 py-3 xl:border-r xl:border-b-0"
-                    >
-                      <p
-                        class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:hidden"
+                      <div
+                        class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3"
                       >
-                        Client individuel
-                      </p>
-                      <template v-if="remisesCiblees.length">
-                        <div
-                          v-for="(remise, index) in remisesCiblees"
-                          :key="index"
-                          class="rounded-md border bg-background p-2"
-                        >
-                          <div
-                            class="flex flex-wrap items-center justify-between gap-2"
-                          >
-                            <div class="flex flex-wrap items-center gap-2">
-                              <p class="font-medium">
-                                {{ remise.produit || "Produit ciblé" }}
-                              </p>
-                              <Badge v-if="remise.contenant" variant="outline">
-                                {{ remise.contenant }}
-                              </Badge>
-                              <Badge v-if="remise.lot" variant="outline">
-                                {{ remise.lot }}
-                              </Badge>
-                            </div>
-                            <Badge
-                              v-if="formatRemise(remise.remise)"
-                              variant="secondary"
-                            >
-                              {{ formatRemise(remise.remise) }}
-                            </Badge>
-                          </div>
+                        <div class="min-w-0">
                           <p
-                            v-if="metaRemiseCiblee(remise)"
-                            class="mt-1 text-xs text-muted-foreground"
+                            class="text-[0.65rem] font-semibold uppercase tracking-[0.08em]"
+                            :class="classesLibelleRemise(item.portee)"
                           >
-                            {{ metaRemiseCiblee(remise) }}
+                            {{ item.origine }}
                           </p>
-                          <p
-                            v-if="periodeRemiseCiblee(remise)"
-                            class="mt-1 text-xs text-muted-foreground"
-                          >
-                            {{ periodeRemiseCiblee(remise) }}
+                          <p class="mt-1 font-medium">
+                            {{ item.contexte }}
                           </p>
                         </div>
-                      </template>
-                      <span v-else class="text-muted-foreground">—</span>
-                    </div>
-                    <div class="grid gap-2 px-3 py-3">
-                      <p
-                        class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:hidden"
-                      >
-                        Type de client
-                      </p>
-                      <template
-                        v-if="
-                          remisesType.some((type) => type.remisesCiblees.length)
-                        "
-                      >
-                        <template
-                          v-for="type in remisesType.filter(
-                            (type) => type.remisesCiblees.length,
-                          )"
-                          :key="`produits-${type.idClientType ?? type.libelle ?? 'type'}`"
+                        <Badge
+                          v-if="formatRemise(item.remise.remise)"
+                          variant="outline"
+                          class="text-sm tabular-nums"
+                          :class="classesValeurRemise(item.portee)"
                         >
-                          <div class="flex flex-wrap items-center gap-2">
-                            <span class="font-medium">{{
-                              type.libelle || "Type de client"
-                            }}</span>
-                          </div>
+                          {{ formatRemise(item.remise.remise) }}
+                        </Badge>
+                      </div>
+
+                      <p class="mt-3 font-semibold leading-snug">
+                        {{ item.remise.produit || "Produit ciblé" }}
+                      </p>
+
+                      <div
+                        v-if="item.remise.contenant || item.remise.lot"
+                        class="mt-2 flex flex-wrap gap-1.5"
+                      >
+                        <Badge v-if="item.remise.contenant" variant="outline">
+                          {{ item.remise.contenant }}
+                        </Badge>
+                        <Badge v-if="item.remise.lot" variant="outline">
+                          {{ item.remise.lot }}
+                        </Badge>
+                      </div>
+
+                      <div
+                        v-if="metaRemiseCiblee(item.remise)"
+                        class="mt-3 border-t pt-2.5"
+                      >
+                        <p
+                          class="text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
+                        >
+                          Condition d’application
+                        </p>
+                        <p class="mt-0.5 font-medium">
+                          {{ metaRemiseCiblee(item.remise) }}
+                        </p>
+                      </div>
+
+                      <div
+                        v-if="datesRemiseCiblee(item.remise).length"
+                        class="mt-3 flex items-start gap-2 rounded-md bg-muted/55 px-2.5 py-2"
+                      >
+                        <CalendarDays
+                          class="mt-0.5 size-3.5 shrink-0 text-primary"
+                          aria-hidden="true"
+                        />
+                        <dl class="grid flex-1 grid-cols-2 gap-x-4 gap-y-1">
                           <div
-                            v-for="(remise, index) in type.remisesCiblees"
-                            :key="`${type.idClientType ?? type.libelle}-${index}`"
-                            class="rounded-md border bg-background p-2"
+                            v-for="date in datesRemiseCiblee(item.remise)"
+                            :key="date.label"
+                            class="grid gap-0.5"
                           >
-                            <div
-                              class="flex flex-wrap items-center justify-between gap-2"
+                            <dt
+                              class="text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground"
                             >
-                              <div class="flex flex-wrap items-center gap-2">
-                                <p class="font-medium">
-                                  {{ remise.produit || "Produit ciblé" }}
-                                </p>
-                                <Badge
-                                  v-if="remise.contenant"
-                                  variant="outline"
-                                >
-                                  {{ remise.contenant }}
-                                </Badge>
-                                <Badge v-if="remise.lot" variant="outline">
-                                  {{ remise.lot }}
-                                </Badge>
-                              </div>
-                              <Badge
-                                v-if="formatRemise(remise.remise)"
-                                variant="secondary"
-                              >
-                                {{ formatRemise(remise.remise) }}
-                              </Badge>
-                            </div>
-                            <p
-                              v-if="metaRemiseCiblee(remise)"
-                              class="mt-1 text-xs text-muted-foreground"
-                            >
-                              {{ metaRemiseCiblee(remise) }}
-                            </p>
-                            <p
-                              v-if="periodeRemiseCiblee(remise)"
-                              class="mt-1 text-xs text-muted-foreground"
-                            >
-                              {{ periodeRemiseCiblee(remise) }}
-                            </p>
+                              {{ date.label }}
+                            </dt>
+                            <dd class="font-medium tabular-nums">
+                              {{ date.valeur }}
+                            </dd>
                           </div>
-                        </template>
-                      </template>
-                      <span v-else class="text-muted-foreground">—</span>
-                    </div>
+                        </dl>
+                      </div>
+                    </article>
                   </div>
-                </div>
+                </section>
               </div>
             </CardContent>
           </Card>

@@ -1,4 +1,4 @@
-import { CircleHelp, ClipboardList, LayoutDashboard, Package, ReceiptText, Store, UserRound, Users } from '@lucide/vue'
+import { CircleHelp, ClipboardList, LayoutDashboard, MessageCircle, Package, ReceiptText, Store, UserRound, Users } from '@lucide/vue'
 
 export const adminSections = [
   { to: '/admin', label: 'Tableau de bord', exact: true, icon: LayoutDashboard },
@@ -11,5 +11,6 @@ export const adminSections = [
 export const clientSections = [
   { to: '/', label: 'Boutique', exact: true, icon: Store },
   { to: '/commandes', label: 'Mes commandes', icon: ClipboardList },
+  { to: '/contact', label: 'Contact', icon: MessageCircle },
   { to: '/compte', label: 'Mon compte', icon: UserRound },
 ]
