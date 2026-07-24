@@ -147,6 +147,7 @@ async function onGoogle() {
 
 async function onSendLoginLink() {
   fieldErrors.email = undefined;
+  fieldErrors.password = undefined;
   erreurConnexion.value = "";
   const email = emailSchema.safeParse(form.email.trim().toLowerCase());
   if (!email.success) {
@@ -219,6 +220,7 @@ async function onSubmit() {
 async function onResetPassword() {
   const email = z.email().safeParse(form.email);
   erreurConnexion.value = "";
+  fieldErrors.password = undefined;
   if (!email.success) {
     fieldErrors.email =
       "Saisissez votre email pour recevoir le lien de réinitialisation.";
@@ -308,15 +310,13 @@ async function onResetPassword() {
           </div>
 
           <template v-else>
-            <!-- Adresse email : identifiant commun aux deux méthodes ci-dessous. -->
+            <!-- Lorsqu'un lien est ouvert sur un autre appareil, l'adresse doit
+                 être confirmée avant de finaliser la connexion. -->
             <form
+              v-if="lienEmailEnAttente"
               class="grid gap-3"
               novalidate
-              @submit.prevent="
-                lienEmailEnAttente
-                  ? terminerConnexionParLien()
-                  : onSendLoginLink()
-              "
+              @submit.prevent="terminerConnexionParLien"
             >
               <div class="grid gap-1.5">
                 <Label for="email">Votre adresse email</Label>
@@ -335,39 +335,41 @@ async function onResetPassword() {
                   {{ fieldErrors.email }}
                 </p>
               </div>
-              <p v-if="lienEmailEnAttente" class="text-xs text-muted-foreground">
+              <p class="text-xs text-muted-foreground">
                 Pour votre sécurité, confirmez l’adresse qui a reçu ce lien.
               </p>
               <Button
                 type="submit"
                 class="h-10 w-full"
-                :disabled="sendingLink || completingLink"
+                :disabled="completingLink"
               >
                 <MailIcon />
-                {{
-                  completingLink
-                    ? "Connexion…"
-                    : lienEmailEnAttente
-                      ? "Finaliser ma connexion"
-                      : sendingLink
-                        ? "Envoi…"
-                        : "Recevoir un lien de connexion"
-                }}
+                {{ completingLink ? "Connexion…" : "Finaliser ma connexion" }}
               </Button>
             </form>
 
-            <!-- Mot de passe : alternative sur la MÊME adresse. Masquée pendant
-                 la finalisation d'une connexion par lien. -->
-            <template v-if="!lienEmailEnAttente">
-              <div class="relative flex items-center" aria-hidden="true">
-                <span class="h-px flex-1 bg-border" />
-                <span class="px-3 text-xs text-muted-foreground"
-                  >ou avec un mot de passe</span
-                >
-                <span class="h-px flex-1 bg-border" />
-              </div>
-
+            <!-- Parcours principal : l'identifiant et le mot de passe restent
+                 dans un même bloc, sans action concurrente entre les champs. -->
+            <template v-else>
               <form class="grid gap-3" novalidate @submit.prevent="onSubmit">
+                <div class="grid gap-1.5">
+                  <Label for="email">Votre adresse email</Label>
+                  <Input
+                    id="email"
+                    v-model="form.email"
+                    type="email"
+                    autocomplete="email"
+                    inputmode="email"
+                    placeholder="vous@exemple.fr"
+                    :aria-invalid="Boolean(fieldErrors.email)"
+                    autofocus
+                    @input="effacerErreurConnexion"
+                  />
+                  <p v-if="fieldErrors.email" class="text-sm text-destructive">
+                    {{ fieldErrors.email }}
+                  </p>
+                </div>
+
                 <div class="grid gap-1.5">
                   <Label for="password">Mot de passe</Label>
                   <div class="relative">
@@ -404,7 +406,6 @@ async function onResetPassword() {
                 </div>
                 <Button
                   type="submit"
-                  variant="outline"
                   class="w-full"
                   :disabled="submitting"
                   >{{ submitting ? "Connexion…" : "Se connecter" }}</Button
@@ -416,9 +417,23 @@ async function onResetPassword() {
                   class="h-auto justify-self-center p-0 text-sm text-muted-foreground"
                   :disabled="resetting"
                   @click="onResetPassword"
-                  >Mot de passe oublié ?</Button
                 >
+                  {{ resetting ? "Envoi…" : "Mot de passe oublié ?" }}
+                </Button>
               </form>
+
+              <Button
+                type="button"
+                variant="outline"
+                class="w-full"
+                :disabled="sendingLink"
+                @click="onSendLoginLink"
+              >
+                <MailIcon />
+                {{
+                  sendingLink ? "Envoi…" : "Recevoir un lien de connexion"
+                }}
+              </Button>
             </template>
           </template>
 
