@@ -40,6 +40,13 @@ if [[ ! -f server/.env ]]; then
   exit 1
 fi
 
+# Un VirtualHost lié à l'adresse exacte prend la priorité sur les sites
+# génériques *:443 du VPS et peut leur faire servir le certificat de l'IP.
+if grep -Eq '<VirtualHost[[:space:]]+[0-9a-fA-F:.]+:(80|443)>' deploy/goa-kombucha-ip.conf; then
+  echo "Configuration Apache dangereuse : les VirtualHosts GOA doivent utiliser *:80 et *:443." >&2
+  exit 1
+fi
+
 echo "Build et vérifications locales"
 npm run typecheck
 npm test
@@ -90,6 +97,9 @@ ssh "$VPS_HOST" "set -e
     -e 's|^PORT=.*|PORT=8788|' \
     -e 's|^FIREBASE_EMULATORS=.*|FIREBASE_EMULATORS=true|' \
     -e 's|^FIREBASE_PROJECT_ID=.*|FIREBASE_PROJECT_ID=demo-goa-kombucha|' \
+    -e 's|^FIREBASE_AUTH_EMULATOR_HOST=.*|FIREBASE_AUTH_EMULATOR_HOST=localhost:9099|' \
+    -e 's|^FIRESTORE_EMULATOR_HOST=.*|FIRESTORE_EMULATOR_HOST=localhost:8080|' \
+    -e 's|^FIREBASE_STORAGE_EMULATOR_HOST=.*|FIREBASE_STORAGE_EMULATOR_HOST=localhost:9199|' \
     -e 's|^AUTH_DISABLED=.*|AUTH_DISABLED=false|' \
     -e 's|^WEB_ORIGIN=.*|WEB_ORIGIN=$PUBLIC_URL|' \
     -e 's|^INVITE_BASE_URL=.*|INVITE_BASE_URL=$PUBLIC_URL/activer|' \
