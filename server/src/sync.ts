@@ -19,6 +19,8 @@
 import type { Firestore } from 'firebase-admin/firestore'
 import { randomUUID } from 'node:crypto'
 import { config } from './config.js'
+import { getAdminAuth } from './firebase.js'
+import { revoquerInvitationsClientSupprime } from './invitations.js'
 import {
   EasybeerBanError,
   getClient,
@@ -1024,6 +1026,103 @@ async function idsClientsAvecCompte(db: Firestore): Promise<number[]> {
   return [...new Set(snap.docs.map((d) => d.data()).filter(doitSynchroniserClientEasybeer).map((d) => d.easybeerIdClient))]
 }
 
+const CONFIRMATIONS_SUPPRESSION_CLIENT = 2
+
+export function idsComptesAbsentsEasybeer(
+  comptes: Array<{ easybeerIdClient?: unknown; role?: unknown; syncEasybeer?: unknown }>,
+  clientsEasybeer: Array<{ idClient?: number | null }>,
+): number[] {
+  const presents = new Set(
+    clientsEasybeer
+      .map((client) => client.idClient)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+  )
+  return [...new Set(
+    comptes
+      .flatMap((compte) =>
+        compte.role !== 'admin' && doitSynchroniserClientEasybeer(compte)
+          ? [compte.easybeerIdClient]
+          : [],
+      )
+      .filter((id) => !presents.has(id)),
+  )]
+}
+
+/**
+ * Réconciliation non destructive : deux listes Easybeer complètes et
+ * consécutives doivent confirmer l'absence avant de désactiver le compte.
+ * Les commandes restent conservées ; seuls les accès, invitations et caches de
+ * prix devenus inutiles sont neutralisés.
+ */
+async function rapprocherComptesSupprimesEasybeer(db: Firestore, clientsEasybeer: ClientResume[]) {
+  const utilisateurs = await db.collection('users').where('easybeerIdClient', '!=', null).get()
+  const idsPresents = new Set(clientsEasybeer.map((client) => client.idClient).filter((id): id is number => id != null))
+  const maintenant = Date.now()
+  const aDesactiver: Array<{ uid: string; idClient: number }> = []
+  const batch = db.batch()
+  let ecritures = 0
+
+  for (const doc of utilisateurs.docs) {
+    const data = doc.data()
+    if (data.role === 'admin' || typeof data.easybeerIdClient !== 'number') continue
+    const idClient = data.easybeerIdClient as number
+    if (idsPresents.has(idClient)) {
+      if (data.easybeerMissingSince || data.easybeerMissingSyncCount) {
+        batch.set(doc.ref, { easybeerMissingSince: null, easybeerMissingSyncCount: 0 }, { merge: true })
+        ecritures++
+      }
+      continue
+    }
+    if (data.status === 'source_deleted') continue
+
+    const confirmations = Number(data.easybeerMissingSyncCount ?? 0) + 1
+    if (confirmations < CONFIRMATIONS_SUPPRESSION_CLIENT) {
+      batch.set(
+        doc.ref,
+        {
+          easybeerMissingSince: data.easybeerMissingSince ?? maintenant,
+          easybeerMissingSyncCount: confirmations,
+        },
+        { merge: true },
+      )
+      ecritures++
+      continue
+    }
+
+    batch.set(
+      doc.ref,
+      {
+        status: 'source_deleted',
+        sourceDeletedAt: maintenant,
+        easybeerMissingSince: data.easybeerMissingSince ?? maintenant,
+        easybeerMissingSyncCount: confirmations,
+        syncEasybeer: false,
+      },
+      { merge: true },
+    )
+    ecritures++
+    aDesactiver.push({ uid: doc.id, idClient })
+  }
+
+  if (ecritures) await batch.commit()
+  const adminAuth = getAdminAuth()
+  for (const compte of aDesactiver) {
+    if (adminAuth) {
+      await adminAuth.updateUser(compte.uid, { disabled: true }).catch((e) =>
+        console.warn(`[sync] désactivation Auth ${compte.uid} : ${(e as Error).message}`),
+      )
+      await adminAuth.revokeRefreshTokens(compte.uid).catch((e) =>
+        console.warn(`[sync] révocation sessions ${compte.uid} : ${(e as Error).message}`),
+      )
+    }
+    await revoquerInvitationsClientSupprime(db, compte.idClient).catch((e) =>
+      console.warn(`[sync] révocation invitations client ${compte.idClient} : ${(e as Error).message}`),
+    )
+    await db.doc(`cacheClients/${compte.idClient}`).delete().catch(() => undefined)
+  }
+  return aDesactiver.length
+}
+
 /**
  * Synchro complète : catalogue + référentiels + listes admin (clients,
  * commandes récentes) + fiche/prix de chaque client à compte.
@@ -1125,8 +1224,11 @@ export async function syncTout(db: Firestore): Promise<SyncReport> {
   }
 
   let listeClientsNb = 0
+  let listeClientsSynchronises: ClientResume[] | null = null
   try {
-    listeClientsNb = (await syncListeClients(db)).length
+    listeClientsSynchronises = await syncListeClients(db)
+    listeClientsNb = listeClientsSynchronises.length
+    await rapprocherComptesSupprimesEasybeer(db, listeClientsSynchronises)
   } catch (e) {
     erreurs.push(`liste clients : ${(e as Error).message}`)
   }

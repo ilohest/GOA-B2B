@@ -53,7 +53,7 @@ export interface AuthUser {
   uid: string
   email?: string
   role: 'client' | 'admin'
-  status?: 'invited' | 'active' | 'revoked'
+  status?: 'invited' | 'active' | 'revoked' | 'source_deleted'
   easybeerIdClient?: number
 }
 
@@ -72,8 +72,14 @@ export interface AdminClientsResponse {
   clients: ClientResume[]
   comptes: Record<
     number,
-    { statut: 'invited' | 'active' | 'revoked'; emails: string[] }
+    { statut: 'invited' | 'active' | 'revoked' | 'source_deleted'; emails: string[] }
   >
+  comptesSupprimes: {
+    uid: string
+    email: string | null
+    easybeerIdClient: number | null
+    sourceDeletedAt: number | null
+  }[]
   syncedAt: number | null
   indisponible?: boolean
   revalidationEnCours?: boolean
@@ -354,7 +360,7 @@ export interface AdminClientDetail {
   comptes: {
     uid: string
     email: string
-    status: 'invited' | 'active' | 'revoked'
+    status: 'invited' | 'active' | 'revoked' | 'source_deleted'
   }[]
   invitation: {
     etat: 'valide' | 'utilise' | 'expire' | 'revoque'

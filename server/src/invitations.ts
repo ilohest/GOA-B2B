@@ -17,6 +17,27 @@ import { getClient } from './easybeer.js'
 
 const COLL = 'invitations'
 
+/** Révoque les invitations encore utilisables lorsqu'un client disparaît de la source. */
+export async function revoquerInvitationsClientSupprime(db: Firestore, easybeerIdClient: number): Promise<number> {
+  const snap = await db.collection(COLL).where('easybeerIdClient', '==', easybeerIdClient).get()
+  const actives = snap.docs.filter((doc) => {
+    const data = doc.data()
+    return !data.usedAt && !data.revoked
+  })
+  if (!actives.length) return 0
+  const batch = db.batch()
+  const maintenant = Date.now()
+  for (const doc of actives) {
+    batch.update(doc.ref, {
+      revoked: true,
+      revokedAt: maintenant,
+      revokedReason: 'client_supprime_easybeer',
+    })
+  }
+  await batch.commit()
+  return actives.length
+}
+
 export interface InvitationCreee {
   token: string
   lien: string

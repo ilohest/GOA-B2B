@@ -3,7 +3,13 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { randomUUID } from 'node:crypto'
 import { config, validerConfigurationProduction } from './config.js'
-import { comptePlateformeAutorise, requireAuth, requireAdmin, requireFirebaseIdentity } from './auth.js'
+import {
+  comptePlateformeAutorise,
+  comptePlateformePresentDansEasybeer,
+  requireAuth,
+  requireAdmin,
+  requireFirebaseIdentity,
+} from './auth.js'
 import { getDb, getAdminAuth, getBucket } from './firebase.js'
 import {
   getClient,
@@ -1415,24 +1421,41 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
 // ---- Admin : invitations (flux §5 du brief) ----
 
 /** Statuts des comptes plateforme par idClient (collection users, petite). */
-type StatutCompte = 'invited' | 'active' | 'revoked'
+type StatutCompte = 'invited' | 'active' | 'revoked' | 'source_deleted'
 
 async function comptesParClient(): Promise<Record<number, { statut: StatutCompte; emails: string[] }>> {
   const comptes: Record<number, { statut: StatutCompte; emails: string[] }> = {}
   const db = getDb()
   if (!db) return comptes
   const snap = await db.collection('users').where('easybeerIdClient', '!=', null).get()
-  const priorite: Record<StatutCompte, number> = { revoked: 0, invited: 1, active: 2 }
+  const priorite: Record<StatutCompte, number> = { source_deleted: -1, revoked: 0, invited: 1, active: 2 }
   for (const doc of snap.docs) {
     const d = doc.data()
     const id = d.easybeerIdClient as number
     const statut: StatutCompte =
-      d.status === 'active' || d.status === 'revoked' ? d.status : 'invited'
+      d.status === 'active' || d.status === 'revoked' || d.status === 'source_deleted'
+        ? d.status
+        : 'invited'
     const entry = (comptes[id] ??= { statut, emails: [] })
     if (d.email) entry.emails.push(d.email as string)
     if (priorite[statut] > priorite[entry.statut]) entry.statut = statut
   }
   return comptes
+}
+
+async function comptesSupprimesEasybeer() {
+  const db = getDb()
+  if (!db) return []
+  const snap = await db.collection('users').where('status', '==', 'source_deleted').get()
+  return snap.docs.map((doc) => {
+    const data = doc.data()
+    return {
+      uid: doc.id,
+      email: (data.email as string | undefined) ?? null,
+      easybeerIdClient: (data.easybeerIdClient as number | undefined) ?? null,
+      sourceDeletedAt: (data.sourceDeletedAt as number | undefined) ?? null,
+    }
+  })
 }
 
 /**
@@ -1442,13 +1465,15 @@ async function comptesParClient(): Promise<Record<number, { statut: StatutCompte
 app.get('/api/admin/clients', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
-  const [{ clients, syncedAt, indisponible, revalidationEnCours, revalidationEchouee }, comptes] = await Promise.all([
+  const [{ clients, syncedAt, indisponible, revalidationEnCours, revalidationEchouee }, comptes, comptesSupprimes] = await Promise.all([
     lireListeClients(db, c.req.query('refresh') === '1'),
     comptesParClient(),
+    comptesSupprimesEasybeer(),
   ])
   return c.json({
     clients,
     comptes,
+    comptesSupprimes,
     syncedAt,
     indisponible: indisponible ?? false,
     revalidationEnCours: revalidationEnCours ?? false,
@@ -1570,6 +1595,12 @@ app.put('/api/admin/accounts/:uid/status', requireAuth, requireAdmin, async (c) 
   if (compte.role === 'admin' || compte.easybeerIdClient == null) {
     return c.json({ error: 'Seuls les comptes clients peuvent être modifiés ici' }, 403)
   }
+  if (!parse.data.revoked && compte.status === 'source_deleted') {
+    const clientRestaure = await getClient(compte.easybeerIdClient as number).catch(() => null)
+    if (!clientRestaure) {
+      return c.json({ error: "Ce client doit d’abord être restauré dans Easybeer." }, 409)
+    }
+  }
 
   const maintenant = Date.now()
   await adminAuth.updateUser(uid, { disabled: parse.data.revoked })
@@ -1591,6 +1622,10 @@ app.put('/api/admin/accounts/:uid/status', requireAuth, requireAdmin, async (c) 
         reactivatedBy: c.get('user').uid,
         revokedAt: null,
         revokedBy: null,
+        sourceDeletedAt: null,
+        easybeerMissingSince: null,
+        easybeerMissingSyncCount: 0,
+        syncEasybeer: true,
       },
       { merge: true },
     )
@@ -1678,6 +1713,12 @@ async function traiterEmailAuth(
   if (!db) return
   const profil = (await db.collection('users').doc(user.uid).get()).data()
   if (!comptePlateformeAutorise(profil)) return
+  if (profil?.role !== 'admin') {
+    const clients = (await db.doc('cache/clientsListe').get()).data()?.clients as
+      | Array<{ idClient?: number | null }>
+      | undefined
+    if (!comptePlateformePresentDansEasybeer(profil, clients)) return
+  }
 
   if (type === 'connexion') {
     const red = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
@@ -1836,7 +1877,9 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
     for (const doc of snap.docs) {
       const d = doc.data()
       const status: StatutCompte =
-        d.status === 'active' || d.status === 'revoked' ? d.status : 'invited'
+        d.status === 'active' || d.status === 'revoked' || d.status === 'source_deleted'
+          ? d.status
+          : 'invited'
       comptes.push({ uid: doc.id, email: (d.email as string) ?? '?', status })
     }
   }

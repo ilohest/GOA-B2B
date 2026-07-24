@@ -5,6 +5,7 @@ import {
   cacheClientDoitEtreRafraichi,
   cacheEstAncien,
   doitSynchroniserClientEasybeer,
+  idsComptesAbsentsEasybeer,
   normaliserTarifsPersonnalises,
   prixEstFrais,
   type CacheClientDoc,
@@ -22,6 +23,20 @@ describe('sélection des comptes pour la synchro Easybeer', () => {
   it('ignore les identifiants absents ou invalides', () => {
     expect(doitSynchroniserClientEasybeer({})).toBe(false)
     expect(doitSynchroniserClientEasybeer({ easybeerIdClient: '588074' })).toBe(false)
+  })
+
+  it('repère uniquement les comptes clients disparus de la liste Easybeer', () => {
+    expect(
+      idsComptesAbsentsEasybeer(
+        [
+          { role: 'client', easybeerIdClient: 588074 },
+          { role: 'client', easybeerIdClient: 827557 },
+          { role: 'admin', easybeerIdClient: 999999 },
+          { role: 'client', easybeerIdClient: 111111, syncEasybeer: false },
+        ],
+        [{ idClient: 588074 }],
+      ),
+    ).toEqual([827557])
   })
 })
 

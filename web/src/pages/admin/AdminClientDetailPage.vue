@@ -884,7 +884,7 @@ function datesRemiseCiblee(
                       :variant="
                         c.status === 'active'
                           ? 'default'
-                          : c.status === 'revoked'
+                          : c.status === 'revoked' || c.status === 'source_deleted'
                             ? 'destructive'
                             : 'secondary'
                       "
@@ -894,6 +894,8 @@ function datesRemiseCiblee(
                           ? "Actif"
                           : c.status === "revoked"
                             ? "Révoqué"
+                            : c.status === "source_deleted"
+                              ? "Supprimé d’Easybeer"
                             : "Invité"
                       }}
                     </Badge>
@@ -912,7 +914,7 @@ function datesRemiseCiblee(
                       }}
                     </Button>
                     <Button
-                      v-else-if="c.status === 'revoked'"
+                      v-else-if="c.status === 'revoked' || c.status === 'source_deleted'"
                       type="button"
                       size="xs"
                       variant="outline"
