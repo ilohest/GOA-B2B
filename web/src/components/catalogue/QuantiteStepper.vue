@@ -3,8 +3,8 @@
  * Stepper de quantité en pilule, mobile-first (gros boutons tactiles).
  * `pas` = incrément éventuellement imposé à un article (1 par défaut).
  */
-import { ref, watch } from 'vue'
-import { Info } from '@lucide/vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { Check, Info } from '@lucide/vue'
 import IconTooltip from '@/components/admin/IconTooltip.vue'
 
 const props = withDefaults(
@@ -22,13 +22,42 @@ const emit = defineEmits<{
 }>()
 
 const saisie = ref(String(props.quantite))
+const ajoutAnime = ref(false)
+const ajoutConfirme = ref(false)
+let minuteurAnimation: ReturnType<typeof setTimeout> | null = null
+let minuteurConfirmation: ReturnType<typeof setTimeout> | null = null
 
 watch(
   () => props.quantite,
-  (quantite) => {
+  async (quantite, precedente) => {
     saisie.value = String(quantite)
+    if (quantite <= precedente) return
+
+    ajoutAnime.value = false
+    await nextTick()
+    ajoutAnime.value = true
+    if (minuteurAnimation) clearTimeout(minuteurAnimation)
+    minuteurAnimation = setTimeout(() => {
+      ajoutAnime.value = false
+      minuteurAnimation = null
+    }, 320)
   },
 )
+
+onBeforeUnmount(() => {
+  if (minuteurAnimation) clearTimeout(minuteurAnimation)
+  if (minuteurConfirmation) clearTimeout(minuteurConfirmation)
+})
+
+function ajouter() {
+  ajoutConfirme.value = true
+  if (minuteurConfirmation) clearTimeout(minuteurConfirmation)
+  minuteurConfirmation = setTimeout(() => {
+    ajoutConfirme.value = false
+    minuteurConfirmation = null
+  }, 850)
+  emit('changer', props.pas)
+}
 
 function validerSaisie() {
   const valeur = Number(saisie.value)
@@ -48,7 +77,10 @@ const pluriel = (n: number) => (n > 1 ? `${n} cartons` : 'un carton')
   <div class="flex flex-col items-stretch gap-1.5">
     <div
       class="grid h-10 grid-cols-[2.75rem_1fr_2.75rem] items-center rounded-full border bg-background shadow-xs transition-colors"
-      :class="quantite > 0 ? 'border-primary/40' : ''"
+      :class="[
+        quantite > 0 ? 'border-primary/40' : '',
+        ajoutAnime ? 'quantite-ajoutee' : '',
+      ]"
     >
       <button
         type="button"
@@ -74,13 +106,22 @@ const pluriel = (n: number) => (n > 1 ? `${n} cartons` : 'un carton')
       />
       <button
         type="button"
-        class="grid h-10 place-items-center rounded-full text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        class="grid h-10 place-items-center rounded-full text-sm font-medium transition-[color,background-color,transform] duration-200 active:scale-[0.94]"
+        :class="
+          ajoutConfirme
+            ? 'bg-primary/10 text-primary'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+        "
         :aria-label="`Ajouter ${pluriel(props.pas)} de ${props.libelle}`"
-        @click="emit('changer', props.pas)"
+        @click="ajouter"
       >
-        {{ props.pas > 1 ? `+${props.pas}` : '+' }}
+        <Check v-if="ajoutConfirme" class="size-4" aria-hidden="true" />
+        <template v-else>{{ props.pas > 1 ? `+${props.pas}` : '+' }}</template>
       </button>
     </div>
+    <span class="sr-only" role="status" aria-live="polite">
+      {{ ajoutConfirme ? `${pluriel(props.pas)} ajouté au panier` : '' }}
+    </span>
     <div v-if="props.pas > 1" class="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
       <span>Cartons complets : par {{ props.pas }}</span>
       <IconTooltip
@@ -97,3 +138,30 @@ const pluriel = (n: number) => (n > 1 ? `${n} cartons` : 'un carton')
     </div>
   </div>
 </template>
+
+<style scoped>
+.quantite-ajoutee {
+  animation: quantite-ajoutee 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes quantite-ajoutee {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(40 153 72 / 0%);
+  }
+  45% {
+    transform: translateY(-1px) scale(1.015);
+    box-shadow: 0 0 0 4px rgb(40 153 72 / 12%);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(40 153 72 / 0%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quantite-ajoutee {
+    animation: none;
+  }
+}
+</style>

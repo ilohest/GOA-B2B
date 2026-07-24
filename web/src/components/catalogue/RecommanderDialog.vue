@@ -7,7 +7,7 @@
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useQuery, useQueryClient } from "@tanstack/vue-query";
-import { Info, RotateCcw, TriangleAlert, X } from "@lucide/vue";
+import { Check, Info, RotateCcw, TriangleAlert, X } from "@lucide/vue";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
 import type {
@@ -48,13 +48,17 @@ const queryClient = useQueryClient();
 const { nbCartons, appliquerCommande } = usePanier();
 
 const mode = ref<"remplacer" | "ajouter">("remplacer");
+const confirmationEnCours = ref(false);
 const panierNonVide = computed(() => nbCartons.value > 0);
 
 // Réinitialise le choix à chaque ouverture : « remplacer » est le défaut sûr.
 watch(
   () => props.open,
   (ouvert) => {
-    if (ouvert) mode.value = "remplacer";
+    if (ouvert) {
+      mode.value = "remplacer";
+      confirmationEnCours.value = false;
+    }
   },
 );
 
@@ -99,9 +103,10 @@ function fermer() {
   emit("update:open", false);
 }
 
-function confirmer() {
+async function confirmer() {
   const resultat = recap.value;
-  if (!resultat?.reprises.length) return;
+  if (!resultat?.reprises.length || confirmationEnCours.value) return;
+  confirmationEnCours.value = true;
   appliquerCommande(
     resultat.reprises.map((l) => ({
       idStockBouteille: l.idStockBouteille as number,
@@ -112,6 +117,12 @@ function confirmer() {
   // Le catalogue passe de la clé « modification » à la clé nue : on invalide
   // pour que la page d'accueil reparte sur des tarifs à jour.
   queryClient.invalidateQueries({ queryKey: ["catalogue"] });
+  const animationsReduites = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  if (!animationsReduites) {
+    await new Promise((resolve) => window.setTimeout(resolve, 280));
+  }
   const nb = resultat.nbCartons;
   toast.success(
     `${nb} carton${nb > 1 ? "s" : ""} ajouté${nb > 1 ? "s" : ""} au panier`,
@@ -137,28 +148,33 @@ function confirmer() {
         </DialogDescription>
       </DialogHeader>
 
-      <div
-        v-if="chargement"
-        class="grid gap-2"
-        aria-label="Chargement du récapitulatif"
-        aria-busy="true"
-      >
-        <Skeleton v-for="i in 4" :key="i" class="h-12 w-full rounded-lg" />
-      </div>
+      <Transition name="recommande-contenu" mode="out-in">
+        <div
+          v-if="chargement"
+          key="chargement"
+          class="grid gap-2"
+          aria-label="Chargement du récapitulatif"
+          aria-busy="true"
+        >
+          <Skeleton v-for="i in 4" :key="i" class="h-12 w-full rounded-lg" />
+        </div>
 
-      <p v-else-if="erreur" class="text-sm text-destructive">{{ erreur }}</p>
+        <p v-else-if="erreur" key="erreur" class="text-sm text-destructive">
+          {{ erreur }}
+        </p>
 
-      <template v-else-if="recap">
+        <div v-else-if="recap" key="recap" class="grid gap-4">
         <ul class="grid gap-1.5">
           <li
             v-for="(ligne, i) in recap.lignes"
             :key="`${ligne.idStockBouteille ?? 'x'}-${i}`"
-            class="flex items-start gap-3 rounded-lg border px-3 py-2 text-sm"
+            class="recommande-ligne flex items-start gap-3 rounded-lg border px-3 py-2 text-sm"
             :class="
               ligne.motif
                 ? 'border-dashed bg-muted/40 text-muted-foreground'
                 : 'bg-background'
             "
+            :style="{ '--delai-ligne': `${Math.min(i, 6) * 35}ms` }"
           >
             <ProduitVignette
               :photo-url="ligne.produit?.photoUrl"
@@ -246,16 +262,20 @@ function confirmer() {
           <div class="flex flex-wrap gap-2">
             <Button
               size="sm"
+              class="transition-transform duration-200 active:scale-[0.97]"
               :variant="mode === 'remplacer' ? 'default' : 'outline'"
               @click="mode = 'remplacer'"
             >
+              <Check v-if="mode === 'remplacer'" class="size-3.5" />
               Remplacer le panier
             </Button>
             <Button
               size="sm"
+              class="transition-transform duration-200 active:scale-[0.97]"
               :variant="mode === 'ajouter' ? 'default' : 'outline'"
               @click="mode = 'ajouter'"
             >
+              <Check v-if="mode === 'ajouter'" class="size-3.5" />
               Ajouter aux quantités
             </Button>
           </div>
@@ -271,17 +291,91 @@ function confirmer() {
           Aucune commande n'est envoyée à cette étape : vous pourrez ajouter,
           retirer ou modifier les quantités dans votre panier avant de valider.
         </p>
-      </template>
+        </div>
+      </Transition>
 
       <DialogFooter>
-        <Button variant="outline" @click="fermer">Annuler</Button>
         <Button
-          :disabled="chargement || !recap?.reprises.length"
+          variant="outline"
+          :disabled="confirmationEnCours"
+          @click="fermer"
+        >
+          Annuler
+        </Button>
+        <Button
+          class="min-w-36 transition-transform duration-200 active:scale-[0.97]"
+          :disabled="
+            chargement || !recap?.reprises.length || confirmationEnCours
+          "
           @click="confirmer"
         >
-          Ajouter au panier
+          <Check v-if="confirmationEnCours" class="confirmation-coche size-4" />
+          {{ confirmationEnCours ? "Ajouté au panier" : "Ajouter au panier" }}
         </Button>
       </DialogFooter>
     </DialogScrollContent>
   </Dialog>
 </template>
+
+<style scoped>
+.recommande-contenu-enter-active,
+.recommande-contenu-leave-active {
+  transition:
+    opacity 160ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.recommande-contenu-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.recommande-contenu-leave-to {
+  opacity: 0;
+  transform: translateY(-3px);
+}
+
+.recommande-ligne {
+  animation: recommande-ligne-arrivee 260ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+  animation-delay: var(--delai-ligne);
+}
+
+.confirmation-coche {
+  animation: confirmation-coche 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes recommande-ligne-arrivee {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes confirmation-coche {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recommande-contenu-enter-active,
+  .recommande-contenu-leave-active {
+    transition: none;
+  }
+
+  .recommande-ligne,
+  .confirmation-coche {
+    animation: none;
+  }
+}
+</style>

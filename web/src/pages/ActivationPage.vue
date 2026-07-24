@@ -8,9 +8,10 @@ import { api } from "@/lib/api";
 import type { InvitationValidation } from "@/lib/types";
 import { useAuth } from "@/composables/useAuth";
 import BrandLogo from "@/components/BrandLogo.vue";
+import AuthBrandPanel from "@/components/auth/AuthBrandPanel.vue";
+import "@/components/auth/auth-premium.css";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
   CardContent,
   CardHeader,
   CardTitle,
@@ -143,10 +144,16 @@ async function onGoogle() {
 </script>
 
 <template>
-  <main class="flex min-h-dvh items-center justify-center p-4">
-    <Card class="w-full max-w-sm">
+  <main class="auth-page flex min-h-dvh items-center justify-center p-4 lg:p-8">
+    <div
+      class="auth-shell mx-auto grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-[#fcfaf5] shadow-[0_30px_90px_rgba(25,45,36,0.14)] lg:grid-cols-[minmax(24rem,0.84fr)_minmax(0,1.16fr)]"
+    >
+      <section class="auth-form-panel relative flex min-h-[38rem] items-center justify-center bg-[#fcfaf5] px-4 py-8 sm:px-6 lg:min-h-[46rem] lg:px-10 lg:py-10">
+    <div class="auth-form-card w-full max-w-md">
       <CardHeader class="text-center">
-        <BrandLogo variante="complet" class="mb-2" />
+        <div class="auth-logo mx-auto mb-2 w-fit">
+          <BrandLogo variante="complet" />
+        </div>
         <CardTitle class="text-xl">Activez votre compte</CardTitle>
       </CardHeader>
       <CardContent>
@@ -165,14 +172,14 @@ async function onGoogle() {
 
         <div v-else-if="state === 'invalid'" class="grid gap-4 text-center">
           <p class="text-sm text-muted-foreground">{{ invalidMessage }}</p>
-          <Button variant="outline" as-child>
+          <Button variant="outline" class="auth-secondary" as-child>
             <RouterLink to="/login">Aller à la connexion</RouterLink>
           </Button>
         </div>
 
-        <div v-else class="grid gap-4">
+        <div v-else class="grid gap-4 pt-4">
           <Button
-            class="h-11 w-full bg-white text-foreground shadow-sm ring-1 ring-border hover:bg-muted"
+            class="h-11 w-full border border-emerald-950/10 bg-white/70 text-foreground shadow-sm backdrop-blur-sm hover:bg-white"
             :disabled="googleLoading"
             @click="onGoogle"
           >
@@ -209,9 +216,9 @@ async function onGoogle() {
           </div>
 
           <div class="relative flex items-center" aria-hidden="true">
-            <span class="h-px flex-1 bg-border" />
-            <span class="px-3 text-xs text-muted-foreground">ou</span>
-            <span class="h-px flex-1 bg-border" />
+            <span class="h-px flex-1 bg-emerald-950/10" />
+            <span class="px-3 text-[0.7rem] tracking-wide text-muted-foreground/80">ou</span>
+            <span class="h-px flex-1 bg-emerald-950/10" />
           </div>
 
           <form class="grid gap-4" novalidate @submit.prevent="onSubmit">
@@ -222,6 +229,7 @@ async function onGoogle() {
                 v-model="form.email"
                 type="email"
                 autocomplete="email"
+                class="auth-input"
                 :aria-invalid="Boolean(fieldErrors.email)"
               />
               <p v-if="fieldErrors.email" class="text-sm text-destructive">
@@ -236,7 +244,7 @@ async function onGoogle() {
                   v-model="form.password"
                   :type="motDePasseVisible ? 'text' : 'password'"
                   autocomplete="new-password"
-                  class="pr-10"
+                  class="auth-input pr-10"
                   :aria-invalid="Boolean(fieldErrors.password)"
                 />
                 <button
@@ -266,7 +274,7 @@ async function onGoogle() {
                   v-model="form.confirm"
                   :type="confirmationVisible ? 'text' : 'password'"
                   autocomplete="new-password"
-                  class="pr-10"
+                  class="auth-input pr-10"
                   :aria-invalid="Boolean(fieldErrors.confirm)"
                 />
                 <button
@@ -288,12 +296,19 @@ async function onGoogle() {
                 {{ fieldErrors.confirm }}
               </p>
             </div>
-            <Button type="submit" class="w-full" :disabled="submitting">
+            <Button
+              type="submit"
+              class="premium-primary h-11 w-full"
+              :disabled="submitting"
+            >
               {{ submitting ? "Enregistrement…" : "Activer mon compte" }}
             </Button>
           </form>
         </div>
       </CardContent>
-    </Card>
+    </div>
+      </section>
+      <AuthBrandPanel />
+    </div>
   </main>
 </template>

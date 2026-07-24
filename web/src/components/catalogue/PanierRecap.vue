@@ -194,8 +194,9 @@ onMounted(async () => {
           <li
             v-for="l in lignes"
             :key="l.idStockBouteille"
-            class="grid min-w-0 gap-3 border-b border-border/60 py-3 first:pt-0"
+            class="panier-ligne grid min-w-0 border-b border-border/60 py-3 first:pt-0"
           >
+            <div class="panier-ligne-contenu grid min-h-0 min-w-0 gap-3 overflow-hidden">
             <div class="grid min-w-0 gap-1">
               <div class="flex items-start justify-between gap-3">
                 <span class="line-clamp-2 leading-snug">{{ l.libelle }}</span>
@@ -267,9 +268,12 @@ onMounted(async () => {
                 >
                   {{ (l.pas ?? 1) > 1 ? `−${l.pas}` : "−" }}
                 </button>
-                <span class="text-center font-semibold tabular-nums">{{
-                  l.quantite
-                }}</span>
+                <Transition name="panier-quantite" mode="out-in">
+                  <span
+                    :key="l.quantite"
+                    class="text-center font-semibold tabular-nums"
+                  >{{ l.quantite }}</span>
+                </Transition>
                 <button
                   type="button"
                   class="grid h-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -310,6 +314,7 @@ onMounted(async () => {
               Ce produit n'est plus proposé actuellement : sa quantité peut être
               réduite, mais pas augmentée.
             </p>
+            </div>
           </li>
         </TransitionGroup>
       </ul>
@@ -334,37 +339,53 @@ onMounted(async () => {
         :class="aRemise ? 'text-sm' : 'font-semibold'"
       >
         <span>{{ aRemise ? "Sous-total HT" : "Total HT" }}</span>
-        <span class="shrink-0 whitespace-nowrap tabular-nums">{{
-          prixFr(totalHT)
-        }}</span>
+        <Transition name="panier-total" mode="out-in">
+          <span
+            :key="totalHT"
+            class="shrink-0 whitespace-nowrap tabular-nums"
+          >{{ prixFr(totalHT) }}</span>
+        </Transition>
       </li>
       <template v-if="aRemise">
         <li class="flex items-baseline justify-between gap-3 text-primary">
           <span class="min-w-0 flex-1">Total des remises</span>
-          <span class="shrink-0 whitespace-nowrap font-medium tabular-nums"
-            >− {{ prixFr(remiseMontant!) }}</span
-          >
+          <Transition name="panier-total" mode="out-in">
+            <span
+              :key="remiseMontant ?? 0"
+              class="shrink-0 whitespace-nowrap font-medium tabular-nums"
+              >− {{ prixFr(remiseMontant!) }}</span
+            >
+          </Transition>
         </li>
         <li class="flex items-baseline justify-between gap-3 font-semibold">
           <span>Total HT</span>
-          <span class="shrink-0 whitespace-nowrap tabular-nums">{{
-            prixFr(totalApresRemise)
-          }}</span>
+          <Transition name="panier-total" mode="out-in">
+            <span
+              :key="totalApresRemise"
+              class="shrink-0 whitespace-nowrap tabular-nums"
+            >{{ prixFr(totalApresRemise) }}</span>
+          </Transition>
         </li>
       </template>
       <li
         class="flex items-baseline justify-between gap-3 text-muted-foreground"
       >
         <span>TVA (5,5 %)</span>
-        <span class="shrink-0 whitespace-nowrap tabular-nums">{{
-          prixFr(montantTVA)
-        }}</span>
+        <Transition name="panier-total" mode="out-in">
+          <span
+            :key="montantTVA"
+            class="shrink-0 whitespace-nowrap tabular-nums"
+          >{{ prixFr(montantTVA) }}</span>
+        </Transition>
       </li>
       <li class="flex items-baseline justify-between gap-3 font-semibold">
         <span>Total TTC</span>
-        <span class="shrink-0 whitespace-nowrap tabular-nums">{{
-          prixFr(totalTTC)
-        }}</span>
+        <Transition name="panier-total" mode="out-in">
+          <span
+            :key="totalTTC"
+            class="shrink-0 whitespace-nowrap tabular-nums"
+          >{{ prixFr(totalTTC) }}</span>
+        </Transition>
       </li>
     </ul>
     <div
@@ -410,20 +431,90 @@ onMounted(async () => {
 .panier-ligne-move {
   transition:
     opacity 180ms ease,
-    transform 180ms ease;
+    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    grid-template-rows 300ms cubic-bezier(0.16, 1, 0.3, 1),
+    padding-block 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panier-ligne {
+  grid-template-rows: 1fr;
+}
+
+.panier-ligne-enter-active {
+  animation: panier-ligne-accent 480ms ease-out;
 }
 
 .panier-ligne-enter-from,
 .panier-ligne-leave-to {
   opacity: 0;
-  transform: translateX(10px) scale(0.98);
+  grid-template-rows: 0fr;
+  padding-block: 0;
+  transform: translateX(-12px);
+}
+
+.panier-total-enter-active,
+.panier-total-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.panier-total-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.panier-total-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+.panier-quantite-enter-active {
+  animation: panier-quantite-pulse 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.panier-quantite-leave-active {
+  display: none;
+}
+
+@keyframes panier-quantite-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  65% {
+    color: var(--primary);
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes panier-ligne-accent {
+  0%,
+  35% {
+    background-color: rgb(40 153 72 / 8%);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .panier-ligne-enter-active,
   .panier-ligne-leave-active,
-  .panier-ligne-move {
+  .panier-ligne-move,
+  .panier-total-enter-active,
+  .panier-total-leave-active {
     transition: none;
+  }
+  .panier-ligne-enter-active {
+    animation: none;
+  }
+  .panier-quantite-enter-active {
+    animation: none;
   }
 }
 </style>

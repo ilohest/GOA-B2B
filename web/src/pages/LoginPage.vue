@@ -3,14 +3,15 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { z } from "zod";
 import { toast } from "vue-sonner";
-import { EyeIcon, EyeOffIcon, MailIcon } from "@lucide/vue";
+import { EyeIcon, EyeOffIcon, MailIcon, Pencil } from "@lucide/vue";
 import { useAuth } from "@/composables/useAuth";
 import { api } from "@/lib/api";
 import type { MeResponse } from "@/lib/types";
 import BrandLogo from "@/components/BrandLogo.vue";
+import AuthBrandPanel from "@/components/auth/AuthBrandPanel.vue";
+import "@/components/auth/auth-premium.css";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -153,6 +154,10 @@ function modifierEmail() {
   compteRevoque.value = false;
 }
 
+function focusMotDePasse() {
+  if (emailValide.value) document.getElementById("password")?.focus();
+}
+
 async function verifierCompteAutorise() {
   const profil = await api.get<MeResponse>("/me");
   if (profil.user.role === "client" && profil.user.easybeerIdClient == null) {
@@ -256,10 +261,16 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main class="flex min-h-dvh items-center justify-center p-4">
-    <Card class="w-full max-w-sm">
+  <main class="auth-page flex min-h-dvh items-center justify-center p-4 lg:p-8">
+    <div
+      class="auth-shell mx-auto grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-emerald-950/10 bg-[#fcfaf5] shadow-[0_30px_90px_rgba(25,45,36,0.14)] lg:grid-cols-[minmax(24rem,0.84fr)_minmax(0,1.16fr)]"
+    >
+      <section class="auth-form-panel relative flex min-h-[38rem] items-center justify-center bg-[#fcfaf5] px-4 py-8 sm:px-6 lg:min-h-[46rem] lg:px-10 lg:py-10">
+        <div class="auth-form-card w-full max-w-md">
       <CardHeader class="text-center">
-        <BrandLogo variante="complet" class="mb-2" />
+        <div class="auth-logo mx-auto mb-2 w-fit">
+          <BrandLogo variante="complet" />
+        </div>
         <CardTitle class="text-xl">Espace professionnel</CardTitle>
         <CardDescription>{{ descriptionConnexion }}</CardDescription>
       </CardHeader>
@@ -304,6 +315,7 @@ async function onSubmit() {
                 autocomplete="email"
                 inputmode="email"
                 placeholder="vous@exemple.fr"
+                class="auth-input"
                 :aria-invalid="Boolean(fieldErrors.email)"
                 autofocus
                 @input="effacerErreurConnexion"
@@ -317,7 +329,7 @@ async function onSubmit() {
             </p>
             <Button
               type="submit"
-              class="h-10 w-full"
+              class="premium-primary h-11 w-full"
               :disabled="completingLink"
             >
               <MailIcon />
@@ -325,11 +337,17 @@ async function onSubmit() {
             </Button>
           </form>
 
-          <!-- Étape 1 : l'utilisateur s'identifie uniquement avec son e-mail. -->
-          <template v-else-if="!emailValide">
+          <Transition
+            v-else
+            name="auth-step"
+            mode="out-in"
+            @after-enter="focusMotDePasse"
+          >
+            <!-- Étape 1 : l'utilisateur s'identifie uniquement avec son e-mail. -->
+            <div v-if="!emailValide" key="email" class="grid gap-4 pt-4">
             <Button
               type="button"
-              class="h-11 w-full bg-white text-foreground shadow-sm ring-1 ring-border hover:bg-muted"
+              class="h-11 w-full border border-emerald-950/10 bg-white/70 text-foreground shadow-sm backdrop-blur-sm hover:bg-white"
               :disabled="googleLoading"
               @click="onGoogle"
             >
@@ -359,9 +377,9 @@ async function onSubmit() {
             </Button>
 
             <div class="relative flex items-center" aria-hidden="true">
-              <span class="h-px flex-1 bg-border" />
-              <span class="px-3 text-xs text-muted-foreground">ou</span>
-              <span class="h-px flex-1 bg-border" />
+              <span class="h-px flex-1 bg-emerald-950/10" />
+              <span class="px-3 text-[0.7rem] tracking-wide text-muted-foreground/80">ou</span>
+              <span class="h-px flex-1 bg-emerald-950/10" />
             </div>
 
             <form class="grid gap-3" novalidate @submit.prevent="validerEmail">
@@ -374,6 +392,7 @@ async function onSubmit() {
                   autocomplete="email"
                   inputmode="email"
                   placeholder="vous@exemple.fr"
+                  class="auth-input"
                   :aria-invalid="Boolean(fieldErrors.email)"
                   autofocus
                   @input="effacerErreurConnexion"
@@ -382,31 +401,31 @@ async function onSubmit() {
                   {{ fieldErrors.email }}
                 </p>
               </div>
-              <Button type="submit" class="w-full">Continuer</Button>
+              <Button type="submit" class="premium-primary h-11 w-full">Continuer</Button>
             </form>
 
             <p class="text-center text-xs text-muted-foreground">
               Vous choisirez ensuite entre votre mot de passe ou un lien par
               e-mail.
             </p>
-          </template>
+            </div>
 
-          <!-- Étape 2 : choix de la méthode pour l'adresse validée. -->
-          <template v-else>
+            <!-- Étape 2 : choix de la méthode pour l'adresse validée. -->
+            <div v-else key="methodes" class="grid gap-4">
             <div
-              class="flex items-center justify-between gap-3 rounded-lg border bg-muted/40 px-3 py-2"
+              class="flex items-center justify-between gap-3 rounded-xl border border-emerald-950/10 bg-white/55 px-3 py-2.5 shadow-inner shadow-black/[0.02]"
             >
               <span class="min-w-0 truncate text-sm font-medium">
                 {{ form.email }}
               </span>
-              <Button
+              <button
                 type="button"
-                variant="link"
-                class="h-auto shrink-0 p-0 text-xs"
+                class="grid size-7 shrink-0 place-items-center rounded-full text-emerald-800 transition-colors hover:bg-emerald-950/5 hover:text-emerald-950"
+                aria-label="Modifier l’adresse email"
                 @click="modifierEmail"
               >
-                Modifier
-              </Button>
+                <Pencil class="size-3.5" aria-hidden="true" />
+              </button>
             </div>
 
             <form class="grid gap-3" novalidate @submit.prevent="onSubmit">
@@ -418,9 +437,8 @@ async function onSubmit() {
                     v-model="form.password"
                     :type="motDePasseVisible ? 'text' : 'password'"
                     autocomplete="current-password"
-                    class="pr-10"
+                    class="auth-input pr-10"
                     :aria-invalid="Boolean(fieldErrors.password)"
-                    autofocus
                     @input="effacerErreurMotDePasse"
                   />
                   <button
@@ -445,28 +463,33 @@ async function onSubmit() {
                   {{ fieldErrors.password }}
                 </p>
               </div>
-              <Button type="submit" class="w-full" :disabled="submitting">
+              <Button
+                type="submit"
+                class="premium-primary h-11 w-full"
+                :disabled="submitting"
+              >
                 {{ submitting ? "Connexion…" : "Se connecter" }}
               </Button>
             </form>
 
             <div class="relative flex items-center" aria-hidden="true">
-              <span class="h-px flex-1 bg-border" />
-              <span class="px-3 text-xs text-muted-foreground">ou</span>
-              <span class="h-px flex-1 bg-border" />
+              <span class="h-px flex-1 bg-emerald-950/10" />
+              <span class="px-3 text-[0.7rem] tracking-wide text-muted-foreground/80">ou</span>
+              <span class="h-px flex-1 bg-emerald-950/10" />
             </div>
 
             <Button
               type="button"
               variant="outline"
-              class="w-full"
+              class="auth-secondary h-11 w-full"
               :disabled="sendingLink"
               @click="onSendLoginLink"
             >
               <MailIcon />
               {{ sendingLink ? "Envoi…" : "Recevoir un lien de connexion" }}
             </Button>
-          </template>
+            </div>
+          </Transition>
 
           <div
             v-if="erreurConnexion"
@@ -481,6 +504,37 @@ async function onSubmit() {
           </div>
         </div>
       </CardContent>
-    </Card>
+        </div>
+      </section>
+
+      <AuthBrandPanel />
+    </div>
   </main>
 </template>
+
+<style scoped>
+.auth-step-enter-active,
+.auth-step-leave-active {
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.auth-step-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.auth-step-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-step-enter-active,
+  .auth-step-leave-active {
+    transition: none;
+  }
+}
+</style>

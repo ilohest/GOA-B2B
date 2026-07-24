@@ -542,9 +542,14 @@ function viderPanierAvecAnnulation() {
                 ? `Modification #${modification.numero ?? modification.idCommande}`
                 : "Votre commande"
             }}</span>
-            <span class="text-sm font-normal text-muted-foreground">
-              ({{ nbCartons }} article{{ nbCartons === 1 ? "" : "s" }})
-            </span>
+            <Transition name="panier-compteur" mode="out-in">
+              <span
+                :key="nbCartons"
+                class="text-sm font-normal text-muted-foreground"
+              >
+                ({{ nbCartons }} article{{ nbCartons === 1 ? "" : "s" }})
+              </span>
+            </Transition>
           </CardTitle>
           <CardDescription v-if="modification"> </CardDescription>
         </CardHeader>
@@ -697,3 +702,29 @@ function viderPanierAvecAnnulation() {
     />
   </div>
 </template>
+
+<style scoped>
+.panier-compteur-enter-active,
+.panier-compteur-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.panier-compteur-enter-from {
+  opacity: 0;
+  transform: translateY(3px);
+}
+
+.panier-compteur-leave-to {
+  opacity: 0;
+  transform: translateY(-3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panier-compteur-enter-active,
+  .panier-compteur-leave-active {
+    transition: none;
+  }
+}
+</style>

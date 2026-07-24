@@ -154,7 +154,7 @@ const validationBloquee = computed(
       </p>
     </div>
 
-    <Card class="overflow-hidden">
+    <Card class="commande-confirmation-card overflow-hidden">
       <CardHeader class="border-b bg-muted/25">
         <div class="flex items-start gap-3">
           <span class="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
@@ -247,3 +247,26 @@ const validationBloquee = computed(
     </Card>
   </div>
 </template>
+
+<style scoped>
+.commande-confirmation-card {
+  animation: confirmation-arrivee 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes confirmation-arrivee {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commande-confirmation-card {
+    animation: none;
+  }
+}
+</style>

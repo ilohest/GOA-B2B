@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ClipboardList, RotateCcw, Store } from "@lucide/vue";
+import { CircleCheck, ClipboardList, RotateCcw, Store } from "@lucide/vue";
 import { useQuery } from "@tanstack/vue-query";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
@@ -221,6 +221,7 @@ async function modifier(commande: CommandeResume) {
                   v-if="data?.source !== 'local'"
                   variant="outline"
                   size="sm"
+                  class="transition-transform duration-200 active:scale-[0.97]"
                   :disabled="recommandeBloquee"
                   :title="
                     recommandeBloquee
@@ -271,11 +272,17 @@ async function modifier(commande: CommandeResume) {
   <Dialog v-model:open="confirmationOuverte">
     <DialogContent class="sm:max-w-md">
       <template v-if="confirmation">
-        <DialogHeader>
+        <div
+          class="confirmation-succes mx-auto grid size-12 place-items-center rounded-full bg-primary/10 text-primary"
+          aria-hidden="true"
+        >
+          <CircleCheck class="size-6" />
+        </div>
+        <DialogHeader class="text-center sm:text-center">
           <DialogTitle>{{
             confirmation.modification
-              ? "Commande mise à jour ✓"
-              : "Commande envoyée ✓"
+              ? "Commande mise à jour"
+              : "Commande envoyée"
           }}</DialogTitle>
           <DialogDescription>
             Votre commande a bien été transmise à GOA<template
@@ -314,3 +321,31 @@ async function modifier(commande: CommandeResume) {
     </DialogContent>
   </Dialog>
 </template>
+
+<style scoped>
+.confirmation-succes {
+  animation: confirmation-succes 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes confirmation-succes {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+
+  62% {
+    transform: scale(1.04);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirmation-succes {
+    animation: none;
+  }
+}
+</style>
