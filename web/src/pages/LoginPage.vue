@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { z } from "zod";
 import { toast } from "vue-sonner";
-import { ChevronDownIcon, EyeIcon, EyeOffIcon, MailIcon } from "@lucide/vue";
+import { EyeIcon, EyeOffIcon, MailIcon } from "@lucide/vue";
 import { useAuth } from "@/composables/useAuth";
 import { api } from "@/lib/api";
 import type { MeResponse } from "@/lib/types";
@@ -31,10 +31,8 @@ const router = useRouter();
 const {
   login,
   loginWithGoogle,
-  sendLoginLink,
   isLoginLink,
   loginWithEmailLink,
-  resetPassword,
   logout,
   firebaseConfigured,
 } = useAuth();
@@ -47,7 +45,6 @@ const sendingLink = ref(false);
 const completingLink = ref(false);
 const resetting = ref(false);
 const motDePasseVisible = ref(false);
-const passwordOpen = ref(false);
 const erreurConnexion = ref("");
 const compteRevoque = ref(false);
 const lienEnvoyeA = ref("");
@@ -158,7 +155,12 @@ async function onSendLoginLink() {
   }
   sendingLink.value = true;
   try {
-    await sendLoginLink(email.data, redirectTo.value);
+    // Le backend renvoie une réponse générique (aucune énumération) : on affiche
+    // toujours l'écran « consultez votre email », que le compte existe ou non.
+    await api.post("/auth/login-link", {
+      email: email.data,
+      redirect: redirectTo.value,
+    });
     window.localStorage.setItem(EMAIL_STORAGE_KEY, email.data);
     lienEnvoyeA.value = email.data;
     toast.success("Lien de connexion envoyé.");
@@ -220,20 +222,20 @@ async function onResetPassword() {
   if (!email.success) {
     fieldErrors.email =
       "Saisissez votre email pour recevoir le lien de réinitialisation.";
-    passwordOpen.value = true;
     return;
   }
   resetting.value = true;
   try {
-    await resetPassword(email.data);
-    toast.success(`Email de réinitialisation envoyé à ${email.data}.`);
+    await api.post("/auth/reset-password", { email: email.data });
   } catch {
-    toast.success(
-      `Si un compte existe pour ${email.data}, un email a été envoyé.`,
-    );
+    // Réponse volontairement générique ci-dessous : on n'interrompt pas sur erreur.
   } finally {
     resetting.value = false;
   }
+  // Message générique dans tous les cas (anti-énumération de comptes).
+  toast.success(
+    "Si un compte existe pour cette adresse, un email de réinitialisation vient d’être envoyé.",
+  );
 }
 </script>
 
@@ -285,6 +287,8 @@ async function onResetPassword() {
             <span class="h-px flex-1 bg-border" />
           </div>
 
+          <!-- Lien envoyé : on n'affiche que la confirmation, les autres
+               méthodes n'ont plus lieu d'être. -->
           <div
             v-if="lienEnvoyeA"
             class="rounded-lg border border-primary/20 bg-brand-50 p-4 text-center"
@@ -303,54 +307,120 @@ async function onResetPassword() {
             >
           </div>
 
-          <form
-            v-else
-            class="grid gap-3"
-            novalidate
-            @submit.prevent="
-              lienEmailEnAttente
-                ? terminerConnexionParLien()
-                : onSendLoginLink()
-            "
-          >
-            <div class="grid gap-1.5">
-              <Label for="email">Votre adresse email</Label>
-              <Input
-                id="email"
-                v-model="form.email"
-                type="email"
-                autocomplete="email"
-                inputmode="email"
-                placeholder="vous@exemple.fr"
-                :aria-invalid="Boolean(fieldErrors.email)"
-                autofocus
-                @input="effacerErreurConnexion"
-              />
-              <p v-if="fieldErrors.email" class="text-sm text-destructive">
-                {{ fieldErrors.email }}
-              </p>
-            </div>
-            <p v-if="lienEmailEnAttente" class="text-xs text-muted-foreground">
-              Pour votre sécurité, confirmez l’adresse qui a reçu ce lien.
-            </p>
-            <Button
-              type="submit"
-              variant="outline"
-              class="h-10 w-full"
-              :disabled="sendingLink || completingLink"
+          <template v-else>
+            <!-- Adresse email : identifiant commun aux deux méthodes ci-dessous. -->
+            <form
+              class="grid gap-3"
+              novalidate
+              @submit.prevent="
+                lienEmailEnAttente
+                  ? terminerConnexionParLien()
+                  : onSendLoginLink()
+              "
             >
-              <MailIcon />
-              {{
-                completingLink
-                  ? "Connexion…"
-                  : lienEmailEnAttente
-                    ? "Finaliser ma connexion"
-                    : sendingLink
-                      ? "Envoi…"
-                      : "Recevoir un lien de connexion"
-              }}
-            </Button>
-          </form>
+              <div class="grid gap-1.5">
+                <Label for="email">Votre adresse email</Label>
+                <Input
+                  id="email"
+                  v-model="form.email"
+                  type="email"
+                  autocomplete="email"
+                  inputmode="email"
+                  placeholder="vous@exemple.fr"
+                  :aria-invalid="Boolean(fieldErrors.email)"
+                  autofocus
+                  @input="effacerErreurConnexion"
+                />
+                <p v-if="fieldErrors.email" class="text-sm text-destructive">
+                  {{ fieldErrors.email }}
+                </p>
+              </div>
+              <p v-if="lienEmailEnAttente" class="text-xs text-muted-foreground">
+                Pour votre sécurité, confirmez l’adresse qui a reçu ce lien.
+              </p>
+              <Button
+                type="submit"
+                class="h-10 w-full"
+                :disabled="sendingLink || completingLink"
+              >
+                <MailIcon />
+                {{
+                  completingLink
+                    ? "Connexion…"
+                    : lienEmailEnAttente
+                      ? "Finaliser ma connexion"
+                      : sendingLink
+                        ? "Envoi…"
+                        : "Recevoir un lien de connexion"
+                }}
+              </Button>
+            </form>
+
+            <!-- Mot de passe : alternative sur la MÊME adresse. Masquée pendant
+                 la finalisation d'une connexion par lien. -->
+            <template v-if="!lienEmailEnAttente">
+              <div class="relative flex items-center" aria-hidden="true">
+                <span class="h-px flex-1 bg-border" />
+                <span class="px-3 text-xs text-muted-foreground"
+                  >ou avec un mot de passe</span
+                >
+                <span class="h-px flex-1 bg-border" />
+              </div>
+
+              <form class="grid gap-3" novalidate @submit.prevent="onSubmit">
+                <div class="grid gap-1.5">
+                  <Label for="password">Mot de passe</Label>
+                  <div class="relative">
+                    <Input
+                      id="password"
+                      v-model="form.password"
+                      :type="motDePasseVisible ? 'text' : 'password'"
+                      autocomplete="current-password"
+                      class="pr-10"
+                      :aria-invalid="Boolean(fieldErrors.password)"
+                      @input="effacerErreurConnexion"
+                    />
+                    <button
+                      type="button"
+                      class="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground hover:text-foreground"
+                      :aria-label="
+                        motDePasseVisible
+                          ? 'Masquer le mot de passe'
+                          : 'Afficher le mot de passe'
+                      "
+                      :aria-pressed="motDePasseVisible"
+                      @click="motDePasseVisible = !motDePasseVisible"
+                    >
+                      <EyeOffIcon v-if="motDePasseVisible" class="size-4" />
+                      <EyeIcon v-else class="size-4" />
+                    </button>
+                  </div>
+                  <p
+                    v-if="fieldErrors.password"
+                    class="text-sm text-destructive"
+                  >
+                    {{ fieldErrors.password }}
+                  </p>
+                </div>
+                <Button
+                  type="submit"
+                  variant="outline"
+                  class="w-full"
+                  :disabled="submitting"
+                  >{{ submitting ? "Connexion…" : "Se connecter" }}</Button
+                >
+                <Button
+                  v-if="!compteRevoque"
+                  type="button"
+                  variant="link"
+                  class="h-auto justify-self-center p-0 text-sm text-muted-foreground"
+                  :disabled="resetting"
+                  @click="onResetPassword"
+                  >Mot de passe oublié ?</Button
+                >
+              </form>
+            </template>
+          </template>
 
           <div
             v-if="erreurConnexion"
@@ -362,72 +432,6 @@ async function onResetPassword() {
               Contactez la Brasserie de GOA pour demander la réactivation de
               votre accès.
             </p>
-          </div>
-
-          <div class="border-t pt-3">
-            <button
-              type="button"
-              class="flex w-full items-center justify-between py-1 text-sm text-muted-foreground hover:text-foreground"
-              :aria-expanded="passwordOpen"
-              @click="passwordOpen = !passwordOpen"
-            >
-              Se connecter avec un mot de passe
-              <ChevronDownIcon
-                class="size-4 transition-transform"
-                :class="passwordOpen && 'rotate-180'"
-              />
-            </button>
-
-            <form
-              v-if="passwordOpen"
-              class="mt-3 grid gap-3"
-              novalidate
-              @submit.prevent="onSubmit"
-            >
-              <div class="grid gap-1.5">
-                <Label for="password">Mot de passe</Label>
-                <div class="relative">
-                  <Input
-                    id="password"
-                    v-model="form.password"
-                    :type="motDePasseVisible ? 'text' : 'password'"
-                    autocomplete="current-password"
-                    class="pr-10"
-                    :aria-invalid="Boolean(fieldErrors.password)"
-                    @input="effacerErreurConnexion"
-                  />
-                  <button
-                    type="button"
-                    class="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground hover:text-foreground"
-                    :aria-label="
-                      motDePasseVisible
-                        ? 'Masquer le mot de passe'
-                        : 'Afficher le mot de passe'
-                    "
-                    :aria-pressed="motDePasseVisible"
-                    @click="motDePasseVisible = !motDePasseVisible"
-                  >
-                    <EyeOffIcon v-if="motDePasseVisible" class="size-4" />
-                    <EyeIcon v-else class="size-4" />
-                  </button>
-                </div>
-                <p v-if="fieldErrors.password" class="text-sm text-destructive">
-                  {{ fieldErrors.password }}
-                </p>
-              </div>
-              <Button type="submit" class="w-full" :disabled="submitting">{{
-                submitting ? "Connexion…" : "Se connecter"
-              }}</Button>
-              <Button
-                v-if="!compteRevoque"
-                type="button"
-                variant="link"
-                class="h-auto justify-self-center p-0 text-sm text-muted-foreground"
-                :disabled="resetting"
-                @click="onResetPassword"
-                >Mot de passe oublié ?</Button
-              >
-            </form>
           </div>
         </div>
       </CardContent>

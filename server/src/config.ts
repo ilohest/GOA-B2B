@@ -140,6 +140,13 @@ export const config = {
     // URL absolue du logo GOA (PNG) pour l'email ; vide → wordmark texte.
     logoUrl: process.env.INVITE_LOGO_URL || undefined,
   },
+
+  // Origine du front (front Vue) pour les liens d'authentification envoyés par
+  // email (connexion sans mot de passe, réinitialisation). En prod, ce domaine
+  // DOIT être autorisé dans la console Firebase (Authentication → Settings).
+  webBaseUrl:
+    process.env.WEB_BASE_URL ||
+    new URL(process.env.INVITE_BASE_URL ?? 'http://localhost:5173/activer').origin,
 }
 
 export function erreursConfigurationProduction(configuration: typeof config = config): string[] {

@@ -36,6 +36,12 @@ export const AccountRevocationBodySchema = z.object({
   revoked: z.boolean(),
 })
 
+export const AuthEmailBodySchema = z.object({
+  email: z.email('Adresse email invalide'),
+  // Chemin de redirection APRÈS connexion (validé serveur : interne uniquement).
+  redirect: z.string().max(500).optional(),
+})
+
 export const BulkParamsSchema = z
   .object({
     idsClients: z.array(z.number().int().positive()).min(1).max(250),

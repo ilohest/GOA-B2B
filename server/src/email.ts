@@ -6,6 +6,7 @@
 import nodemailer, { type Transporter } from 'nodemailer'
 import { config } from './config.js'
 import { renderInvitationEmail, type InvitationEmailInput } from './emails/invitation.js'
+import { renderLoginLinkEmail, renderResetPasswordEmail } from './emails/authLink.js'
 
 let transporter: Transporter | null = null
 let tried = false
@@ -69,4 +70,16 @@ export async function envoyerInvitationEmail(
     logoUrl: config.invite.logoUrl,
   })
   await envoyerEmail({ to: input.email, subject, html, text })
+}
+
+/** Rend + envoie l'email « lien de connexion » (connexion sans mot de passe). */
+export async function envoyerLoginLinkEmail(email: string, lien: string): Promise<void> {
+  const { subject, html, text } = renderLoginLinkEmail({ lien, logoUrl: config.invite.logoUrl })
+  await envoyerEmail({ to: email, subject, html, text })
+}
+
+/** Rend + envoie l'email « réinitialisation de mot de passe ». */
+export async function envoyerResetPasswordEmail(email: string, lien: string): Promise<void> {
+  const { subject, html, text } = renderResetPasswordEmail({ lien, logoUrl: config.invite.logoUrl })
+  await envoyerEmail({ to: email, subject, html, text })
 }

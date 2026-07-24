@@ -52,6 +52,7 @@ import {
 import {
   AccountRevocationBodySchema,
   ActivationBodySchema,
+  AuthEmailBodySchema,
   BulkParamsSchema,
   CommandeBodySchema,
   InvitationBodySchema,
@@ -83,7 +84,12 @@ import {
   consommerInvitation,
   consommerInvitationAvecFournisseur,
 } from './invitations.js'
-import { emailActif, envoyerInvitationEmail } from './email.js'
+import {
+  emailActif,
+  envoyerInvitationEmail,
+  envoyerLoginLinkEmail,
+  envoyerResetPasswordEmail,
+} from './email.js'
 import { cloudTasksConfigure, planifierSynchronisationEasybeer, requeteCloudTasksAutorisee } from './tasks.js'
 
 import { EasybeerBanError, etatBanEasybeer, surBan, restaurerBan } from './easybeer.js'
@@ -1474,6 +1480,91 @@ app.post('/api/admin/invitations/bulk', requireAuth, requireAdmin, async (c) => 
     reussies: resultats.filter((r) => r.ok).length,
     envoyees: resultats.filter((r) => r.ok && r.envoye).length,
   })
+})
+
+// ---- Auth : emails GOA personnalisés (lien de connexion + réinitialisation) ----
+//
+// Ces endpoints sont PUBLICS (l'utilisateur n'est pas encore connecté). Garde-fous :
+//  - réponse TOUJOURS générique ({ ok: true }) → aucune énumération d'emails ;
+//  - envoi UNIQUEMENT à un compte Firebase existant et actif (non désactivé)
+//    → pas de relais ouvert vers des adresses arbitraires ;
+//  - rate-limit par email ET par IP (fenêtre glissante, borne mémoire).
+// Le lien est fabriqué par l'Admin SDK (jamais côté client) puis envoyé via le
+// SMTP GOA ; sans SMTP (dev), il est loggé côté serveur pour test.
+
+const tentativesEmailAuth = new Map<string, number[]>()
+
+/** Fenêtre glissante en mémoire. true si la tentative est autorisée. */
+function autoriserTentativeAuth(cle: string, max: number, fenetreMs: number): boolean {
+  const maintenant = Date.now()
+  const recentes = (tentativesEmailAuth.get(cle) ?? []).filter((t) => maintenant - t < fenetreMs)
+  recentes.push(maintenant)
+  tentativesEmailAuth.set(cle, recentes)
+  // Anti-flood d'adresses distinctes : purge grossière si la table enfle trop.
+  if (tentativesEmailAuth.size > 5000) tentativesEmailAuth.clear()
+  return recentes.length <= max
+}
+
+/**
+ * Génère (Admin SDK) puis envoie l'email d'auth demandé — mais seulement si le
+ * compte existe et n'est pas désactivé. Silencieux sinon (anti-énumération).
+ */
+async function traiterEmailAuth(
+  type: 'connexion' | 'reset',
+  email: string,
+  redirect?: string,
+): Promise<void> {
+  const adminAuth = getAdminAuth()
+  if (!adminAuth) {
+    console.warn('[auth] Admin SDK indisponible — email d’auth non envoyé.')
+    return
+  }
+  const user = await adminAuth.getUserByEmail(email).catch(() => null)
+  if (!user || user.disabled) return
+
+  if (type === 'connexion') {
+    const red = redirect && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
+    const url = `${config.webBaseUrl}/login?emailSignIn=1&redirect=${encodeURIComponent(red)}`
+    const lien = await adminAuth.generateSignInWithEmailLink(email, { url, handleCodeInApp: true })
+    if (emailActif()) await envoyerLoginLinkEmail(email, lien)
+    else console.warn(`[auth][dev] lien de connexion pour ${email} : ${lien}`)
+  } else {
+    const lien = await adminAuth.generatePasswordResetLink(email, { url: `${config.webBaseUrl}/login` })
+    if (emailActif()) await envoyerResetPasswordEmail(email, lien)
+    else console.warn(`[auth][dev] lien de réinitialisation pour ${email} : ${lien}`)
+  }
+}
+
+/** Envoi d'un lien de connexion sans mot de passe. PUBLIC, réponse générique. */
+app.post('/api/auth/login-link', async (c) => {
+  const parse = parserBody(AuthEmailBodySchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+  const email = parse.data.email.trim().toLowerCase()
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'inconnue'
+  const okEmail = autoriserTentativeAuth(`login:${email}`, 3, 15 * 60_000)
+  const okIp = autoriserTentativeAuth(`ip:${ip}`, 30, 15 * 60_000)
+  if (okEmail && okIp) {
+    await traiterEmailAuth('connexion', email, parse.data.redirect).catch((e) =>
+      console.warn(`[auth] lien de connexion : ${(e as Error).message}`),
+    )
+  }
+  return c.json({ ok: true })
+})
+
+/** Envoi d'un lien de réinitialisation de mot de passe. PUBLIC, réponse générique. */
+app.post('/api/auth/reset-password', async (c) => {
+  const parse = parserBody(AuthEmailBodySchema, await c.req.json().catch(() => null))
+  if ('erreur' in parse) return c.json({ error: parse.erreur }, 400)
+  const email = parse.data.email.trim().toLowerCase()
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || 'inconnue'
+  const okEmail = autoriserTentativeAuth(`reset:${email}`, 3, 15 * 60_000)
+  const okIp = autoriserTentativeAuth(`ip:${ip}`, 30, 15 * 60_000)
+  if (okEmail && okIp) {
+    await traiterEmailAuth('reset', email).catch((e) =>
+      console.warn(`[auth] reset mot de passe : ${(e as Error).message}`),
+    )
+  }
+  return c.json({ ok: true })
 })
 
 // ---- Invitation : parcours PUBLIC du client invité (page /activer) ----
