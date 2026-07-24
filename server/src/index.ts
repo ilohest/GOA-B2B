@@ -91,6 +91,7 @@ import {
   envoyerResetPasswordEmail,
 } from './email.js'
 import { cloudTasksConfigure, planifierSynchronisationEasybeer, requeteCloudTasksAutorisee } from './tasks.js'
+import { creerZip } from './zip.js'
 
 import { EasybeerBanError, etatBanEasybeer, surBan, restaurerBan } from './easybeer.js'
 
@@ -957,6 +958,138 @@ app.post('/api/commandes/sync', requireAuth, async (c) => {
   return c.json({ ...resultat, indisponible: resultat.indisponible ?? false })
 })
 
+function anneeFacturesValide(valeur: string | undefined) {
+  const annee = Number(valeur)
+  const anneeMax = new Date().getFullYear() + 1
+  return Number.isInteger(annee) && annee >= 2000 && annee <= anneeMax ? annee : null
+}
+
+function commandesDeLAnnee(commandes: Awaited<ReturnType<typeof listeCommandesClient>>, annee: number) {
+  return commandes.filter((commande) => {
+    const date = commande.dateFacturation ?? commande.dateCreation
+    if (date == null) return false
+    const timestamp = new Date(date).getTime()
+    return Number.isFinite(timestamp) && new Date(timestamp).getFullYear() === annee
+  })
+}
+
+function documentsFacturesDeLAnnee(commande: Record<string, unknown>, annee: number) {
+  return ((commande.documents as DocumentEasybeer[] | undefined) ?? []).filter((document) => {
+    if (document.annule || document.idCommandeDocument == null || !estDocumentFacture(document)) return false
+    if (document.dateCreation == null) return true
+    const date = new Date(document.dateCreation)
+    return !Number.isFinite(date.getTime()) || date.getFullYear() === annee
+  })
+}
+
+function anneeFactureCommande(commande: Awaited<ReturnType<typeof listeCommandesClient>>[number]) {
+  const documents = Array.isArray(commande.documents)
+    ? (commande.documents as DocumentEasybeer[])
+    : []
+  const aUneFacture =
+    Boolean(commande.facture) ||
+    Boolean(commande.numeroFacture) ||
+    commande.dateFacturation != null ||
+    documents.some((document) => !document.annule && estDocumentFacture(document))
+  if (!aUneFacture) return null
+
+  const dateDocument = documents.find((document) => !document.annule && estDocumentFacture(document))?.dateCreation
+  const date = dateDocument ?? commande.dateFacturation ?? commande.dateCreation
+  if (date == null) return null
+  const timestamp = new Date(date).getTime()
+  return Number.isFinite(timestamp) ? new Date(timestamp).getFullYear() : null
+}
+
+/** Années contenant réellement des factures pour alimenter le sélecteur. */
+app.get('/api/commandes/factures/annees', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+
+  const commandes = await listeCommandesClient(user.easybeerIdClient)
+  const annees = commandes
+    .map(anneeFactureCommande)
+    .filter((annee): annee is number => annee != null)
+  return c.json({ annees: [...new Set(annees)].sort((a, b) => b - a) })
+})
+
+/** Disponibilité légère utilisée pour désactiver l'action si l'année est vide. */
+app.get('/api/commandes/factures/disponibilite', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+  const annee = anneeFacturesValide(c.req.query('annee'))
+  if (annee == null) return c.json({ error: 'Année invalide' }, 400)
+
+  const commandes = commandesDeLAnnee(await listeCommandesClient(user.easybeerIdClient), annee)
+  for (const resume of commandes) {
+    if (resume.idCommande == null) continue
+    const commande = await detailCommande(resume.idCommande)
+    const proprietaire = (commande.client as { idClient?: number } | undefined)?.idClient
+    if (
+      proprietaire === user.easybeerIdClient &&
+      documentsFacturesDeLAnnee(commande, annee).length > 0
+    ) {
+      return c.json({ disponible: true })
+    }
+  }
+  return c.json({ disponible: false })
+})
+
+/**
+ * Regroupe les factures d'une année dans une archive unique. Les PDF restent
+ * lus depuis Easybeer au moment du clic : le client obtient ainsi les documents
+ * de référence, sans copie persistante à synchroniser dans Firebase Storage.
+ */
+app.get('/api/commandes/factures/archive', requireAuth, async (c) => {
+  const user = c.get('user')
+  if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
+
+  const annee = anneeFacturesValide(c.req.query('annee'))
+  if (annee == null) return c.json({ error: 'Année invalide' }, 400)
+
+  const commandesAnnee = commandesDeLAnnee(await listeCommandesClient(user.easybeerIdClient), annee)
+
+  const fichiers: { nom: string; contenu: ArrayBuffer; date?: Date }[] = []
+  const nomsUtilises = new Map<string, number>()
+
+  for (const resume of commandesAnnee) {
+    if (resume.idCommande == null) continue
+    const commande = await detailCommande(resume.idCommande)
+    const proprietaire = (commande.client as { idClient?: number } | undefined)?.idClient
+    if (proprietaire !== user.easybeerIdClient) continue
+
+    const documents = documentsFacturesDeLAnnee(commande, annee)
+    for (const [index, document] of documents.entries()) {
+      const dateDocument = document.dateCreation == null ? undefined : new Date(document.dateCreation)
+
+      const { corps } = await telechargerDocument(document.idCommandeDocument!)
+      const nomInitial = nomFactureArchive(document, resume.numero ?? null, index)
+      const occurrences = nomsUtilises.get(nomInitial) ?? 0
+      nomsUtilises.set(nomInitial, occurrences + 1)
+      const nom = occurrences === 0 ? nomInitial : nomInitial.replace(/(\.pdf)$/i, `-${occurrences + 1}$1`)
+      fichiers.push({
+        nom,
+        contenu: corps,
+        date: dateDocument && Number.isFinite(dateDocument.getTime()) ? dateDocument : undefined,
+      })
+    }
+  }
+
+  if (!fichiers.length) {
+    return c.json({ error: `Aucune facture disponible pour ${annee}.` }, 404)
+  }
+
+  const archive = creerZip(fichiers)
+  const nom = `factures-goa-${annee}.zip`
+  return new Response(new Uint8Array(archive), {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Length': String(archive.length),
+      'Content-Disposition': `attachment; filename="${nom}"`,
+      'Cache-Control': 'private, no-store',
+    },
+  })
+})
+
 /** Charge une commande pour modification (contrôle propriété + garde-fou statut). */
 async function chargerCommandeClient(idCommande: number, easybeerIdClient: number) {
   const commande = await detailCommande(idCommande)
@@ -970,9 +1103,29 @@ interface DocumentEasybeer {
   code?: string
   nomFichierTelechargement?: string
   nomFichier?: string
+  estFacture?: boolean
   annule?: boolean
   type?: { code?: string; libelle?: string }
-  dateCreation?: number
+  dateCreation?: string | number
+}
+
+function estDocumentFacture(document: DocumentEasybeer) {
+  const codeType = document.type?.code?.toUpperCase()
+  const libelleType = document.type?.libelle?.toLowerCase()
+  return document.estFacture === true || codeType === 'FACTURE' || libelleType?.includes('facture') === true
+}
+
+function nomFactureArchive(document: DocumentEasybeer, numeroCommande: number | null, index: number) {
+  const brut =
+    document.nomFichierTelechargement ||
+    document.nomFichier ||
+    document.code ||
+    `facture-commande-${numeroCommande ?? index + 1}.pdf`
+  const nettoye = brut
+    .replace(/[\\/<>:"|?*\u0000-\u001f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return /\.pdf$/i.test(nettoye) ? nettoye : `${nettoye}.pdf`
 }
 
 async function lireRemisesLocalesCommande(

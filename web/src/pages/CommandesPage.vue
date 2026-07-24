@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   ChevronRight,
   CircleCheck,
   ClipboardList,
+  Download,
   Pencil,
   RotateCcw,
   Store,
@@ -49,6 +50,73 @@ const { data, isPending, isError, error } = useQuery({
 });
 
 const chargement = ref<number | null>(null);
+const telechargementFactures = ref(false);
+const anneeFactures = ref<number | null>(null);
+const archivesFacturesOuvertes = ref(false);
+
+const anneesFacturesQuery = useQuery({
+  queryKey: ["factures", "annees"],
+  queryFn: () => api.get<{ annees: number[] }>("/commandes/factures/annees"),
+  staleTime: 5 * 60 * 1000,
+  retry: false,
+});
+
+const anneesCommandes = computed(() => {
+  return anneesFacturesQuery.data.value?.annees ?? [];
+});
+
+watch(
+  anneesCommandes,
+  (annees) => {
+    if (
+      anneeFactures.value == null ||
+      !annees.includes(anneeFactures.value)
+    ) {
+      anneeFactures.value = annees[0] ?? null;
+    }
+  },
+  { immediate: true },
+);
+
+const disponibiliteFactures = useQuery({
+  queryKey: computed(() => [
+    "factures",
+    "disponibilite",
+    anneeFactures.value,
+  ]),
+  queryFn: () =>
+    api.get<{ disponible: boolean }>(
+      `/commandes/factures/disponibilite?annee=${anneeFactures.value}`,
+    ),
+  enabled: computed(() => anneeFactures.value != null),
+  staleTime: 5 * 60 * 1000,
+  retry: false,
+});
+
+async function telechargerFacturesAnnuelles() {
+  if (
+    anneeFactures.value == null ||
+    !disponibiliteFactures.data.value?.disponible
+  )
+    return;
+  telechargementFactures.value = true;
+  try {
+    await api.telecharger(
+      `/commandes/factures/archive?annee=${anneeFactures.value}`,
+      `factures-goa-${anneeFactures.value}.zip`,
+    );
+    archivesFacturesOuvertes.value = false;
+    toast.success(`Archive ${anneeFactures.value} téléchargée.`, {
+      description: "Toutes les factures disponibles sont regroupées dans le ZIP.",
+    });
+  } catch (e) {
+    toast.error("Impossible de préparer l’archive.", {
+      description: (e as Error).message,
+    });
+  } finally {
+    telechargementFactures.value = false;
+  }
+}
 
 const confirmationOuverte = ref(false);
 const confirmation = ref<{
@@ -140,12 +208,40 @@ async function modifier(commande: CommandeResume) {
 
 <template>
   <Card>
-    <CardHeader>
-      <CardTitle class="flex items-center gap-2 text-lg">
-        <ClipboardList class="size-5 text-muted-foreground" />
-        Mes commandes
-      </CardTitle>
-      <CardDescription> </CardDescription>
+    <CardHeader class="gap-1.5">
+      <div class="flex items-center justify-between gap-3">
+        <CardTitle class="flex items-center gap-2 text-lg">
+          <ClipboardList class="size-5 text-muted-foreground" />
+          Mes commandes
+        </CardTitle>
+
+        <Button
+          v-if="
+            anneesFacturesQuery.isPending.value || anneesCommandes.length > 0
+          "
+          type="button"
+          variant="outline"
+          size="sm"
+          class="shrink-0"
+          :disabled="anneesFacturesQuery.isPending.value"
+          @click="archivesFacturesOuvertes = true"
+        >
+          <Download class="size-4" />
+          <span class="sm:hidden">
+            {{ anneesFacturesQuery.isPending.value ? "Chargement…" : "Factures" }}
+          </span>
+          <span class="hidden sm:inline">
+            {{
+              anneesFacturesQuery.isPending.value
+                ? "Chargement des factures…"
+                : "Télécharger mes factures"
+            }}
+          </span>
+        </Button>
+      </div>
+      <CardDescription>
+        Consultez vos commandes et retrouvez vos documents.
+      </CardDescription>
     </CardHeader>
     <CardContent>
       <div
@@ -257,6 +353,79 @@ async function modifier(commande: CommandeResume) {
       </template>
     </CardContent>
   </Card>
+
+  <Dialog v-model:open="archivesFacturesOuvertes">
+    <DialogContent class="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>Télécharger mes factures</DialogTitle>
+        <DialogDescription>
+          Regroupez toutes les factures d’une année dans une archive ZIP.
+        </DialogDescription>
+      </DialogHeader>
+
+      <div class="grid gap-4 py-1">
+        <div class="grid gap-2">
+          <label for="annee-factures" class="text-sm font-medium">
+            Année de facturation
+          </label>
+          <select
+            id="annee-factures"
+            v-model.number="anneeFactures"
+            class="h-10 w-full rounded-md border bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            <option v-for="annee in anneesCommandes" :key="annee" :value="annee">
+              {{ annee }}
+            </option>
+          </select>
+        </div>
+
+        <div class="rounded-lg border bg-muted/30 p-3 text-sm">
+          <p
+            v-if="disponibiliteFactures.isPending.value"
+            class="text-muted-foreground"
+          >
+            Vérification des factures disponibles…
+          </p>
+          <p
+            v-else-if="disponibiliteFactures.data.value?.disponible"
+            class="font-medium text-foreground"
+          >
+            Vos factures {{ anneeFactures }} sont prêtes à être regroupées.
+          </p>
+          <p
+            v-else-if="disponibiliteFactures.isError.value"
+            class="text-destructive"
+          >
+            Disponibilité momentanément impossible à vérifier.
+          </p>
+          <p v-else class="text-muted-foreground">
+            Aucune facture disponible pour {{ anneeFactures }}.
+          </p>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button
+          type="button"
+          class="w-full"
+          :disabled="
+            telechargementFactures ||
+            disponibiliteFactures.isPending.value ||
+            disponibiliteFactures.isError.value ||
+            !disponibiliteFactures.data.value?.disponible
+          "
+          @click="telechargerFacturesAnnuelles"
+        >
+          <Download class="size-4" />
+          {{
+            telechargementFactures
+              ? "Préparation de l’archive…"
+              : "Télécharger le ZIP"
+          }}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 
   <CommandeDetailDialog
     v-model:id-commande="commandeOuverte"
