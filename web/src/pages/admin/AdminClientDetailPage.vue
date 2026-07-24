@@ -231,6 +231,21 @@ function formatRemise(remise: string | null | undefined) {
   return prixFr(valeur);
 }
 
+const aDesRemises = computed(
+  () =>
+    Boolean(formatRemise(client.value?.remise)) ||
+    remisesCiblees.value.some((remise) =>
+      Boolean(formatRemise(remise.remise)),
+    ) ||
+    remisesType.value.some(
+      (type) =>
+        Boolean(formatRemise(type.remise)) ||
+        type.remisesCiblees.some((remise) =>
+          Boolean(formatRemise(remise.remise)),
+        ),
+    ),
+);
+
 function metaRemiseCiblee(
   remise: AdminClientDetail["client"]["remisesCiblees"][number],
 ) {
@@ -276,13 +291,20 @@ function periodeRemiseCiblee(
           <Skeleton class="h-6 w-48 sm:w-64" />
           <Skeleton class="h-4 w-14" />
         </div>
-        <h1 v-else class="flex items-center gap-2 text-xl font-semibold">
-          <UserRound class="size-5 text-muted-foreground" />
-          {{ client?.nom ?? client?.raisonSociale ?? "…" }}
-          <span class="ml-2 text-sm font-normal text-muted-foreground">{{
-            client?.numero
-          }}</span>
-        </h1>
+        <div v-else class="flex items-start gap-2.5">
+          <UserRound class="mt-1 size-5 shrink-0 text-muted-foreground" />
+          <div class="flex min-w-0 flex-col items-start gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+            <h1 class="text-xl font-semibold leading-tight">
+              {{ client?.nom ?? client?.raisonSociale ?? "…" }}
+            </h1>
+            <span
+              v-if="client?.numero"
+              class="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+            >
+              {{ client.numero }}
+            </span>
+          </div>
+        </div>
       </div>
       <div class="shrink-0">
         <Skeleton v-if="isPending" class="size-8 rounded-full" />
@@ -430,14 +452,20 @@ function periodeRemiseCiblee(
               ><CardTitle class="text-base">Informations</CardTitle></CardHeader
             >
             <CardContent>
-              <dl class="grid gap-2 text-sm">
+              <dl class="grid text-sm sm:gap-2">
                 <div
                   v-for="i in infos"
                   :key="i.label"
-                  class="grid gap-0.5 sm:grid-cols-[12rem_1fr]"
+                  class="grid gap-1 border-b border-border/60 py-3 first:pt-0 last:border-b-0 last:pb-0 sm:grid-cols-[12rem_1fr] sm:gap-0.5 sm:border-0 sm:py-0"
                 >
-                  <dt class="text-muted-foreground">{{ i.label }}</dt>
-                  <dd class="min-w-0">
+                  <dt
+                    class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal"
+                  >
+                    {{ i.label }}
+                  </dt>
+                  <dd
+                    class="min-w-0 text-[0.95rem] font-medium leading-relaxed text-foreground sm:text-sm sm:font-normal sm:leading-normal"
+                  >
                     <IconTooltip
                       v-if="i.valeur && i.confirmationCopie"
                       :text="
@@ -450,13 +478,15 @@ function periodeRemiseCiblee(
                     >
                       <button
                         type="button"
-                        class="group -mx-2 -my-1 flex min-h-7 w-[calc(100%+1rem)] cursor-pointer items-center gap-1.5 rounded-sm px-2 text-left outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        class="group -mx-2 -my-1.5 flex min-h-9 w-[calc(100%+1rem)] cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:-my-1 sm:min-h-7 sm:justify-start sm:gap-1.5 sm:rounded-sm sm:py-1"
                         :aria-label="`Copier ${i.label.toLowerCase()}`"
                         @click="
                           copierTexte(i.valeur, i.confirmationCopie, i.label)
                         "
                       >
-                        <span class="min-w-0 break-words">{{ i.valeur }}</span>
+                        <span class="min-w-0 flex-1 [overflow-wrap:anywhere]">{{
+                          i.valeur
+                        }}</span>
                         <Check
                           v-if="informationCopiee === i.label"
                           class="size-3.5 shrink-0 text-primary"
@@ -469,17 +499,23 @@ function periodeRemiseCiblee(
                         />
                       </button>
                     </IconTooltip>
-                    <span v-else class="min-w-0 break-words">{{
-                      i.valeur || "—"
-                    }}</span>
+                    <span
+                      v-else
+                      class="min-w-0 [overflow-wrap:anywhere]"
+                      :class="i.valeur ? '' : 'text-muted-foreground/70'"
+                    >{{ i.valeur || "—" }}</span>
                   </dd>
                 </div>
                 <div
                   v-if="tags.length"
-                  class="grid gap-0.5 sm:grid-cols-[12rem_1fr]"
+                  class="grid gap-2 pt-3 sm:grid-cols-[12rem_1fr] sm:gap-0.5 sm:pt-0"
                 >
-                  <dt class="text-muted-foreground">Tags</dt>
-                  <dd class="flex flex-wrap gap-1">
+                  <dt
+                    class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal"
+                  >
+                    Tags
+                  </dt>
+                  <dd class="flex flex-wrap gap-1.5">
                     <Badge v-for="t in tags" :key="t" variant="secondary">{{
                       t
                     }}</Badge>
@@ -559,20 +595,36 @@ function periodeRemiseCiblee(
               ></CardHeader
             >
             <CardContent>
-              <dl class="grid gap-2 text-sm">
+              <dl class="grid text-sm sm:gap-2">
                 <div
                   v-for="c in conditions"
                   :key="c.label"
-                  class="grid gap-0.5 sm:grid-cols-[12rem_1fr]"
+                  class="grid gap-1 sm:grid-cols-[12rem_1fr] sm:gap-0.5"
                 >
-                  <dt class="text-muted-foreground">{{ c.label }}</dt>
-                  <dd>
+                  <dt
+                    class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal"
+                  >
+                    {{ c.label }}
+                  </dt>
+                  <dd class="text-[0.95rem] font-medium leading-relaxed sm:text-sm sm:font-normal sm:leading-normal">
                     {{ c.valeur || "—" }}
                   </dd>
                 </div>
               </dl>
 
-              <div class="mt-4 grid gap-2">
+              <div
+                v-if="!aDesRemises"
+                class="mt-4 grid gap-0.5 text-sm sm:grid-cols-[12rem_1fr]"
+              >
+                <h3
+                  class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground sm:text-sm sm:font-normal sm:normal-case sm:tracking-normal"
+                >
+                  Remises
+                </h3>
+                <span class="text-[0.95rem] font-medium text-muted-foreground/70 sm:text-sm sm:font-normal">—</span>
+              </div>
+
+              <div v-else class="mt-4 grid gap-2">
                 <div>
                   <h3 class="text-sm font-medium">Remises</h3>
                 </div>
@@ -587,13 +639,13 @@ function periodeRemiseCiblee(
 
                   <div class="grid border-t xl:grid-cols-[7rem_1fr_1fr]">
                     <div
-                      class="border-b bg-muted/35 px-3 py-2 font-medium text-muted-foreground xl:border-r xl:border-b-0 xl:py-3"
+                      class="border-b bg-muted/35 px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:border-r xl:border-b-0 xl:py-3 xl:text-sm xl:normal-case xl:tracking-normal"
                     >
                       Commande
                     </div>
                     <div class="border-b px-3 py-3 xl:border-r xl:border-b-0">
                       <p
-                        class="mb-2 text-xs font-medium text-muted-foreground xl:hidden"
+                        class="mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:hidden"
                       >
                         Client individuel
                       </p>
@@ -607,7 +659,7 @@ function periodeRemiseCiblee(
                     </div>
                     <div class="grid gap-2 px-3 py-3">
                       <p
-                        class="text-xs font-medium text-muted-foreground xl:hidden"
+                        class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:hidden"
                       >
                         Type de client
                       </p>
@@ -639,7 +691,7 @@ function periodeRemiseCiblee(
 
                   <div class="grid border-t xl:grid-cols-[7rem_1fr_1fr]">
                     <div
-                      class="border-b bg-muted/35 px-3 py-2 font-medium text-muted-foreground xl:border-r xl:border-b-0 xl:py-3"
+                      class="border-b bg-muted/35 px-3 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:border-r xl:border-b-0 xl:py-3 xl:text-sm xl:normal-case xl:tracking-normal"
                     >
                       Produit
                     </div>
@@ -647,7 +699,7 @@ function periodeRemiseCiblee(
                       class="grid gap-2 border-b px-3 py-3 xl:border-r xl:border-b-0"
                     >
                       <p
-                        class="text-xs font-medium text-muted-foreground xl:hidden"
+                        class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:hidden"
                       >
                         Client individuel
                       </p>
@@ -696,7 +748,7 @@ function periodeRemiseCiblee(
                     </div>
                     <div class="grid gap-2 px-3 py-3">
                       <p
-                        class="text-xs font-medium text-muted-foreground xl:hidden"
+                        class="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground xl:hidden"
                       >
                         Type de client
                       </p>

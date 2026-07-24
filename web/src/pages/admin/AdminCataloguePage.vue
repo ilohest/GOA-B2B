@@ -508,26 +508,28 @@ async function retirerPhoto(idStockBouteille: number) {
                 <p v-if="!u.tarifs.length" class="text-xs text-muted-foreground">Aucun tarif</p>
               </div>
 
-              <div class="grid grid-cols-2 gap-2">
-                <label class="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
+              <div class="grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] gap-2">
+                <label class="flex min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-lg border px-2 py-2.5 text-sm">
                   <span>Visible</span>
                   <Switch
+                    class="shrink-0"
                     :model-value="overrideAffiche(u).visible"
                     @update:model-value="(v: boolean) => definirBrouillon(u, 'visible', v)"
                   />
                 </label>
                 <label
-                  class="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                  class="flex min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-lg border px-2 py-2.5 text-xs"
                   :class="overrideAffiche(u).rupture
                     ? 'border-destructive/30 bg-destructive/5 text-destructive'
                     : 'border-primary/30 bg-primary/5 text-primary'"
                 >
-                  <span class="flex items-center gap-1.5 font-medium">
-                    <PackageX v-if="overrideAffiche(u).rupture" class="size-4" />
-                    <PackageCheck v-else class="size-4" />
+                  <span class="flex min-w-0 items-center gap-1 font-medium">
+                    <PackageX v-if="overrideAffiche(u).rupture" class="size-3.5 shrink-0" />
+                    <PackageCheck v-else class="size-3.5 shrink-0" />
                     {{ overrideAffiche(u).rupture ? 'Rupture' : 'Disponible' }}
                   </span>
                   <Switch
+                    class="shrink-0"
                     :model-value="overrideAffiche(u).rupture"
                     color-mode="availability"
                     @update:model-value="(v: boolean) => definirBrouillon(u, 'rupture', v)"

@@ -32,7 +32,12 @@ describe('tarifs personnalisés client', () => {
         {
           id: 142693,
           type: 'STOCK_PRODUIT',
-          modeleProduit: { idProduit: 40716, nomCommercial: 'Gingembre - Citron' },
+          modeleProduit: {
+            idProduit: 40716,
+            nom: 'Gingembre - Citron',
+            nomCommercial: 'Gingembre - Citron',
+            degreAlcool: 0,
+          },
           modeleContenant: { idContenant: 2654, libelleAvecContenance: 'Bouteille - 1L' },
           modeleLot: { idLot: 3, libelle: 'Carton de 6' },
           prixHT: 2,
@@ -44,7 +49,7 @@ describe('tarifs personnalisés client', () => {
         idProduit: 40716,
         idContenant: 2654,
         idLot: 3,
-        produit: 'Gingembre - Citron',
+        produit: 'Gingembre - Citron - 0°',
         contenant: 'Bouteille - 1L',
         packaging: 'Carton de 6',
         prixHT: 2,

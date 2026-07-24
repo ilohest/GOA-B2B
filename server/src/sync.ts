@@ -108,16 +108,18 @@ export function normaliserTarifsPersonnalises(
     .flatMap<TarifPersonnaliseClient>((tarif) => {
       const prixHT = Number(tarif.prixHT)
       if (!tarif.modeleProduit || !Number.isFinite(prixHT)) return []
+      const nomProduit = tarif.modeleProduit.nom?.trim() || tarif.modeleProduit.nomCommercial?.trim()
+      const degreAlcool = Number(tarif.modeleProduit.degreAlcool)
+      const produitEasybeer =
+        nomProduit && Number.isFinite(degreAlcool) && !/°\s*$/.test(nomProduit)
+          ? `${nomProduit} - ${degreAlcool}°`
+          : nomProduit
       return [{
         id: tarif.id ?? null,
         idProduit: tarif.modeleProduit.idProduit ?? null,
         idContenant: tarif.modeleContenant?.idContenant ?? null,
         idLot: tarif.modeleLot?.idLot ?? null,
-        produit:
-          tarif.modeleProduit.nomCommercial?.trim() ||
-          tarif.modeleProduit.nom?.trim() ||
-          tarif.modeleProduit.libelle?.trim() ||
-          null,
+        produit: produitEasybeer || tarif.modeleProduit.libelle?.trim() || null,
         contenant:
           tarif.modeleContenant?.libelleAvecContenance?.trim() ||
           tarif.modeleContenant?.libelle?.trim() ||

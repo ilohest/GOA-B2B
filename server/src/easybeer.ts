@@ -172,6 +172,7 @@ export interface ModeleClientPrix {
     nom?: string
     nomCommercial?: string
     libelle?: string
+    degreAlcool?: number
   } | null
   modeleContenant?: {
     idContenant?: number

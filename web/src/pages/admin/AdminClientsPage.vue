@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, h, reactive, ref, watch } from "vue";
-import { ArrowDown, ArrowUp, ArrowUpDown, Users } from "@lucide/vue";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  CheckCircle2,
+  Info,
+  MailX,
+  Users,
+} from "@lucide/vue";
 import { useRouter } from "vue-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import {
@@ -11,7 +19,6 @@ import {
 } from "@tanstack/vue-table";
 import { toast } from "vue-sonner";
 import { api } from "@/lib/api";
-import { copierDansPressePapiers } from "@/lib/clipboard";
 import type {
   AdminClientsResponse,
   ClientResume,
@@ -220,18 +227,36 @@ function basculerTout(coche: boolean) {
   }
 }
 
-async function copier(texte: string) {
-  if (await copierDansPressePapiers(texte)) {
-    toast.success("Lien copié — envoyez-le au client.");
-    return;
-  }
-  toast.error("Impossible de copier dans le presse-papiers.");
-}
-
 // --- Invitations en masse ---
 
 const dialogBulkInvitations = ref(false);
 const resultatsBulk = ref<InvitationBulkResultat[] | null>(null);
+const invitationsEnvoyees = computed(
+  () => resultatsBulk.value?.filter((resultat) => resultat.ok && resultat.envoye) ?? [],
+);
+const invitationsNonEnvoyees = computed(
+  () => resultatsBulk.value?.filter((resultat) => !resultat.ok || !resultat.envoye) ?? [],
+);
+
+function nomResultatInvitation(resultat: InvitationBulkResultat) {
+  const client = data.value?.clients.find(
+    (item) => item.idClient === resultat.easybeerIdClient,
+  );
+  return (
+    resultat.client?.nom ??
+    client?.nom ??
+    client?.raisonSociale ??
+    `Client ${resultat.easybeerIdClient}`
+  );
+}
+
+function motifInvitationNonEnvoyee(resultat: InvitationBulkResultat) {
+  if (resultat.erreur?.includes("pas d'email dans Easybeer")) {
+    return "Aucune adresse e-mail renseignée dans Easybeer";
+  }
+  if (resultat.erreurEmail) return "L’e-mail n’a pas pu être envoyé";
+  return resultat.erreur ?? "L’e-mail n’a pas pu être envoyé";
+}
 
 const bulkInvitations = useMutation({
   mutationFn: () =>
@@ -727,19 +752,26 @@ function ouvrirFiche(client: ClientResume) {
 
     <!-- Invitations en masse -->
     <Dialog v-model:open="dialogBulkInvitations">
-      <DialogContent class="sm:max-w-lg">
+      <DialogContent
+        class="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] overflow-y-auto sm:max-w-lg"
+      >
         <DialogHeader>
-          <DialogTitle
-            >Inviter
+          <DialogTitle>
             {{
               resultatsBulk
-                ? "la sélection"
-                : `${idsSelectionInvitation.length} client(s)`
-            }}</DialogTitle
-          >
+                ? "Résultat des invitations"
+                : `Inviter ${idsSelectionInvitation.length} client(s)`
+            }}
+          </DialogTitle>
           <DialogDescription>
-            Un email d'invitation est envoyé à chaque client (adresse de sa
-            fiche Easybeer). Le lien reste copiable si un envoi échoue.
+            <template v-if="resultatsBulk">
+              L’envoi est terminé. Consultez le récapitulatif ci-dessous.
+            </template>
+            <template v-else>
+              Les invitations seront envoyées aux adresses e-mail enregistrées
+              dans Easybeer. Les clients sans adresse seront signalés après
+              l’envoi.
+            </template>
           </DialogDescription>
         </DialogHeader>
 
@@ -761,32 +793,77 @@ function ouvrirFiche(client: ClientResume) {
           </DialogFooter>
         </div>
 
-        <div v-else class="grid max-h-80 gap-2 overflow-y-auto">
-          <div
-            v-for="r in resultatsBulk"
-            :key="r.easybeerIdClient"
-            class="flex items-center justify-between gap-3 rounded-lg border p-2"
-          >
-            <div class="min-w-0 text-sm">
-              <template v-if="r.ok">
-                <p class="truncate font-medium">
-                  {{ r.client?.nom ?? r.easybeerIdClient }}
-                </p>
-                <p class="truncate text-xs text-muted-foreground">
-                  {{ r.email }} · {{ r.envoye ? "email envoyé" : "à copier" }}
-                </p>
-              </template>
-              <p v-else class="text-xs text-destructive">{{ r.erreur }}</p>
-            </div>
-            <Button
-              v-if="r.ok && r.lien"
-              size="sm"
-              variant="outline"
-              @click="copier(r.lien!)"
+        <div v-else class="grid gap-4">
+          <div class="grid grid-cols-2 gap-2">
+            <div
+              class="rounded-xl border border-emerald-700/15 bg-emerald-50/70 p-3 text-emerald-900"
             >
-              Copier le lien
-            </Button>
+              <CheckCircle2 class="mb-2 size-5" aria-hidden="true" />
+              <p class="text-2xl font-semibold tabular-nums">
+                {{ invitationsEnvoyees.length }}
+              </p>
+              <p class="text-xs font-medium">
+                {{
+                  invitationsEnvoyees.length > 1
+                    ? "Invitations envoyées"
+                    : "Invitation envoyée"
+                }}
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-amber-700/15 bg-amber-50/70 p-3 text-amber-950"
+            >
+              <MailX class="mb-2 size-5" aria-hidden="true" />
+              <p class="text-2xl font-semibold tabular-nums">
+                {{ invitationsNonEnvoyees.length }}
+              </p>
+              <p class="text-xs font-medium">
+                {{
+                  invitationsNonEnvoyees.length > 1
+                    ? "Non envoyées"
+                    : "Non envoyée"
+                }}
+              </p>
+            </div>
           </div>
+
+          <div v-if="invitationsNonEnvoyees.length" class="grid gap-2">
+            <p class="text-sm font-semibold">
+              Clients à vérifier
+            </p>
+            <ul class="max-h-48 divide-y overflow-y-auto rounded-xl border">
+              <li
+                v-for="resultat in invitationsNonEnvoyees"
+                :key="resultat.easybeerIdClient"
+                class="grid gap-0.5 px-3 py-2.5 text-sm"
+              >
+                <p class="font-medium">
+                  {{ nomResultatInvitation(resultat) }}
+                </p>
+                <p class="text-xs leading-relaxed text-muted-foreground">
+                  {{ motifInvitationNonEnvoyee(resultat) }}
+                </p>
+              </li>
+            </ul>
+          </div>
+
+          <div
+            v-if="invitationsNonEnvoyees.length"
+            class="flex items-start gap-2.5 rounded-xl bg-muted/60 p-3 text-sm"
+          >
+            <Info class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <p class="leading-relaxed text-muted-foreground">
+              Les clients sans adresse e-mail renseignée dans Easybeer n’ont
+              reçu aucune invitation. La colonne <strong class="text-foreground">Compte</strong>
+              permet de les repérer. Ouvrez ensuite leur fiche individuelle pour
+              copier leur lien d’invitation unique et leur transmettre par un
+              autre moyen.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button @click="dialogBulkInvitations = false">Fermer</Button>
+          </DialogFooter>
         </div>
       </DialogContent>
     </Dialog>

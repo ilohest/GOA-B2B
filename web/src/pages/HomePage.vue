@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from "vue";
+import { computed, markRaw, ref, watchEffect } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Loader2, RotateCcw, Store } from "@lucide/vue";
 import { useQuery } from "@tanstack/vue-query";
@@ -34,6 +34,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+const ToastAnnulationPanierRaw = markRaw(ToastAnnulationPanier);
 
 const router = useRouter();
 const route = useRoute();
@@ -191,7 +193,7 @@ function supprimerLignePanier(idStockBouteille: number) {
   fixer(idStockBouteille, 0);
   toast.info(`${libelle} retiré du panier.`, {
     class: "panier-toast-annulation overflow-hidden",
-    description: ToastAnnulationPanier,
+    description: ToastAnnulationPanierRaw,
     duration: 7000,
     action: {
       label: "Annuler",
@@ -211,7 +213,7 @@ function viderPanierAvecAnnulation() {
   for (const id of Object.keys(quantitesSupprimees)) fixer(Number(id), 0);
   toast.info("Panier vidé.", {
     class: "panier-toast-annulation overflow-hidden",
-    description: ToastAnnulationPanier,
+    description: ToastAnnulationPanierRaw,
     componentProps: {
       texte: `${nbLignes} produit${nbLignes > 1 ? "s" : ""} retiré${nbLignes > 1 ? "s" : ""}.`,
     },

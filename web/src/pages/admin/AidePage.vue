@@ -207,7 +207,7 @@ const questionsFrequentes = computed(() =>
   margin: 0;
 }
 .guide :deep(.exemple-remises-images figure:last-child) {
-  width: min(100%, 22rem);
+  width: min(100%, 18rem);
   justify-self: center;
 }
 .guide :deep(.exemple-remises-images img) {
@@ -223,9 +223,6 @@ const questionsFrequentes = computed(() =>
 @media (min-width: 768px) {
   .guide :deep(.exemple-remises-images) {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  }
-  .guide :deep(.exemple-remises-images figure:last-child) {
-    width: 100%;
   }
 }
 </style>

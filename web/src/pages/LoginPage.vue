@@ -272,7 +272,9 @@ async function onSubmit() {
           <BrandLogo variante="complet" />
         </div>
         <CardTitle class="text-xl">Espace professionnel</CardTitle>
-        <CardDescription>{{ descriptionConnexion }}</CardDescription>
+        <CardDescription :class="emailValide ? 'mb-3 lg:mb-4' : ''">
+          {{ descriptionConnexion }}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <p v-if="!firebaseConfigured" class="text-sm text-destructive">
