@@ -64,7 +64,7 @@ export const config = {
 
   // Synchro périodique Easybeer → cache (0 = désactivée ; en prod, Cloud Scheduler).
   syncIntervalMinutes: Number(process.env.SYNC_INTERVAL_MINUTES ?? 0),
-  schedulerSecret: process.env.SCHEDULER_SECRET || undefined,
+  schedulerServiceAccountEmail: process.env.SCHEDULER_SERVICE_ACCOUNT_EMAIL || undefined,
 
   cloudTasks: {
     projectId: process.env.CLOUD_TASKS_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || undefined,
@@ -158,8 +158,8 @@ export function erreursConfigurationProduction(configuration: typeof config = co
   if (!configuration.firebase.storageBucket) erreurs.push('FIREBASE_STORAGE_BUCKET est requis')
   if (!configuration.webOrigin.startsWith('https://')) erreurs.push('WEB_ORIGIN doit utiliser HTTPS')
   if (configuration.syncIntervalMinutes > 0) erreurs.push('SYNC_INTERVAL_MINUTES doit être 0 sur Cloud Run')
-  if (!configuration.schedulerSecret || configuration.schedulerSecret.length < 32) {
-    erreurs.push('SCHEDULER_SECRET doit contenir au moins 32 caractères')
+  if (!configuration.schedulerServiceAccountEmail?.endsWith('.gserviceaccount.com')) {
+    erreurs.push('SCHEDULER_SERVICE_ACCOUNT_EMAIL doit être un compte de service Google')
   }
   if (!configuration.cloudTasks.projectId || !configuration.cloudTasks.serviceUrl || !configuration.cloudTasks.secret) {
     erreurs.push('Cloud Tasks requiert CLOUD_TASKS_PROJECT_ID, CLOUD_RUN_SERVICE_URL et TASKS_SECRET')

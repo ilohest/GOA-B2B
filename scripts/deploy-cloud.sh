@@ -6,6 +6,9 @@ PUBLIC_URL="${PUBLIC_URL:-https://commande.goa-kombucha.fr}"
 REGION="${CLOUD_REGION:-europe-west1}"
 SERVICE_NAME="${CLOUD_RUN_SERVICE_NAME:-goa-b2b-api}"
 SERVICE_ACCOUNT_NAME="${CLOUD_SERVICE_ACCOUNT_NAME:-goa-api}"
+SCHEDULER_SERVICE_ACCOUNT_NAME="${CLOUD_SCHEDULER_SERVICE_ACCOUNT_NAME:-goa-scheduler}"
+SCHEDULER_JOB="${CLOUD_SCHEDULER_JOB:-goa-cache-maintenance}"
+SCHEDULER_SCHEDULE="${CLOUD_SCHEDULER_SCHEDULE:-*/10 * * * *}"
 QUEUE="${CLOUD_TASKS_QUEUE:-easybeer-sync}"
 FIREBASE_API_KEY="${VITE_FIREBASE_API_KEY:-}"
 FIREBASE_APP_ID="${VITE_FIREBASE_APP_ID:-}"
@@ -53,8 +56,9 @@ VITE_FIREBASE_APP_ID="$FIREBASE_APP_ID" \
   npm --prefix web run build
 
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-ENV_VARS="FIREBASE_PROJECT_ID=${PROJECT_ID},FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET_VALUE},FIREBASE_EMULATORS=false,AUTH_DISABLED=false,WEB_ORIGIN=${PUBLIC_URL},INVITE_BASE_URL=${PUBLIC_URL}/activer,COMMANDE_EST_DEVIS=${COMMANDE_EST_DEVIS_VALUE},SYNC_INTERVAL_MINUTES=0,CLOUD_TASKS_PROJECT_ID=${PROJECT_ID},CLOUD_TASKS_LOCATION=${REGION},CLOUD_TASKS_QUEUE=${QUEUE},CLOUD_RUN_SERVICE_URL=https://initial.invalid,SMTP_HOST=${SMTP_HOST_VALUE},SMTP_PORT=${SMTP_PORT_VALUE},SMTP_USER=${SMTP_USER_VALUE},SMTP_FROM=${SMTP_FROM_VALUE},CATALOGUE_AUTO_REFRESH_MINUTES=30,PRIX_AUTO_REFRESH_MINUTES=30,PRIX_COMMANDE_MAX_AGE_MINUTES=60,CLIENTS_AUTO_REFRESH_MINUTES=30,COMMANDES_AUTO_REFRESH_MINUTES=10"
-SECRET_VARS="EASYBEER_USERNAME=easybeer-username:latest,EASYBEER_PASSWORD=easybeer-password:latest,SMTP_PASS=smtp-password:latest,TASKS_SECRET=tasks-secret:latest,SCHEDULER_SECRET=scheduler-secret:latest"
+SCHEDULER_SERVICE_ACCOUNT="${SCHEDULER_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+ENV_VARS="FIREBASE_PROJECT_ID=${PROJECT_ID},FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET_VALUE},FIREBASE_EMULATORS=false,AUTH_DISABLED=false,WEB_ORIGIN=${PUBLIC_URL},INVITE_BASE_URL=${PUBLIC_URL}/activer,COMMANDE_EST_DEVIS=${COMMANDE_EST_DEVIS_VALUE},SYNC_INTERVAL_MINUTES=0,SCHEDULER_SERVICE_ACCOUNT_EMAIL=${SCHEDULER_SERVICE_ACCOUNT},CLOUD_TASKS_PROJECT_ID=${PROJECT_ID},CLOUD_TASKS_LOCATION=${REGION},CLOUD_TASKS_QUEUE=${QUEUE},CLOUD_RUN_SERVICE_URL=https://initial.invalid,SMTP_HOST=${SMTP_HOST_VALUE},SMTP_PORT=${SMTP_PORT_VALUE},SMTP_USER=${SMTP_USER_VALUE},SMTP_FROM=${SMTP_FROM_VALUE},CATALOGUE_AUTO_REFRESH_MINUTES=30,PRIX_AUTO_REFRESH_MINUTES=30,PRIX_COMMANDE_MAX_AGE_MINUTES=60,CLIENTS_AUTO_REFRESH_MINUTES=30,COMMANDES_AUTO_REFRESH_MINUTES=10"
+SECRET_VARS="EASYBEER_USERNAME=easybeer-username:latest,EASYBEER_PASSWORD=easybeer-password:latest,SMTP_PASS=smtp-password:latest,TASKS_SECRET=tasks-secret:latest"
 
 echo "Déploiement de l'API Cloud Run"
 gcloud run deploy "$SERVICE_NAME" \
@@ -83,12 +87,43 @@ gcloud run services update "$SERVICE_NAME" \
   --project "$PROJECT_ID" \
   --update-env-vars "CLOUD_RUN_SERVICE_URL=${SERVICE_URL}" \
   --quiet
+gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --member "serviceAccount:${SCHEDULER_SERVICE_ACCOUNT}" \
+  --role roles/run.invoker \
+  --quiet >/dev/null
+
+echo "Configuration de Cloud Scheduler"
+SCHEDULER_ARGS=(
+  --location "$REGION"
+  --project "$PROJECT_ID"
+  --schedule "$SCHEDULER_SCHEDULE"
+  --time-zone "Europe/Brussels"
+  --uri "${SERVICE_URL}/api/scheduled/maintenance"
+  --http-method POST
+  --oidc-service-account-email "$SCHEDULER_SERVICE_ACCOUNT"
+  --oidc-token-audience "$SERVICE_URL"
+  --attempt-deadline 60s
+  --max-retry-attempts 3
+  --min-backoff 30s
+  --max-backoff 300s
+)
+if gcloud scheduler jobs describe "$SCHEDULER_JOB" --location "$REGION" --project "$PROJECT_ID" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http "$SCHEDULER_JOB" "${SCHEDULER_ARGS[@]}" --quiet
+else
+  gcloud scheduler jobs create http "$SCHEDULER_JOB" "${SCHEDULER_ARGS[@]}" --quiet
+fi
 
 echo "Déploiement Firebase Hosting et règles"
 firebase deploy --project "$PROJECT_ID" --only hosting,firestore:rules,storage
 
 echo "Vérifications HTTP"
 curl --fail --silent --show-error "${SERVICE_URL}/api/health" >/dev/null
+gcloud scheduler jobs describe "$SCHEDULER_JOB" \
+  --location "$REGION" \
+  --project "$PROJECT_ID" \
+  --format='value(state,schedule,httpTarget.uri)' | grep -F "${SERVICE_URL}/api/scheduled/maintenance" >/dev/null
 curl --fail --silent --show-error "https://${PROJECT_ID}.web.app" >/dev/null
 if ! curl --fail --silent --show-error "$PUBLIC_URL" >/dev/null 2>&1; then
   echo "Le domaine personnalisé n'est pas encore actif ; termine sa validation dans Firebase Hosting et OVH."

@@ -9,7 +9,7 @@ compte de facturation doivent appartenir au client.
 - Cloud Run `goa-b2b-api` : API Hono/Node.
 - Firebase Auth, Firestore et Storage : comptes et données.
 - Cloud Tasks `easybeer-sync` : synchronisations longues et retries.
-- Cloud Scheduler : mise à jour générale quotidienne de sécurité.
+- Cloud Scheduler : contrôle conditionnel des caches toutes les 10 minutes.
 - Secret Manager : identifiants Easybeer, SMTP et secrets techniques.
 
 Région applicative : `europe-west1` (Belgique). Pour la base Firestore, choisir
@@ -50,8 +50,9 @@ export FIREBASE_STORAGE_BUCKET="identifiant-du-projet-client.firebasestorage.app
 npm run setup:cloud
 ```
 
-Le script active les API, crée un compte de service applicatif, une file limitée
-à une synchronisation concurrente et cinq conteneurs Secret Manager vides.
+Le script active les API, crée les comptes de service Cloud Run et Scheduler,
+une file limitée à une synchronisation concurrente et quatre conteneurs Secret
+Manager vides.
 
 ## 4. Ajouter les secrets
 
@@ -69,8 +70,7 @@ Répéter pour :
 - `easybeer-username` ;
 - `easybeer-password` ;
 - `smtp-password` ;
-- `tasks-secret` : valeur aléatoire d'au moins 32 caractères ;
-- `scheduler-secret` : autre valeur aléatoire d'au moins 32 caractères.
+- `tasks-secret` : valeur aléatoire d'au moins 32 caractères.
 
 ## 5. Premier déploiement
 
@@ -90,7 +90,8 @@ npm run deploy:cloud
 ```
 
 Le script exécute les tests, construit les deux applications, déploie Cloud Run,
-injecte les secrets, déploie Firebase Hosting et teste les endpoints publics.
+injecte les secrets, crée ou met à jour le job Cloud Scheduler avec son identité
+OIDC, déploie Firebase Hosting et teste les endpoints publics.
 
 ## 6. Domaine OVH
 
@@ -102,18 +103,30 @@ DKIM ou DMARC utilisés par les e-mails.
 Attendre la validation DNS et la génération du certificat HTTPS avant les tests
 de connexion et d'invitation.
 
-## 7. Mise à jour générale quotidienne
+## 7. Maintenance automatique des caches
 
-Avant l'ouverture aux clients, créer une tâche Cloud Scheduler quotidienne vers
-l'URL Cloud Run directe :
+Le déploiement configure automatiquement le job `goa-cache-maintenance` :
 
-- méthode : `POST` ;
-- chemin : `/api/scheduled/sync` ;
-- en-tête : `Authorization: Bearer <scheduler-secret>` ;
-- horaire recommandé : 06:00, fuseau `Europe/Brussels`.
+- fréquence : toutes les 10 minutes, fuseau `Europe/Brussels` ;
+- méthode : `POST` sur `/api/scheduled/maintenance` ;
+- authentification : jeton OIDC signé pour le compte `goa-scheduler` ;
+- traitement : mise en file d'une Cloud Task durable ;
+- concurrence : une seule tâche, avec trois tentatives et backoff.
 
-L'endpoint ne réalise pas lui-même le travail : il crée une Cloud Task durable.
-La file limite la concurrence à 1 et retente au maximum 3 fois avec backoff.
+La tâche lit d'abord les horodatages Firestore. Elle n'appelle Easybeer que pour
+les familles expirées : commandes après 10 minutes, clients et catalogue après
+30 minutes. Le nettoyage des comptes supprimés d'Easybeer reste exécuté lors du
+rafraîchissement de la liste clients. Les prix propres à un client restent
+rafraîchis à la consultation de sa boutique, afin de ne pas synchroniser à vide
+des comptes inactifs.
+
+Après le déploiement, vérifier le job avec :
+
+```bash
+gcloud scheduler jobs describe goa-cache-maintenance \
+  --location europe-west1 \
+  --project "$FIREBASE_PROJECT_ID"
+```
 
 ## 8. Recette avant commandes réelles
 

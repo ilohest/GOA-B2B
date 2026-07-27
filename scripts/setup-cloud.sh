@@ -5,6 +5,7 @@ PROJECT_ID="${FIREBASE_PROJECT_ID:-}"
 REGION="${CLOUD_REGION:-europe-west1}"
 QUEUE="${CLOUD_TASKS_QUEUE:-easybeer-sync}"
 SERVICE_ACCOUNT_NAME="${CLOUD_SERVICE_ACCOUNT_NAME:-goa-api}"
+SCHEDULER_SERVICE_ACCOUNT_NAME="${CLOUD_SCHEDULER_SERVICE_ACCOUNT_NAME:-goa-scheduler}"
 STORAGE_BUCKET="${FIREBASE_STORAGE_BUCKET:-${PROJECT_ID}.firebasestorage.app}"
 
 if [[ -z "$PROJECT_ID" ]]; then
@@ -17,6 +18,7 @@ if ! command -v gcloud >/dev/null 2>&1; then
 fi
 
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+SCHEDULER_SERVICE_ACCOUNT="${SCHEDULER_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
 echo "Activation des API Google Cloud"
 gcloud services enable \
@@ -33,6 +35,11 @@ gcloud services enable \
 if ! gcloud iam service-accounts describe "$SERVICE_ACCOUNT" --project "$PROJECT_ID" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$SERVICE_ACCOUNT_NAME" \
     --display-name "GOA B2B API" \
+    --project "$PROJECT_ID"
+fi
+if ! gcloud iam service-accounts describe "$SCHEDULER_SERVICE_ACCOUNT" --project "$PROJECT_ID" >/dev/null 2>&1; then
+  gcloud iam service-accounts create "$SCHEDULER_SERVICE_ACCOUNT_NAME" \
+    --display-name "GOA Cache Scheduler" \
     --project "$PROJECT_ID"
 fi
 
@@ -73,7 +80,7 @@ gcloud tasks queues update "$QUEUE" \
   --max-backoff 1800s
 
 echo "Création des conteneurs de secrets (sans valeur)"
-for secret in easybeer-username easybeer-password smtp-password tasks-secret scheduler-secret; do
+for secret in easybeer-username easybeer-password smtp-password tasks-secret; do
   if ! gcloud secrets describe "$secret" --project "$PROJECT_ID" >/dev/null 2>&1; then
     gcloud secrets create "$secret" --replication-policy automatic --project "$PROJECT_ID"
   fi
@@ -86,5 +93,6 @@ done
 
 echo
 echo "Socle Google Cloud prêt pour ${PROJECT_ID}."
-echo "Ajoute maintenant une version à chacun des cinq secrets avant le premier déploiement."
+echo "Ajoute maintenant une version à chacun des quatre secrets avant le premier déploiement."
 echo "Compte de service Cloud Run : ${SERVICE_ACCOUNT}"
+echo "Compte de service Cloud Scheduler : ${SCHEDULER_SERVICE_ACCOUNT}"

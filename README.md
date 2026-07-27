@@ -122,9 +122,11 @@ Le script VPS reste uniquement disponible pour la préproduction temporaire.
 - La boutique auto-répare le catalogue/grille et les prix du client après
   **30 min**, avec stale-while-revalidate, verrou distribué et délai
   anti-rafale. Les seuils sont configurables dans `server/.env.example`.
-- En production, un Cloud Scheduler quotidien vers `POST /api/scheduled/sync`
-  assure une mise à jour générale de sécurité, en complément des actualisations
-  déclenchées à la consultation.
+- En production, Cloud Scheduler appelle toutes les 10 minutes
+  `POST /api/scheduled/maintenance` avec un jeton OIDC. La requête met en file
+  une Cloud Task qui vérifie les horodatages Firestore et ne rafraîchit que les
+  familles expirées (commandes 10 min, clients/catalogue 30 min). Le job est
+  créé ou mis à jour automatiquement par `scripts/deploy-cloud.sh`.
 - Garder `PRIX_CACHE_MAX_AGE_MINUTES` supérieur aux seuils proactifs et
   `PRIX_COMMANDE_MAX_AGE_MINUTES` compris entre le seuil de refresh prix et le
   garde-fou dur. Les listes clients et commandes se renouvellent selon leurs

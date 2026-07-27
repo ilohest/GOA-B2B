@@ -8,7 +8,7 @@ function configurationProductionValide(): typeof config {
     webOrigin: 'https://commande.goa-kombucha.fr',
     authDisabled: false,
     syncIntervalMinutes: 0,
-    schedulerSecret: 's'.repeat(32),
+    schedulerServiceAccountEmail: 'goa-scheduler@goa-production.iam.gserviceaccount.com',
     firebase: {
       ...config.firebase,
       projectId: 'goa-production',
@@ -47,15 +47,15 @@ describe('garde-fous de production', () => {
     ]))
   })
 
-  it('refuse des secrets trop courts ou une file incomplète', () => {
+  it('refuse un compte Scheduler ou une file Cloud Tasks incomplets', () => {
     const valide = configurationProductionValide()
     const erreurs = erreursConfigurationProduction({
       ...valide,
-      schedulerSecret: 'court',
+      schedulerServiceAccountEmail: 'adresse-invalide',
       cloudTasks: { ...valide.cloudTasks, serviceUrl: undefined, secret: 'court' },
     })
     expect(erreurs).toEqual(expect.arrayContaining([
-      'SCHEDULER_SECRET doit contenir au moins 32 caractères',
+      'SCHEDULER_SERVICE_ACCOUNT_EMAIL doit être un compte de service Google',
       'Cloud Tasks requiert CLOUD_TASKS_PROJECT_ID, CLOUD_RUN_SERVICE_URL et TASKS_SECRET',
     ]))
   })

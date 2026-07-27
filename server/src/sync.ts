@@ -1054,7 +1054,7 @@ export function idsComptesAbsentsEasybeer(
  * Les commandes restent conservées ; seuls les accès, invitations et caches de
  * prix devenus inutiles sont neutralisés.
  */
-async function rapprocherComptesSupprimesEasybeer(db: Firestore, clientsEasybeer: ClientResume[]) {
+export async function rapprocherComptesSupprimesEasybeer(db: Firestore, clientsEasybeer: ClientResume[]) {
   const utilisateurs = await db.collection('users').where('easybeerIdClient', '!=', null).get()
   const idsPresents = new Set(clientsEasybeer.map((client) => client.idClient).filter((id): id is number => id != null))
   const maintenant = Date.now()

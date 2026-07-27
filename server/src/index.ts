@@ -96,7 +96,14 @@ import {
   envoyerLoginLinkEmail,
   envoyerResetPasswordEmail,
 } from './email.js'
-import { cloudTasksConfigure, planifierSynchronisationEasybeer, requeteCloudTasksAutorisee } from './tasks.js'
+import {
+  cloudTasksConfigure,
+  planifierMaintenanceCaches,
+  planifierSynchronisationEasybeer,
+  requeteCloudTasksAutorisee,
+} from './tasks.js'
+import { entretenirCachesPartages } from './maintenance.js'
+import { requeteSchedulerAutorisee } from './schedulerAuth.js'
 import { creerZip } from './zip.js'
 
 import { EasybeerBanError, etatBanEasybeer, surBan, restaurerBan } from './easybeer.js'
@@ -2423,20 +2430,16 @@ app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
 })
 
 /**
- * Endpoint pour Cloud Scheduler / cron externe. Protégé par un secret serveur,
- * sans dépendre d'une session Firebase admin interactive.
+ * Cloud Scheduler ne réalise aucun travail long : son jeton OIDC est vérifié,
+ * puis une tâche de maintenance conditionnelle est mise en file.
  */
-app.post('/api/scheduled/sync', async (c) => {
-  if (!config.schedulerSecret) return c.json({ error: 'Scheduler non configuré' }, 501)
-  const header = c.req.header('Authorization') ?? ''
-  const token = header.startsWith('Bearer ') ? header.slice(7) : ''
-  if (token !== config.schedulerSecret) return c.json({ error: 'Non autorisé' }, 401)
-  if (cloudTasksConfigure()) {
-    const task = await planifierSynchronisationEasybeer('scheduler')
-    return c.json({ demarree: true, task: task.nom }, 202)
+app.post('/api/scheduled/maintenance', async (c) => {
+  if (!(await requeteSchedulerAutorisee(c.req.header('Authorization')))) {
+    return c.json({ error: 'Non autorisé' }, 401)
   }
-  const res = await executerSyncCache()
-  return c.json(res.body, res.status as 200 | 202 | 501 | 503)
+  if (!cloudTasksConfigure()) return c.json({ error: 'Cloud Tasks non configuré' }, 501)
+  const task = await planifierMaintenanceCaches()
+  return c.json({ planifiee: true, task: task.nom }, 202)
 })
 
 /** Worker privé logique de Cloud Tasks. Les retries sont pilotés par la file. */
@@ -2451,6 +2454,20 @@ app.post('/api/tasks/sync', async (c) => {
     return c.json({ ...res.body, error: 'Synchronisation partielle — nouvelle tentative demandée' }, 500)
   }
   return c.json(res.body, 200)
+})
+
+app.post('/api/tasks/maintenance', async (c) => {
+  if (!requeteCloudTasksAutorisee(c.req.header('X-Goa-Task-Secret'))) {
+    return c.json({ error: 'Non autorisé' }, 401)
+  }
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  const resultat = await entretenirCachesPartages(db)
+  console.log(
+    `[maintenance] caches demandés=${Object.entries(resultat.demandes).filter(([, actif]) => actif).map(([cle]) => cle).join(',') || 'aucun'} ` +
+      `actualisés=${resultat.actualises.join(',') || 'aucun'} en-cours=${resultat.dejaEnCours.join(',') || 'aucun'}`,
+  )
+  return c.json(resultat)
 })
 
 // Entretien périodique optionnel des caches partagés. Chaque ressource conserve
