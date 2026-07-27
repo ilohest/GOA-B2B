@@ -13,7 +13,12 @@ export function useSyncEnCours() {
   const statutSync = useQuery({
     queryKey: ['admin', 'sync-status'],
     queryFn: () => api.get<SyncStatusResponse>('/admin/sync/status'),
-    refetchInterval: 10_000,
+    // Cet état pilote tous les boutons de synchronisation. Il ne doit pas
+    // hériter du staleTime global de 30 s, sinon un changement de page peut
+    // brièvement réafficher un bouton actif alors qu'un refresh tourne déjà.
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: (query) => query.state.data?.verrou?.actif ? 2_000 : 5_000,
   })
   const syncEnCours = computed(() => statutSync.data.value?.verrou?.actif === true)
   return { statutSync, syncEnCours }

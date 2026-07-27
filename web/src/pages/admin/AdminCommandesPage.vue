@@ -221,7 +221,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
           </div>
           <BoutonActualiser
             label="Actualiser les commandes"
-            :pending="actualisation.isPending.value || syncEnCours"
+            :pending="actualisation.isPending.value || data?.revalidationEnCours === true || syncEnCours"
             @click="actualisation.mutate()"
           />
         </div>

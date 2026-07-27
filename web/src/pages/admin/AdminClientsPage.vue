@@ -613,7 +613,7 @@ function ouvrirFiche(client: ClientResume) {
             </div>
             <BoutonActualiser
               label="Actualiser les clients"
-              :pending="actualisation.isPending.value || syncEnCours"
+              :pending="actualisation.isPending.value || data?.revalidationEnCours === true || syncEnCours"
               @click="actualisation.mutate()"
             />
           </div>
