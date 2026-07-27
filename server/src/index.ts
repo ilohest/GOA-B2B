@@ -2200,44 +2200,39 @@ app.get('/api/admin/commandes/:id/documents/:idDoc/pdf', requireAuth, requireAdm
   })
 })
 
-/** Statistiques du tableau de bord — 100 % depuis les caches, zéro appel Easybeer. */
+/**
+ * Statistiques du tableau de bord depuis les caches. Chaque famille applique
+ * son propre seuil stale-while-revalidate : commandes 10 min, clients 30 min,
+ * catalogue/grille 30 min. Le dashboard ne lance jamais une synchro complète.
+ */
 app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
   if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
 
-  const [clientsSnap, commandesSnap, catalogueSnap, overridesSnap, metaSnap, comptes] = await Promise.all([
-    db.doc('cache/clientsListe').get(),
-    db.doc('cache/commandesRecentes').get(),
-    db.doc('cache/catalogue').get(),
+  const [clientsCache, commandesCache, catalogueCache, overridesSnap, metaSnap, comptes] = await Promise.all([
+    lireListeClients(db),
+    lireCommandesRecentes(db),
+    lireCachesCatalogueResilients(db),
     db.collection('catalogueOverrides').get(),
     db.doc('cache/meta').get(),
     comptesParClient(),
   ])
 
-  const clients = (clientsSnap.data()?.clients ?? []) as { actif: boolean }[]
-  const commandes = (commandesSnap.data()?.commandes ?? []) as {
-    totalHT: number | null
-    totalTTC: number | null
-    dateCreation: number | null
-    etat: { code: string; libelle: string; couleur: string | null }
-  }[]
-  const produits = (catalogueSnap.data()?.produits ?? []) as unknown[]
-  const clientsSyncedAt = (clientsSnap.data()?.syncedAt as number | undefined) ?? null
-  const commandesSyncedAt = (commandesSnap.data()?.syncedAt as number | undefined) ?? null
-  const catalogueSyncedAt = (catalogueSnap.data()?.syncedAt as number | undefined) ?? null
+  const clients = clientsCache.clients
+  const commandes = commandesCache.commandes
+  const produits = catalogueCache.catalogue.produits
+  const clientsSyncedAt = clientsCache.syncedAt
+  const commandesSyncedAt = commandesCache.syncedAt
+  const catalogueSyncedAt = catalogueCache.catalogue.syncedAt
   const timestampsCache = [clientsSyncedAt, commandesSyncedAt, catalogueSyncedAt]
   const cachePlusAncienAt = timestampsCache.every((timestamp): timestamp is number => typeof timestamp === 'number')
     ? Math.min(...timestampsCache)
     : null
-  let revalidationEnCours = false
-  if (cacheEstAncien(cachePlusAncienAt, config.cache.fullSyncRefreshAgeMinutes * 60_000)) {
-    // Le snapshot périmé reste servi immédiatement, mais l'admin n'a rien à
-    // cliquer : le verrou global déduplique la demande et l'UI suit son état.
-    revalidationEnCours = await demanderSynchronisationAutomatique(cachePlusAncienAt, 'dashboard').catch((e) => {
-      console.error('[sync] déclenchement automatique dashboard :', (e as Error).message)
-      return false
-    })
-  }
+  const revalidationEnCours = Boolean(
+    clientsCache.revalidationEnCours ||
+    commandesCache.revalidationEnCours ||
+    catalogueCache.revalidationEnCours,
+  )
   const meta = metaSnap.data()
   // Les rapports antérieurs à l'ajout du champ `reussi` restent lisibles :
   // on recalcule leur état à partir des erreurs enregistrées.
@@ -2395,61 +2390,6 @@ async function executerSyncCache() {
   return { status: 200, body: { ok: res.report.reussi, report: res.report } }
 }
 
-const DELAI_NOUVELLE_DEMANDE_SYNC_AUTO_MS = 10 * 60_000
-
-/**
- * Déclenche une synchronisation complète sans action utilisateur lorsqu'un
- * snapshot global est ancien. Le bail de demande évite les tâches répétées
- * avant même que le verrou de synchronisation principal soit acquis.
- */
-async function demanderSynchronisationAutomatique(
-  cachePlusAncienAt: number | null,
-  origine: 'dashboard' | 'demarrage' | 'intervalle',
-) {
-  const db = getDb()
-  if (!db) return false
-  if (!cacheEstAncien(cachePlusAncienAt, config.cache.fullSyncRefreshAgeMinutes * 60_000)) return false
-  if (etatBanEasybeer().banni) return false
-
-  const maintenant = Date.now()
-  const demandeRef = db.doc('cache/autoSyncRequest')
-  const acceptee = await db.runTransaction(async (tx) => {
-    const derniereDemande = (await tx.get(demandeRef)).data()?.requestedAt as number | undefined
-    if (derniereDemande && maintenant - derniereDemande < DELAI_NOUVELLE_DEMANDE_SYNC_AUTO_MS) return false
-    tx.set(demandeRef, { requestedAt: maintenant, origine }, { merge: true })
-    return true
-  })
-  if (!acceptee) return false
-
-  console.log(`[sync] demande automatique (${origine}) — cache global ancien.`)
-  if (cloudTasksConfigure()) {
-    await planifierSynchronisationEasybeer('scheduler')
-    return true
-  }
-  void executerSyncCache()
-    .then((resultat) => {
-      if (resultat.status >= 500) {
-        console.warn(`[sync] demande automatique ${origine} terminée en erreur :`, resultat.body)
-      }
-    })
-    .catch((e) => console.error(`[sync] demande automatique ${origine} interrompue :`, (e as Error).message))
-  return true
-}
-
-async function cacheGlobalPlusAncienAt() {
-  const db = getDb()
-  if (!db) return null
-  const [clients, commandes, catalogue] = await Promise.all([
-    db.doc('cache/clientsListe').get(),
-    db.doc('cache/commandesRecentes').get(),
-    db.doc('cache/catalogue').get(),
-  ])
-  const timestamps = [clients.data()?.syncedAt, commandes.data()?.syncedAt, catalogue.data()?.syncedAt]
-  return timestamps.every((timestamp): timestamp is number => typeof timestamp === 'number')
-    ? Math.min(...timestamps)
-    : null
-}
-
 /** Déclenche une synchro complète Easybeer → cache (verrou single-flight). */
 app.post('/api/admin/sync', requireAuth, requireAdmin, async (c) => {
   const db = getDb()
@@ -2513,23 +2453,29 @@ app.post('/api/tasks/sync', async (c) => {
   return c.json(res.body, 200)
 })
 
-// Synchro périodique optionnelle (SYNC_INTERVAL_MINUTES > 0). En prod, préférer
-// Cloud Scheduler → POST /api/admin/sync (étape 9). Robuste : ne tape pas
-// l'API pendant un ban connu (sinon on le prolonge), et le verrou évite les
-// chevauchements. Un premier contrôle est exécuté au démarrage : un redémarrage
-// ou un déploiement ne repousse donc plus la prochaine synchronisation de 24 h.
+// Entretien périodique optionnel des caches partagés. Chaque ressource conserve
+// son propre seuil (commandes 10 min, clients et catalogue 30 min) et ses
+// propres verrous/cooldowns. Un premier contrôle est exécuté au démarrage : un
+// déploiement ne repousse donc plus l'entretien des caches de 24 h.
 if (config.syncIntervalMinutes > 0) {
-  const verifierEtSynchroniser = async (origine: 'demarrage' | 'intervalle') => {
-    try {
-      await demanderSynchronisationAutomatique(await cacheGlobalPlusAncienAt(), origine)
-    } catch (e) {
-      console.error(`[sync] échec du contrôle ${origine} :`, (e as Error).message)
+  const verifierCachesPartages = async (origine: 'demarrage' | 'intervalle') => {
+    const db = getDb()
+    if (!db) return
+    const resultats = await Promise.allSettled([
+      lireListeClients(db),
+      lireCommandesRecentes(db),
+      lireCachesCatalogueResilients(db),
+    ])
+    for (const resultat of resultats) {
+      if (resultat.status === 'rejected') {
+        console.error(`[sync] échec du contrôle ${origine} :`, (resultat.reason as Error).message)
+      }
     }
   }
-  const demarrageTimer = setTimeout(() => void verifierEtSynchroniser('demarrage'), 10_000)
+  const demarrageTimer = setTimeout(() => void verifierCachesPartages('demarrage'), 10_000)
   demarrageTimer.unref?.()
   const intervalle = setInterval(
-    () => void verifierEtSynchroniser('intervalle'),
+    () => void verifierCachesPartages('intervalle'),
     config.syncIntervalMinutes * 60_000,
   )
   intervalle.unref?.()

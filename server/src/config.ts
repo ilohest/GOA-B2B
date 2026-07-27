@@ -104,15 +104,6 @@ export const config = {
       10,
       1,
     ),
-    // Une arrivée sur le dashboard admin ne doit jamais laisser croire qu'un
-    // snapshot global ancien est encore à jour. Au-delà de ce seuil, une
-    // synchronisation complète est demandée automatiquement en arrière-plan.
-    fullSyncRefreshAgeMinutes: nombreConfig(
-      'FULL_SYNC_AUTO_REFRESH_MINUTES',
-      process.env.FULL_SYNC_AUTO_REFRESH_MINUTES,
-      60,
-      1,
-    ),
     // Après un échec/ban, une visite client ne doit pas relancer une rafale.
     autoRefreshCooldownMinutes: nombreConfig(
       'CACHE_AUTO_REFRESH_COOLDOWN_MINUTES',
