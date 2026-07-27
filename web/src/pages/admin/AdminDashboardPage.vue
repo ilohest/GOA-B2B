@@ -36,6 +36,9 @@ type SyncStartResponse = { demarree: true } | { enCours: true } | { ok: boolean;
 const syncGlobaleEnCours = computed(
   () => statutSync.data.value?.verrou?.actif === true && statutSync.data.value.verrou.kind === 'sync',
 )
+const actualisationAutomatiqueEnCours = computed(
+  () => data.value?.revalidationEnCours === true || syncEnCours.value,
+)
 const declenchementManuel = ref(false)
 let rapportAvantSyncAt: number | null = null
 let dernierRapportNotifieAt: number | null = null
@@ -253,7 +256,7 @@ const stats = computed<CarteStatistique[]>(() => {
         <div class="flex items-center gap-2">
           <Skeleton v-if="isPending" class="h-3 w-40" />
           <p
-            v-if="data?.revalidationEnCours || syncEnCours"
+            v-if="actualisationAutomatiqueEnCours"
             class="text-xs whitespace-nowrap text-primary"
           >
             Mise à jour automatique en cours…
@@ -274,7 +277,7 @@ const stats = computed<CarteStatistique[]>(() => {
         <BoutonActualiser
           label="Tout synchroniser"
           label-pending="Synchronisation…"
-          :pending="synchro.isPending.value || syncEnCours"
+          :pending="synchro.isPending.value || actualisationAutomatiqueEnCours"
           @click="synchro.mutate()"
         />
       </div>
