@@ -131,6 +131,31 @@ router.beforeEach(async (to, from) => {
     return false
   }
 
+  // La page de connexion est publique uniquement tant qu'aucune session n'est
+  // active. On attend Firebase afin d'éviter d'afficher brièvement le formulaire
+  // pendant la restauration de session. Exception : un lien de connexion doit
+  // pouvoir être finalisé même si une autre session existe déjà dans le navigateur.
+  if (to.name === 'login') {
+    const { waitForAuth, isAuthenticated, isLoginLink } = useAuth()
+    await waitForAuth()
+    if (isAuthenticated.value && !isLoginLink(window.location.href)) {
+      try {
+        const profil = await queryClient.ensureQueryData({
+          queryKey: ['me'],
+          queryFn: () => api.get<MeResponse>('/me'),
+        })
+        return profil.user.role === 'admin'
+          ? { name: 'admin-dashboard' }
+          : { name: 'boutique' }
+      } catch {
+        // Une session Firebase peut avoir été révoquée côté serveur. Dans ce
+        // cas, l'API gère sa déconnexion et la page de connexion reste utile.
+        return true
+      }
+    }
+    return true
+  }
+
   if (to.meta.public) return true
   const { waitForAuth, isAuthenticated } = useAuth()
   await waitForAuth()

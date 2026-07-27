@@ -9,7 +9,6 @@ import {
   Copy,
   Info,
   MailX,
-  UserX,
   Users,
 } from "@lucide/vue";
 import { useRoute, useRouter } from "vue-router";
@@ -621,32 +620,6 @@ function ouvrirFiche(client: ClientResume) {
         </div>
       </CardHeader>
       <CardContent class="grid gap-4">
-        <div
-          v-if="data?.comptesSupprimes.length"
-          class="grid gap-2 rounded-xl border border-amber-300/70 bg-amber-50/70 p-3 text-amber-950"
-        >
-          <div class="flex items-start gap-2">
-            <UserX class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <div class="grid gap-1">
-              <p class="text-sm font-medium">
-                {{ data.comptesSupprimes.length }} compte<template v-if="data.comptesSupprimes.length > 1">s</template>
-                désactivé<template v-if="data.comptesSupprimes.length > 1">s</template> après suppression dans Easybeer
-              </p>
-              <p class="text-xs text-amber-900/80">
-                Les accès et invitations sont révoqués. Les commandes historiques restent conservées.
-              </p>
-            </div>
-          </div>
-          <ul class="grid gap-1 pl-6 text-xs sm:flex sm:flex-wrap sm:gap-x-4">
-            <li v-for="compte in data.comptesSupprimes" :key="compte.uid">
-              <span class="font-medium">{{ compte.email ?? "Adresse inconnue" }}</span>
-              <span v-if="compte.easybeerIdClient" class="text-amber-900/70">
-                · client {{ compte.easybeerIdClient }}
-              </span>
-            </li>
-          </ul>
-        </div>
-
         <div class="flex flex-wrap items-center gap-2">
           <Input
             v-model="recherche"

@@ -1,13 +1,44 @@
 <script setup lang="ts">
+import { onBeforeUnmount, ref } from 'vue'
 import {
   Building2,
+  Check,
+  Copy,
   ExternalLink,
   Mail,
   MapPin,
   MessageCircle,
   Phone,
 } from '@lucide/vue'
+import { toast } from 'vue-sonner'
+import { copierDansPressePapiers } from '@/lib/clipboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+
+type InformationCopiable = 'email' | 'telephone' | 'adresse'
+
+const informationCopiee = ref<InformationCopiable | null>(null)
+let confirmationCopieTimer: number | undefined
+
+async function copierInformation(
+  cle: InformationCopiable,
+  valeur: string,
+  confirmation: string,
+) {
+  if (!(await copierDansPressePapiers(valeur))) {
+    toast.error('Impossible de copier cette information.')
+    return
+  }
+  informationCopiee.value = cle
+  toast.success(confirmation)
+  if (confirmationCopieTimer) window.clearTimeout(confirmationCopieTimer)
+  confirmationCopieTimer = window.setTimeout(() => {
+    informationCopiee.value = null
+  }, 2000)
+}
+
+onBeforeUnmount(() => {
+  if (confirmationCopieTimer) window.clearTimeout(confirmationCopieTimer)
+})
 </script>
 
 <template>
@@ -58,68 +89,126 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
         </CardHeader>
         <CardContent>
           <div class="divide-y">
-            <a
-              href="mailto:contact@goa-kombucha.fr"
-              class="group flex items-start gap-3 py-4 first:pt-0 last:pb-0"
-            >
+            <div class="group flex items-start gap-2 py-4 first:pt-0 last:pb-0">
               <span
                 class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
               >
                 <Mail class="size-4.5" aria-hidden="true" />
               </span>
-              <span class="min-w-0 flex-1">
+              <div class="min-w-0 flex-1">
                 <span class="block text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   E-mail
                 </span>
-                <span class="mt-1 block break-all text-sm font-medium sm:text-base">
-                  contact@goa-kombucha.fr
-                </span>
+                <div class="mt-1 flex min-w-0 items-center gap-1.5">
+                  <a
+                    href="mailto:contact@goa-kombucha.fr"
+                    class="inline-flex min-w-0 items-center gap-1.5 break-all rounded-sm text-sm font-medium outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:text-base"
+                  >
+                    contact@goa-kombucha.fr
+                  </a>
+                  <button
+                    type="button"
+                    class="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :aria-label="informationCopiee === 'email' ? 'Adresse e-mail copiée' : 'Copier l’adresse e-mail'"
+                    :title="informationCopiee === 'email' ? 'Adresse copiée' : 'Copier l’adresse e-mail'"
+                    @click="copierInformation('email', 'contact@goa-kombucha.fr', 'Adresse e-mail copiée.')"
+                  >
+                    <Check v-if="informationCopiee === 'email'" class="size-4 text-primary" aria-hidden="true" />
+                    <Copy v-else class="size-4" aria-hidden="true" />
+                  </button>
+                </div>
                 <span class="mt-1 block text-xs text-muted-foreground">
                   Commandes, gamme, distribution et partenariats
                 </span>
-              </span>
-              <ExternalLink class="mt-2 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            </a>
+              </div>
+              <a
+                href="mailto:contact@goa-kombucha.fr"
+                class="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Écrire à GOA"
+              >
+                <ExternalLink class="size-4" aria-hidden="true" />
+              </a>
+            </div>
 
-            <a
-              href="tel:+33665409335"
-              class="group flex items-start gap-3 py-4 first:pt-0 last:pb-0"
-            >
+            <div class="group flex items-start gap-2 py-4 first:pt-0 last:pb-0">
               <span
                 class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
               >
                 <Phone class="size-4.5" aria-hidden="true" />
               </span>
-              <span class="min-w-0 flex-1">
+              <div class="min-w-0 flex-1">
                 <span class="block text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   Téléphone
                 </span>
-                <span class="mt-1 block text-sm font-medium sm:text-base">06 65 40 93 35</span>
-              </span>
-              <ExternalLink class="mt-2 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            </a>
+                <div class="mt-1 flex items-center gap-1.5">
+                  <a
+                    href="tel:+33665409335"
+                    class="inline-flex items-center gap-1.5 rounded-sm text-sm font-medium outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:text-base"
+                  >
+                    06 65 40 93 35
+                  </a>
+                  <button
+                    type="button"
+                    class="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :aria-label="informationCopiee === 'telephone' ? 'Numéro de téléphone copié' : 'Copier le numéro de téléphone'"
+                    :title="informationCopiee === 'telephone' ? 'Numéro copié' : 'Copier le numéro'"
+                    @click="copierInformation('telephone', '+33 6 65 40 93 35', 'Numéro de téléphone copié.')"
+                  >
+                    <Check v-if="informationCopiee === 'telephone'" class="size-4 text-primary" aria-hidden="true" />
+                    <Copy v-else class="size-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+              <a
+                href="tel:+33665409335"
+                class="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Appeler GOA"
+              >
+                <ExternalLink class="size-4" aria-hidden="true" />
+              </a>
+            </div>
 
-            <a
-              href="https://www.google.com/maps/search/?api=1&query=390+Route+du+Vieux+Four+24590+Saint-Geni%C3%A8s"
-              target="_blank"
-              rel="noreferrer"
-              class="group flex items-start gap-3 py-4 first:pt-0 last:pb-0"
-            >
+            <div class="group flex items-start gap-2 py-4 first:pt-0 last:pb-0">
               <span
                 class="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground"
               >
                 <MapPin class="size-4.5" aria-hidden="true" />
               </span>
-              <span class="min-w-0 flex-1">
+              <div class="min-w-0 flex-1">
                 <span class="block text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
                   La brasserie
                 </span>
-                <span class="mt-1 block text-sm font-medium leading-relaxed sm:text-base">
-                  390 route du Vieux Four<br />24590 Saint-Geniès
-                </span>
-              </span>
-              <ExternalLink class="mt-2 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            </a>
+                <div class="mt-1 flex items-start gap-1.5">
+                  <a
+                    href="https://www.google.com/maps/search/?api=1&query=390+Route+du+Vieux+Four+24590+Saint-Geni%C3%A8s"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="inline-flex items-start gap-1.5 rounded-sm text-sm font-medium leading-relaxed outline-none hover:text-primary hover:underline focus-visible:ring-2 focus-visible:ring-ring sm:text-base"
+                  >
+                    <span>390 route du Vieux Four<br />24590 Saint-Geniès</span>
+                  </a>
+                  <button
+                    type="button"
+                    class="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :aria-label="informationCopiee === 'adresse' ? 'Adresse copiée' : 'Copier l’adresse de la brasserie'"
+                    :title="informationCopiee === 'adresse' ? 'Adresse copiée' : 'Copier l’adresse'"
+                    @click="copierInformation('adresse', '390 route du Vieux Four, 24590 Saint-Geniès', 'Adresse de la brasserie copiée.')"
+                  >
+                    <Check v-if="informationCopiee === 'adresse'" class="size-4 text-primary" aria-hidden="true" />
+                    <Copy v-else class="size-4" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+              <a
+                href="https://www.google.com/maps/search/?api=1&query=390+Route+du+Vieux+Four+24590+Saint-Geni%C3%A8s"
+                target="_blank"
+                rel="noreferrer"
+                class="grid size-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Ouvrir l’adresse dans Google Maps"
+              >
+                <ExternalLink class="size-4" aria-hidden="true" />
+              </a>
+            </div>
           </div>
         </CardContent>
       </Card>
