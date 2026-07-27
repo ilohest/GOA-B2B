@@ -107,6 +107,8 @@ export interface AdminDashboardResponse {
   dernierSync: number | null
   /** Dernière tentative, y compris lorsqu'elle est partielle. */
   dernierRapportSync: SyncReport | null
+  /** Un cache ancien vient de déclencher une synchronisation automatique. */
+  revalidationEnCours?: boolean
 }
 
 export interface CatalogueOverride {

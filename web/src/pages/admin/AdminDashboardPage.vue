@@ -26,6 +26,7 @@ function accord(nombre: number, singulier: string, pluriel: string) {
 const { data, isPending, isError, error } = useQuery({
   queryKey: ['admin', 'dashboard'],
   queryFn: () => api.get<AdminDashboardResponse>('/admin/dashboard'),
+  refetchInterval: (query) => query.state.data?.revalidationEnCours ? 10_000 : false,
 })
 
 const { statutSync, syncEnCours } = useSyncEnCours()
@@ -251,6 +252,12 @@ const stats = computed<CarteStatistique[]>(() => {
       <div class="grid justify-items-start gap-2 sm:justify-items-end">
         <div class="flex items-center gap-2">
           <Skeleton v-if="isPending" class="h-3 w-40" />
+          <p
+            v-if="data?.revalidationEnCours || syncEnCours"
+            class="text-xs whitespace-nowrap text-primary"
+          >
+            Mise à jour automatique en cours…
+          </p>
           <p
             v-else-if="derniereTentativePartielle"
             class="text-xs text-amber-700 sm:whitespace-nowrap"
