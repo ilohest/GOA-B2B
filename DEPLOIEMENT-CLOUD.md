@@ -136,7 +136,100 @@ gcloud scheduler jobs describe goa-cache-maintenance \
   --project "$FIREBASE_PROJECT_ID"
 ```
 
-## 8. Recette avant commandes réelles
+## 8. Sauvegardes et protection des données
+
+À exécuter dès que Firestore et Storage existent, avant d'ouvrir le portail aux
+clients. Le script est idempotent et peut être relancé sans risque.
+
+```bash
+export FIREBASE_PROJECT_ID="goa-b2b-production"
+export FIREBASE_STORAGE_BUCKET="goa-b2b-production.firebasestorage.app"
+npm run setup:sauvegardes
+```
+
+Il active la récupération à un instant précis (PITR, fenêtre de sept jours), crée
+une sauvegarde Firestore quotidienne conservée quatre semaines et une sauvegarde
+hebdomadaire du dimanche conservée douze semaines, puis règle le soft delete du
+bucket Storage sur trente jours.
+
+### Comptes Authentication
+
+Les comptes Firebase Authentication ne sont couverts par aucune de ces
+sauvegardes, ni par le PITR. Ils sont protégés séparément par un job Cloud Run
+hebdomadaire, indépendant de tout poste de travail.
+
+Générer d'abord une paire de clés sur un poste sûr, et conserver la clé privée
+hors ligne en double exemplaire :
+
+```bash
+age-keygen -o cle-privee-goa.txt
+```
+
+Puis déployer la sauvegarde, en ne fournissant que la clé **publique** :
+
+```bash
+export FIREBASE_PROJECT_ID="goa-b2b-production"
+export AGE_RECIPIENT="age1..."
+./scripts/setup-export-auth-cloud.sh
+```
+
+Le script crée un bucket dédié à accès public interdit, un compte de service
+limité à la lecture d'Authentication et au dépôt d'objets, un job Cloud Run et un
+déclencheur hebdomadaire le dimanche à 3 h. Le compte de service ne peut ni
+relire ni supprimer les sauvegardes : compromettre le job ne permet pas
+d'effacer l'historique.
+
+Le JSON en clair ne touche jamais un disque : il est chiffré en flux vers Cloud
+Storage. La sauvegarde inclut les paramètres de hachage des mots de passe, sans
+lesquels une restauration obligerait tous les clients à réinitialiser le leur.
+Le job refuse d'écrire s'il ne parvient pas à les lire.
+
+Exécution immédiate pour vérifier :
+
+```bash
+gcloud run jobs execute goa-export-auth --region europe-west1 \
+  --project goa-b2b-production --wait
+```
+
+Le script local `npm run export:auth` reste disponible pour un export manuel
+ponctuel vers le poste de travail.
+
+### Restaurer des comptes Authentication
+
+À tester au moins une fois, dans un projet Firebase distinct, jamais directement
+en production.
+
+```bash
+gcloud storage cp gs://goa-b2b-production-sauvegardes-auth/auth/FICHIER.json.age .
+age -d -i cle-privee-goa.txt -o sauvegarde.json FICHIER.json.age
+```
+
+Le fichier obtenu contient `hashConfig` et `users`. Extraire les comptes et
+relire les paramètres de hachage :
+
+```bash
+node -e 'const d=require("./sauvegarde.json");require("fs").writeFileSync("users.json",JSON.stringify({users:d.users}));console.log(d.hashConfig)'
+```
+
+Puis importer en reportant les valeurs affichées :
+
+```bash
+firebase auth:import users.json \
+  --hash-algo=SCRYPT \
+  --hash-key="SIGNER_KEY" \
+  --salt-separator="SALT_SEPARATOR" \
+  --rounds=8 \
+  --mem-cost=14 \
+  --project projet-de-test
+```
+
+Supprimer ensuite les fichiers déchiffrés : ils contiennent des données
+personnelles et des empreintes de mots de passe.
+
+La checklist complète, incluant les tests de restauration et la supervision, se
+trouve dans [`TODO-SAUVEGARDES-PRODUCTION.md`](./TODO-SAUVEGARDES-PRODUCTION.md).
+
+## 9. Recette avant commandes réelles
 
 1. Tester connexion Google, lien sans mot de passe, mot de passe oublié et
    activation d'une invitation avec Google puis avec un mot de passe.
@@ -157,7 +250,7 @@ export COMMANDE_EST_DEVIS="false"
 npm run deploy:cloud
 ```
 
-## 9. Migration depuis le projet temporaire
+## 10. Migration depuis le projet temporaire
 
 La migration doit être faite juste avant la recette finale : export Firestore et
 Storage, import dans le projet client, recréation contrôlée des comptes Auth puis

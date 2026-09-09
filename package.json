@@ -8,6 +8,8 @@
     "deploy:vps": "./scripts/deploy-vps.sh",
     "setup:cloud": "./scripts/setup-cloud.sh",
     "deploy:cloud": "./scripts/deploy-cloud.sh",
+    "setup:sauvegardes": "./scripts/setup-sauvegardes.sh",
+    "export:auth": "./scripts/export-auth.sh",
     "seed": "npm --prefix server run seed",
     "typecheck": "npm --prefix server run typecheck && npm --prefix web run typecheck",
     "test": "npm --prefix server run test"
