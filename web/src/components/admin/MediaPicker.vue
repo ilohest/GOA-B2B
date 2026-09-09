@@ -5,11 +5,12 @@
  * choisir ne la duplique pas — plusieurs unités peuvent pointer vers la même.
  */
 import { computed, ref, watch } from 'vue'
-import { ImageOff, Loader2, Trash2, Upload } from '@lucide/vue'
+import { Eye, ImageOff, Loader2, Trash2, Upload, X } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
 import type { MediaItem } from '@/lib/types'
+import { dateHeureFr } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -29,6 +30,14 @@ const input = ref<HTMLInputElement>()
 const survole = ref(false)
 const selection = ref<string | null>(null)
 const recherche = ref('')
+const apercu = ref<MediaItem | null>(null)
+const dimensions = ref<string | null>(null)
+
+function ouvrirApercu(item: MediaItem) {
+  // Les dimensions ne sont pas stockées : on les lit sur l'image chargée.
+  dimensions.value = null
+  apercu.value = item
+}
 
 const media = useQuery({
   queryKey: ['admin', 'media'],
@@ -49,6 +58,7 @@ watch(
     if (!ouvert) return
     selection.value = null
     recherche.value = ''
+    apercu.value = null
     // Déposer sur la vignette doit valoir import, pas seulement ouverture.
     if (props.fichierAImporter) traiter(props.fichierAImporter)
   },
@@ -68,8 +78,9 @@ const envoi = useMutation({
 
 const suppression = useMutation({
   mutationFn: (id: string) => api.delete(`/admin/media/${id}`),
-  onSuccess: () => {
+  onSuccess: (_res, id) => {
     queryClient.invalidateQueries({ queryKey: ['admin', 'media'] })
+    if (apercu.value?.id === id) apercu.value = null
     toast.success('Image supprimée.')
   },
   onError: (e) => toast.error((e as Error).message),
@@ -120,7 +131,10 @@ function poids(octets: number) {
     @click.self="fermer"
     @keydown.esc="fermer"
   >
-    <div class="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border bg-background shadow-lg">
+    <div
+      class="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-xl border bg-background shadow-lg transition-[max-width]"
+      :class="apercu ? 'max-w-5xl' : 'max-w-3xl'"
+    >
       <div class="flex items-start justify-between gap-4 border-b px-5 py-4">
         <div class="min-w-0">
           <h2 class="text-base font-semibold">Choisir une image</h2>
@@ -172,7 +186,8 @@ function poids(octets: number) {
           Aucune image ne correspond à « {{ recherche }} ».
         </p>
 
-        <ul v-else class="grid grid-cols-3 gap-3 sm:grid-cols-4">
+        <div v-else class="grid gap-4" :class="apercu ? 'sm:grid-cols-[minmax(0,1fr)_18rem]' : ''">
+        <ul class="grid grid-cols-3 gap-3" :class="apercu ? 'sm:grid-cols-3' : 'sm:grid-cols-4'">
           <li v-for="item in liste" :key="item.id" class="relative">
             <button
               type="button"
@@ -201,8 +216,50 @@ function poids(octets: number) {
             >
               <Trash2 class="size-3.5" />
             </button>
+            <button
+              type="button"
+              class="oeil absolute right-2.5 bottom-11 grid size-6 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm transition"
+              :class="apercu?.id === item.id ? 'ring-2 ring-primary/40' : ''"
+              :aria-label="`Aperçu de ${item.nom}`"
+              @click.stop="ouvrirApercu(item)"
+            >
+              <Eye class="size-3.5" />
+            </button>
           </li>
         </ul>
+
+        <aside v-if="apercu" class="grid content-start gap-3 rounded-lg border bg-muted/20 p-3">
+          <div class="flex items-start justify-between gap-2">
+            <p class="text-sm font-medium">Aperçu</p>
+            <button
+              type="button"
+              class="grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Fermer l'aperçu"
+              @click="apercu = null"
+            >
+              <X class="size-4" />
+            </button>
+          </div>
+          <img
+            :src="apercu.url"
+            :alt="apercu.nom"
+            class="max-h-72 w-full rounded-md border bg-background object-contain"
+            @load="(e) => {
+              const img = e.target as HTMLImageElement
+              dimensions = `${img.naturalWidth} × ${img.naturalHeight}`
+            }"
+          />
+          <div class="grid gap-0.5">
+            <p class="text-sm font-medium break-words">{{ apercu.nom }}</p>
+            <p class="text-xs text-muted-foreground">
+              {{ dateHeureFr(apercu.creeLe) }} · {{ apercu.contentType.replace('image/', '').toUpperCase() }}
+              <template v-if="dimensions"> · {{ dimensions }}</template>
+            </p>
+            <p class="text-xs text-muted-foreground">{{ poids(apercu.taille) }}</p>
+          </div>
+          <Button size="sm" @click="((selection = apercu.url), valider())">Utiliser cette image</Button>
+        </aside>
+        </div>
 
         <p v-if="media.isError.value" class="flex items-center gap-2 text-sm text-destructive">
           <ImageOff class="size-4" />
@@ -226,3 +283,20 @@ function poids(octets: number) {
     </div>
   </Teleport>
 </template>
+
+<style scoped>
+/*
+ * L'œil suit le survol, comme attendu d'un aperçu secondaire. Mais le survol
+ * n'existe pas au doigt : là, il reste visible, sans quoi la fonction serait
+ * inaccessible sur tablette.
+ */
+@media (hover: hover) {
+  .oeil {
+    opacity: 0;
+  }
+  li:hover .oeil,
+  .oeil:focus-visible {
+    opacity: 1;
+  }
+}
+</style>
