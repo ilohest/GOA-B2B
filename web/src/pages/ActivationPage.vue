@@ -5,6 +5,7 @@ import { z } from "zod";
 import { toast } from "vue-sonner";
 import { EyeIcon, EyeOffIcon } from "@lucide/vue";
 import { api } from "@/lib/api";
+import { queryClient } from "@/lib/queryClient";
 import type { InvitationValidation } from "@/lib/types";
 import { useAuth } from "@/composables/useAuth";
 import BrandLogo from "@/components/BrandLogo.vue";
@@ -102,6 +103,9 @@ async function onSubmit() {
     );
     // Connexion directe dans la foulée : zéro étape superflue pour le client.
     await login(res.email || parsed.data.email, parsed.data.password);
+    // L'activation attribue un rôle : le profil éventuellement déjà lu n'est
+    // plus valable, et la garde du routeur s'en sert pour choisir la page.
+    await queryClient.invalidateQueries({ queryKey: ["me"] });
     toast.success("Votre compte est prêt !");
     router.push("/");
   } catch (e) {
@@ -120,6 +124,9 @@ async function onGoogle() {
   try {
     await loginWithGoogle();
     await api.post(`/invitations/${token}/consume-provider`);
+    // L'activation attribue un rôle : le profil éventuellement déjà lu n'est
+    // plus valable, et la garde du routeur s'en sert pour choisir la page.
+    await queryClient.invalidateQueries({ queryKey: ["me"] });
     toast.success("Votre compte est prêt !");
     router.push("/");
   } catch (e) {

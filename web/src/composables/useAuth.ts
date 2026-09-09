@@ -16,10 +16,13 @@ import {
   type User,
 } from 'firebase/auth'
 import { firebaseAuth, firebaseConfigured } from '@/firebase'
+import { queryClient } from '@/lib/queryClient'
 
 const currentUser = ref<User | null>(null)
 const ready = ref(false)
 let readyPromise: Promise<void> | null = null
+/** `undefined` tant qu'aucun état d'authentification n'a encore été observé. */
+let uidPrecedent: string | null | undefined
 
 function ensureListener(): Promise<void> {
   if (readyPromise) return readyPromise
@@ -30,6 +33,13 @@ function ensureListener(): Promise<void> {
       return
     }
     onAuthStateChanged(firebaseAuth, (user) => {
+      // Le cache de requêtes vit dans l'onglet, pas dans la session : sans
+      // purge, les données du compte précédent lui survivent. Un client qui
+      // activait son invitation depuis un onglet où un administrateur s'était
+      // connecté héritait de son profil et se retrouvait envoyé vers /admin.
+      const uid = user?.uid ?? null
+      if (uidPrecedent !== undefined && uidPrecedent !== uid) queryClient.clear()
+      uidPrecedent = uid
       currentUser.value = user
       if (!ready.value) {
         ready.value = true
