@@ -534,20 +534,44 @@ function resumerClient(c: ModeleClient): ClientResume {
   }
 }
 
+/**
+ * Nombre de pages au-delà duquel on considère qu'Easybeer boucle ou que le
+ * volume dépasse ce que ce cache peut porter. Le plafond existe pour éviter une
+ * boucle infinie, jamais pour tronquer : l'atteindre est une erreur.
+ */
+const PAGES_MAX_CLIENTS = 100
+
 /** Tous les clients Easybeer (~250 → 2 appels), en un doc de cache. */
 export async function syncListeClients(db: Firestore): Promise<ClientResume[]> {
   const parPage = 200
   let clients: ClientResume[] = []
-  for (let page = 1; page <= 10; page++) {
+  let complet = false
+  for (let page = 1; page <= PAGES_MAX_CLIENTS; page++) {
     const res = await avecRetry(
       `clients page ${page}`,
       () => listeClients({}, { numeroPage: page, nombreParPage: parPage }),
       (r) => Array.isArray(r?.liste),
     )
     clients = [...clients, ...res.liste.map(resumerClient)]
-    if (res.liste.length < parPage) break
+    if (res.liste.length < parPage) {
+      complet = true
+      break
+    }
   }
-  await db.doc('cache/clientsListe').set({ clients, syncedAt: Date.now() })
+
+  // Une liste tronquée écraserait le cache avec un sous-ensemble : les clients
+  // manquants seraient refusés à la connexion, puis désactivés comme supprimés
+  // d'Easybeer. Mieux vaut échouer bruyamment et conserver le cache précédent.
+  if (!complet) {
+    throw new Error(
+      `Liste clients incomplète : ${PAGES_MAX_CLIENTS} pages de ${parPage} atteintes sans fin de liste. ` +
+        'Cache conservé en l’état ; augmenter PAGES_MAX_CLIENTS après vérification.',
+    )
+  }
+
+  // `complet` distingue une liste digne de confiance d'un cache absent ou
+  // partiel — l'authentification s'appuie dessus pour ne pas bloquer à tort.
+  await db.doc('cache/clientsListe').set({ clients, syncedAt: Date.now(), complet: true })
   return clients
 }
 
@@ -1056,24 +1080,54 @@ async function idsClientsAvecCompte(db: Firestore): Promise<number[]> {
 
 const CONFIRMATIONS_SUPPRESSION_CLIENT = 2
 
-export function idsComptesAbsentsEasybeer(
-  comptes: Array<{ easybeerIdClient?: unknown; role?: unknown; syncEasybeer?: unknown }>,
+export interface CompteRapproche {
+  uid: string
+  role?: unknown
+  easybeerIdClient?: unknown
+  status?: unknown
+  easybeerMissingSince?: unknown
+  easybeerMissingSyncCount?: unknown
+}
+
+export type DecisionCompte =
+  | { action: 'reinitialiser'; uid: string }
+  | { action: 'confirmer'; uid: string; depuis: number; confirmations: number }
+  | { action: 'desactiver'; uid: string; idClient: number; depuis: number; confirmations: number }
+
+/**
+ * Décide, pour chaque compte, ce que sa présence ou son absence de la liste
+ * Easybeer implique. Fonction pure : c'est ici que se joue la désactivation
+ * d'un client, elle doit être vérifiable sans Firestore.
+ */
+export function decisionsComptesSupprimes(
+  comptes: CompteRapproche[],
   clientsEasybeer: Array<{ idClient?: number | null }>,
-): number[] {
+  maintenant = Date.now(),
+): DecisionCompte[] {
   const presents = new Set(
     clientsEasybeer
       .map((client) => client.idClient)
       .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
   )
-  return [...new Set(
-    comptes
-      .flatMap((compte) =>
-        compte.role !== 'admin' && doitSynchroniserClientEasybeer(compte)
-          ? [compte.easybeerIdClient]
-          : [],
-      )
-      .filter((id) => !presents.has(id)),
-  )]
+
+  return comptes.flatMap<DecisionCompte>((compte) => {
+    if (compte.role === 'admin' || typeof compte.easybeerIdClient !== 'number') return []
+    const idClient = compte.easybeerIdClient
+
+    if (presents.has(idClient)) {
+      // Réapparu (ou jamais parti) : on efface toute trace d'absence en cours.
+      return compte.easybeerMissingSince || compte.easybeerMissingSyncCount
+        ? [{ action: 'reinitialiser', uid: compte.uid }]
+        : []
+    }
+    if (compte.status === 'source_deleted') return []
+
+    const confirmations = Number(compte.easybeerMissingSyncCount ?? 0) + 1
+    const depuis = typeof compte.easybeerMissingSince === 'number' ? compte.easybeerMissingSince : maintenant
+    return confirmations < CONFIRMATIONS_SUPPRESSION_CLIENT
+      ? [{ action: 'confirmer', uid: compte.uid, depuis, confirmations }]
+      : [{ action: 'desactiver', uid: compte.uid, idClient, depuis, confirmations }]
+  })
 }
 
 /**
@@ -1083,56 +1137,49 @@ export function idsComptesAbsentsEasybeer(
  * prix devenus inutiles sont neutralisés.
  */
 export async function rapprocherComptesSupprimesEasybeer(db: Firestore, clientsEasybeer: ClientResume[]) {
-  const utilisateurs = await db.collection('users').where('easybeerIdClient', '!=', null).get()
-  const idsPresents = new Set(clientsEasybeer.map((client) => client.idClient).filter((id): id is number => id != null))
-  const maintenant = Date.now()
-  const aDesactiver: Array<{ uid: string; idClient: number }> = []
-  const batch = db.batch()
-  let ecritures = 0
-
-  for (const doc of utilisateurs.docs) {
-    const data = doc.data()
-    if (data.role === 'admin' || typeof data.easybeerIdClient !== 'number') continue
-    const idClient = data.easybeerIdClient as number
-    if (idsPresents.has(idClient)) {
-      if (data.easybeerMissingSince || data.easybeerMissingSyncCount) {
-        batch.set(doc.ref, { easybeerMissingSince: null, easybeerMissingSyncCount: 0 }, { merge: true })
-        ecritures++
-      }
-      continue
-    }
-    if (data.status === 'source_deleted') continue
-
-    const confirmations = Number(data.easybeerMissingSyncCount ?? 0) + 1
-    if (confirmations < CONFIRMATIONS_SUPPRESSION_CLIENT) {
-      batch.set(
-        doc.ref,
-        {
-          easybeerMissingSince: data.easybeerMissingSince ?? maintenant,
-          easybeerMissingSyncCount: confirmations,
-        },
-        { merge: true },
-      )
-      ecritures++
-      continue
-    }
-
-    batch.set(
-      doc.ref,
-      {
-        status: 'source_deleted',
-        sourceDeletedAt: maintenant,
-        easybeerMissingSince: data.easybeerMissingSince ?? maintenant,
-        easybeerMissingSyncCount: confirmations,
-        syncEasybeer: false,
-      },
-      { merge: true },
-    )
-    ecritures++
-    aDesactiver.push({ uid: doc.id, idClient })
+  // Une liste vide désactiverait tous les comptes. Zéro client chez une
+  // brasserie en activité signale une anomalie de lecture, pas une réalité :
+  // on ne réconcilie rien plutôt que de tout révoquer.
+  if (!clientsEasybeer.length) {
+    console.warn('[sync] liste clients vide : réconciliation des comptes supprimés ignorée.')
+    return 0
   }
 
-  if (ecritures) await batch.commit()
+  const utilisateurs = await db.collection('users').where('easybeerIdClient', '!=', null).get()
+  const maintenant = Date.now()
+  const decisions = decisionsComptesSupprimes(
+    utilisateurs.docs.map((doc) => ({ uid: doc.id, ...(doc.data() as Omit<CompteRapproche, 'uid'>) })),
+    clientsEasybeer,
+    maintenant,
+  )
+  if (!decisions.length) return 0
+
+  const refs = new Map(utilisateurs.docs.map((doc) => [doc.id, doc.ref]))
+  const ecritures = decisions.map((decision) => {
+    const ref = refs.get(decision.uid)!
+    if (decision.action === 'reinitialiser') {
+      return { ref, donnees: { easybeerMissingSince: null, easybeerMissingSyncCount: 0 } }
+    }
+    const commun = {
+      easybeerMissingSince: decision.depuis,
+      easybeerMissingSyncCount: decision.confirmations,
+    }
+    return decision.action === 'confirmer'
+      ? { ref, donnees: commun }
+      : { ref, donnees: { ...commun, status: 'source_deleted', sourceDeletedAt: maintenant, syncEasybeer: false } }
+  })
+
+  // Un lot Firestore accepte 500 écritures : au-delà, tout échouerait d'un bloc.
+  const TAILLE_LOT = 400
+  for (let debut = 0; debut < ecritures.length; debut += TAILLE_LOT) {
+    const batch = db.batch()
+    for (const { ref, donnees } of ecritures.slice(debut, debut + TAILLE_LOT)) {
+      batch.set(ref, donnees, { merge: true })
+    }
+    await batch.commit()
+  }
+
+  const aDesactiver = decisions.filter((d) => d.action === 'desactiver')
   const adminAuth = getAdminAuth()
   for (const compte of aDesactiver) {
     if (adminAuth) {

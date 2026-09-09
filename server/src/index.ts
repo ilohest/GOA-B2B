@@ -5,6 +5,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { config, validerConfigurationProduction } from './config.js'
 import {
   comptePlateformeAutorise,
+  clientsListeFiable,
   comptePlateformePresentDansEasybeer,
   requireAuth,
   requireAdmin,
@@ -972,6 +973,10 @@ app.post('/api/commandes/sync', requireAuth, async (c) => {
   return c.json({ ...resultat, indisponible: resultat.indisponible ?? false })
 })
 
+/** Bornes de l'archive de factures, assemblée en mémoire (Cloud Run, 512 Mio). */
+const NB_MAX_FACTURES_ARCHIVE = 80
+const TAILLE_MAX_ARCHIVE = 80 * 1024 * 1024
+
 function anneeFacturesValide(valeur: string | undefined) {
   const annee = Number(valeur)
   const anneeMax = new Date().getFullYear() + 1
@@ -1033,26 +1038,15 @@ app.get('/api/commandes/factures/disponibilite', requireAuth, async (c) => {
   const annee = anneeFacturesValide(c.req.query('annee'))
   if (annee == null) return c.json({ error: 'Année invalide' }, 400)
 
-  const commandes = commandesDeLAnnee(await listeCommandesClient(user.easybeerIdClient), annee)
-  for (const resume of commandes) {
-    if (resume.idCommande == null) continue
-    const commande = await detailCommande(resume.idCommande)
-    const proprietaire = (commande.client as { idClient?: number } | undefined)?.idClient
-    if (
-      proprietaire === user.easybeerIdClient &&
-      documentsFacturesDeLAnnee(commande, annee).length > 0
-    ) {
-      return c.json({ disponible: true })
-    }
-  }
-  return c.json({ disponible: false })
+  // La liste des commandes porte déjà de quoi savoir si une facture existe :
+  // interroger le détail de chaque commande ferait un appel Easybeer par
+  // commande à chaque affichage, et c'est ainsi qu'on se fait bannir.
+  // Même source que /factures/annees, donc les deux écrans restent cohérents.
+  const commandes = await listeCommandesClient(user.easybeerIdClient)
+  const disponible = commandes.some((commande) => anneeFactureCommande(commande) === annee)
+  return c.json({ disponible })
 })
 
-/**
- * Regroupe les factures d'une année dans une archive unique. Les PDF restent
- * lus depuis Easybeer au moment du clic : le client obtient ainsi les documents
- * de référence, sans copie persistante à synchroniser dans Firebase Storage.
- */
 app.get('/api/commandes/factures/archive', requireAuth, async (c) => {
   const user = c.get('user')
   if (user.easybeerIdClient == null) return c.json({ error: 'Compte non lié à un client Easybeer' }, 400)
@@ -1064,6 +1058,7 @@ app.get('/api/commandes/factures/archive', requireAuth, async (c) => {
 
   const fichiers: { nom: string; contenu: ArrayBuffer; date?: Date }[] = []
   const nomsUtilises = new Map<string, number>()
+  let octetsCumules = 0
 
   for (const resume of commandesAnnee) {
     if (resume.idCommande == null) continue
@@ -1076,6 +1071,22 @@ app.get('/api/commandes/factures/archive', requireAuth, async (c) => {
       const dateDocument = document.dateCreation == null ? undefined : new Date(document.dateCreation)
 
       const { corps } = await telechargerDocument(document.idCommandeDocument!)
+
+      // L'archive est assemblée en mémoire sur une instance de 512 Mio partagée
+      // par plusieurs requêtes : sans plafond, un gros historique ferait tomber
+      // le conteneur, donc aussi les commandes des autres clients.
+      octetsCumules += corps.byteLength
+      if (fichiers.length >= NB_MAX_FACTURES_ARCHIVE || octetsCumules > TAILLE_MAX_ARCHIVE) {
+        return c.json(
+          {
+            error:
+              `Votre historique ${annee} dépasse ce qu'une archive peut contenir. ` +
+              'Téléchargez les factures une à une depuis la liste de vos commandes, ou écrivez-nous.',
+          },
+          413,
+        )
+      }
+
       const nomInitial = nomFactureArchive(document, resume.numero ?? null, index)
       const occurrences = nomsUtilises.get(nomInitial) ?? 0
       nomsUtilises.set(nomInitial, occurrences + 1)
@@ -1760,10 +1771,10 @@ async function traiterEmailAuth(
   const profil = (await db.collection('users').doc(user.uid).get()).data()
   if (!comptePlateformeAutorise(profil)) return
   if (profil?.role !== 'admin') {
-    const clients = (await db.doc('cache/clientsListe').get()).data()?.clients as
-      | Array<{ idClient?: number | null }>
-      | undefined
-    if (!comptePlateformePresentDansEasybeer(profil, clients)) return
+    // Même prudence qu'à la connexion : un cache non fiable ne doit pas priver
+    // un client de son lien de connexion.
+    const clients = await clientsListeFiable(db)
+    if (clients && !comptePlateformePresentDansEasybeer(profil, clients)) return
   }
 
   if (type === 'connexion') {
@@ -2102,6 +2113,7 @@ const TYPES_IMAGE = new Map([
   ['image/webp', 'webp'],
 ])
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024 // 5 Mo
+
 
 /**
  * Le type déclaré par le navigateur n'engage à rien : il se change à volonté et

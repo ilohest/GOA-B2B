@@ -6,6 +6,7 @@
  * - Dev (AUTH_DISABLED=true) : injecte un utilisateur de test lié à
  *   DEV_EASYBEER_ID_CLIENT, sans Firebase. NE JAMAIS activer en prod.
  */
+import type { Firestore } from 'firebase-admin/firestore'
 import type { Context, Next } from 'hono'
 import { config } from './config.js'
 import { verifyIdToken } from './firebase.js'
@@ -37,6 +38,24 @@ export function comptePlateformeAutorise(profil: ProfilPlateforme | null | undef
   )
 }
 
+/**
+ * Liste clients seulement lorsqu'elle est digne de confiance. Un cache absent,
+ * vide ou tronqué ne prouve pas qu'un client a disparu d'Easybeer : s'en servir
+ * pour refuser une connexion bloquerait tous les clients à la moindre
+ * défaillance de synchronisation ou après une restauration de la base. La
+ * révocation durable d'un client supprimé reste assurée par le statut
+ * `source_deleted`, posé par la réconciliation.
+ */
+export async function clientsListeFiable(
+  db: Firestore,
+): Promise<Array<{ idClient?: number | null }> | null> {
+  const snap = await db.doc('cache/clientsListe').get()
+  const data = snap.data()
+  const clients = data?.clients
+  if (data?.complet !== true || !Array.isArray(clients) || clients.length === 0) return null
+  return clients as Array<{ idClient?: number | null }>
+}
+
 export function comptePlateformePresentDansEasybeer(
   profil: ProfilPlateforme | null | undefined,
   clients: Array<{ idClient?: number | null }> | null | undefined,
@@ -61,9 +80,8 @@ async function resolveUser(uid: string, email?: string): Promise<AuthUser | null
   const profil = data as ProfilPlateforme
   if (!comptePlateformeAutorise(profil)) return null
   if (profil.role !== 'admin') {
-    const clientsSnap = await db.doc('cache/clientsListe').get()
-    const clients = clientsSnap.data()?.clients as Array<{ idClient?: number | null }> | undefined
-    if (!comptePlateformePresentDansEasybeer(profil, clients)) return null
+    const clients = await clientsListeFiable(db)
+    if (clients && !comptePlateformePresentDansEasybeer(profil, clients)) return null
   }
   return {
     uid,

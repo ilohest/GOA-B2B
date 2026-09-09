@@ -5,7 +5,7 @@ import {
   cacheClientDoitEtreRafraichi,
   cacheEstAncien,
   doitSynchroniserClientEasybeer,
-  idsComptesAbsentsEasybeer,
+  decisionsComptesSupprimes,
   normaliserTarifsPersonnalises,
   prixEstFrais,
   type CacheClientDoc,
@@ -25,18 +25,88 @@ describe('sélection des comptes pour la synchro Easybeer', () => {
     expect(doitSynchroniserClientEasybeer({ easybeerIdClient: '588074' })).toBe(false)
   })
 
-  it('repère uniquement les comptes clients disparus de la liste Easybeer', () => {
+})
+
+describe('comptes disparus de la liste Easybeer', () => {
+  const presents = [{ idClient: 588074 }]
+
+  it('laisse tranquille un compte encore présent, et n’épargne jamais un admin', () => {
     expect(
-      idsComptesAbsentsEasybeer(
+      decisionsComptesSupprimes(
         [
-          { role: 'client', easybeerIdClient: 588074 },
-          { role: 'client', easybeerIdClient: 827557 },
-          { role: 'admin', easybeerIdClient: 999999 },
-          { role: 'client', easybeerIdClient: 111111, syncEasybeer: false },
+          { uid: 'a', role: 'client', easybeerIdClient: 588074 },
+          { uid: 'b', role: 'admin', easybeerIdClient: 999999 },
+          { uid: 'c', role: 'admin' },
         ],
-        [{ idClient: 588074 }],
+        presents,
       ),
-    ).toEqual([827557])
+    ).toEqual([])
+  })
+
+  it('demande une seconde confirmation avant de désactiver', () => {
+    const decisions = decisionsComptesSupprimes(
+      [{ uid: 'c', role: 'client', easybeerIdClient: 827557 }],
+      presents,
+      1000,
+    )
+    expect(decisions).toEqual([{ action: 'confirmer', uid: 'c', depuis: 1000, confirmations: 1 }])
+  })
+
+  it('désactive seulement à la deuxième absence consécutive', () => {
+    const decisions = decisionsComptesSupprimes(
+      [
+        {
+          uid: 'c',
+          role: 'client',
+          easybeerIdClient: 827557,
+          easybeerMissingSince: 500,
+          easybeerMissingSyncCount: 1,
+        },
+      ],
+      presents,
+      2000,
+    )
+    expect(decisions).toEqual([
+      { action: 'desactiver', uid: 'c', idClient: 827557, depuis: 500, confirmations: 2 },
+    ])
+  })
+
+  it('efface le compteur dès que le client réapparaît', () => {
+    expect(
+      decisionsComptesSupprimes(
+        [
+          {
+            uid: 'a',
+            role: 'client',
+            easybeerIdClient: 588074,
+            easybeerMissingSince: 500,
+            easybeerMissingSyncCount: 1,
+          },
+        ],
+        presents,
+      ),
+    ).toEqual([{ action: 'reinitialiser', uid: 'a' }])
+  })
+
+  it('ne réagit plus à un compte déjà marqué supprimé', () => {
+    expect(
+      decisionsComptesSupprimes(
+        [{ uid: 'c', role: 'client', easybeerIdClient: 827557, status: 'source_deleted' }],
+        presents,
+      ),
+    ).toEqual([])
+  })
+
+  it('ignore un identifiant client absent ou non numérique', () => {
+    expect(
+      decisionsComptesSupprimes(
+        [
+          { uid: 'd', role: 'client' },
+          { uid: 'e', role: 'client', easybeerIdClient: '827557' },
+        ],
+        presents,
+      ),
+    ).toEqual([])
   })
 })
 
