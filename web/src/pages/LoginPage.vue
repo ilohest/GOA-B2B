@@ -59,6 +59,15 @@ const redirectTo = computed(() => {
     : "/";
 });
 
+/**
+ * Le crayon près de l'adresse ramène déjà à l'étape précédente, mais une icône
+ * d'édition ne se lit pas comme un retour : sans repère, la connexion Google
+ * paraît hors d'atteinte une fois l'e-mail validé.
+ */
+const afficherRetourMethodes = computed(
+  () => !lienEnvoyeA.value && !lienEmailEnAttente.value && emailValide.value,
+);
+
 const descriptionConnexion = computed(() => {
   if (lienEnvoyeA.value) return "Connexion sans mot de passe";
   if (lienEmailEnAttente.value) return "Confirmez votre adresse e-mail";
@@ -287,6 +296,22 @@ async function onSubmit() {
     >
       <section class="auth-form-panel relative flex min-h-[38rem] items-center justify-center bg-[#fcfaf5] px-4 py-8 sm:px-6 lg:min-h-[46rem] lg:px-10 lg:py-10">
         <div class="auth-form-card w-full max-w-md">
+      <!--
+        Hauteur réservée en permanence : sans elle, le passage d'une étape à
+        l'autre décalerait tout le formulaire de la hauteur du bouton.
+      -->
+      <div class="flex h-9 items-center">
+        <button
+          v-if="afficherRetourMethodes"
+          type="button"
+          class="grid size-9 place-items-center rounded-full text-emerald-800 transition-colors hover:bg-emerald-950/5 hover:text-emerald-950"
+          aria-label="Revenir au choix de la méthode de connexion"
+          title="Revenir au choix de la méthode de connexion"
+          @click="modifierEmail"
+        >
+          <ArrowLeft class="size-4" aria-hidden="true" />
+        </button>
+      </div>
       <CardHeader class="text-center">
         <div class="auth-logo mx-auto mb-2 w-fit">
           <BrandLogo variante="complet" />
@@ -434,19 +459,6 @@ async function onSubmit() {
 
             <!-- Étape 2 : choix de la méthode pour l'adresse validée. -->
             <div v-else key="methodes" class="grid gap-4">
-            <!--
-              Le crayon ci-dessous ramène déjà à l'étape 1, mais une icône
-              d'édition ne se lit pas comme un retour : sans ce lien explicite,
-              la connexion Google paraît hors d'atteinte une fois l'e-mail validé.
-            -->
-            <button
-              type="button"
-              class="-mt-1 -ml-1 flex items-center gap-1.5 justify-self-start rounded-md px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
-              @click="modifierEmail"
-            >
-              <ArrowLeft class="size-3.5" aria-hidden="true" />
-              Choisir une autre méthode de connexion
-            </button>
             <div
               class="flex items-center justify-between gap-3 rounded-xl border border-emerald-950/10 bg-white/55 px-3 py-2.5 shadow-inner shadow-black/[0.02]"
             >
