@@ -1,5 +1,5 @@
-<!-- guide-version: 1.46 -->
-<!-- guide-updated-at: 2026-07-22 -->
+<!-- guide-version: 1.47 -->
+<!-- guide-updated-at: 2026-09-09 -->
 
 # Guide administrateur — plateforme de commande GOA
 
@@ -274,7 +274,69 @@ boutique dépend bien du tag `laposte`. Rien à choisir par commande.
   avec la mention **« Hors catalogue »**. Il peut conserver la quantité déjà
   commandée, la réduire ou retirer le produit, mais il ne peut pas en ajouter.
 
-## 10. Questions fréquentes
+## 10. Sauvegardes et sécurité des données
+
+### Ce qui est sauvegardé, et à quel rythme
+
+La plateforme conserve automatiquement des copies de sécurité. Vous n'avez rien
+à lancer ni à surveiller.
+
+| Ce qui est protégé | Fréquence | Durée de conservation |
+| --- | --- | --- |
+| Comptes clients, commandes passées sur la plateforme, invitations, réglages du catalogue | Tous les jours | 4 semaines |
+| Les mêmes données, copie hebdomadaire | Tous les dimanches | 12 semaines |
+| Photos des produits | Conservées 30 jours après suppression | 30 jours |
+| Identifiants de connexion des clients | Tous les dimanches | 1 an |
+
+S'ajoute une protection particulière : pendant **7 jours**, il est possible de
+revenir à l'état exact de la plateforme à n'importe quel moment passé, à la
+minute près. C'est ce qui permet de rattraper une fausse manœuvre repérée le
+lendemain.
+
+La base de données est par ailleurs protégée contre une suppression accidentelle.
+
+### Ce que les sauvegardes ne couvrent pas
+
+**Les sauvegardes de la plateforme ne sauvegardent pas Easybeer.** Vos produits,
+vos clients, vos tarifs et vos remises vivent dans Easybeer, et c'est Easybeer
+qui en est responsable. Si une information y est supprimée par erreur, c'est du
+côté d'Easybeer qu'il faut chercher, pas ici.
+
+C'est aussi une bonne nouvelle : l'essentiel de vos données métier existe en
+double, puisque la plateforme ne fait que lire Easybeer.
+
+### Dans quels cas s'en servir
+
+Les sauvegardes servent à réparer une perte, pas à consulter l'historique. Elles
+sont utiles si :
+
+- des comptes clients ont été supprimés ou désactivés par erreur ;
+- des commandes passées sur la plateforme ont disparu ;
+- une modification en série du catalogue a fait plus de dégâts que prévu ;
+- une photo de produit a été supprimée par erreur, il y a moins de 30 jours.
+
+Elles ne servent pas à retrouver une commande annulée volontairement, ni à
+consulter d'anciens tarifs : ces informations restent dans Easybeer.
+
+### Comment faire
+
+**Ne tentez pas de restaurer vous-même.** Une restauration remplace des données
+en place et peut faire perdre ce qui a été fait depuis. La marche à suivre :
+
+1. **Arrêtez d'utiliser la partie concernée** de la plateforme, pour ne pas
+   ajouter de modifications par-dessus le problème.
+2. **Contactez le support** (section suivante) en indiquant ce qui a disparu,
+   et **à quel moment** vous l'avez constaté — même approximatif, c'est
+   l'information la plus utile.
+3. **Ne refaites pas la saisie perdue** avant d'avoir eu une réponse : elle
+   pourrait être écrasée par la restauration.
+
+**Le délai compte.** La restauration à la minute près n'est possible que pendant
+7 jours. Au-delà, on retombe sur la sauvegarde de la nuit ou du dimanche, et tout
+ce qui a été fait entre-temps est perdu. Signalez donc un problème dès que vous
+le remarquez, même si vous n'êtes pas sûr qu'il soit grave.
+
+## 11. Questions fréquentes
 
 **J'ai changé un prix dans Easybeer, le client voit encore l'ancien.**
 → Les prix sont revérifiés à l'ouverture de la boutique lorsqu'ils ont plus de
@@ -324,7 +386,7 @@ affichées.
 → Vérifiez ses spams, et que son email est correct dans Easybeer. Sinon, copiez
 le **lien** et envoyez-le lui manuellement.
 
-## 11. Support
+## 12. Support
 
 Pour toute question, contactez le support :
 

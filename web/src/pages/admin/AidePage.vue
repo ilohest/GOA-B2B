@@ -3,7 +3,7 @@
  * Page Aide de l'admin. Rend directement GUIDE-ADMIN.md (importé brut) : une
  * seule source de vérité, donc jamais désynchronisé du guide versionné.
  */
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ChevronDown, CircleHelp } from '@lucide/vue'
 import { marked } from 'marked'
 import guide from '../../../../GUIDE-ADMIN.md?raw'
@@ -38,12 +38,85 @@ const sectionsGuide = computed(() => {
   return { avantFaq, faqTitre: match[0].replace(/^##\s+/, ''), faqMarkdown, apresFaq }
 })
 
+/** Identifiant d'ancre stable, dérivé du titre affiché. */
+function identifiantSection(titre: string): string {
+  return (
+    'section-' +
+    titre
+      .replace(/<[^>]+>/g, '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  )
+}
+
+/** Les titres rendus par marked n'ont pas d'ancre : on les pose ici. */
+function avecAncres(html: string): string {
+  return html.replace(
+    /<h2>([\s\S]*?)<\/h2>/g,
+    (_, contenu: string) => `<h2 id="${identifiantSection(contenu)}">${contenu}</h2>`,
+  )
+}
+
+const sections = computed(() =>
+  [...guideNettoye.value.matchAll(/^##\s+(\d+)\.\s+(.+?)\s*$/gm)].map(([, numero, titre]) => ({
+    numero,
+    titre,
+    id: identifiantSection(`${numero}. ${titre}`),
+  })),
+)
+
+const sectionActive = ref<string | null>(null)
+
+/**
+ * Le sommaire suit la lecture : sans repère, un guide de douze sections ne
+ * dit plus où l'on se trouve. On retient le dernier titre passé sous la
+ * barre supérieure plutôt que le premier visible, qui sauterait en arrière
+ * dès qu'une section longue occupe tout l'écran.
+ */
+function actualiserSectionActive() {
+  const titres = Array.from(document.querySelectorAll<HTMLElement>('.guide h2[id]'))
+  if (!titres.length) return
+  const seuil = 96
+  let courant = titres[0]
+  for (const titre of titres) {
+    if (titre.getBoundingClientRect().top <= seuil) courant = titre
+  }
+  // En bas de page, la dernière section peut ne jamais franchir le seuil.
+  if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 4) {
+    courant = titres[titres.length - 1]
+  }
+  sectionActive.value = courant.id
+}
+
+let planifie = 0
+function surDefilement() {
+  if (planifie) return
+  planifie = requestAnimationFrame(() => {
+    planifie = 0
+    actualiserSectionActive()
+  })
+}
+
+onMounted(() => {
+  actualiserSectionActive()
+  window.addEventListener('scroll', surDefilement, { passive: true })
+  window.addEventListener('resize', surDefilement, { passive: true })
+})
+onBeforeUnmount(() => {
+  if (planifie) cancelAnimationFrame(planifie)
+  window.removeEventListener('scroll', surDefilement)
+  window.removeEventListener('resize', surDefilement)
+})
+
 const htmlPrincipal = computed(() =>
-  marked.parse(sectionsGuide.value.avantFaq, { async: false, gfm: true }) as string,
+  avecAncres(marked.parse(sectionsGuide.value.avantFaq, { async: false, gfm: true }) as string),
 )
 
 const htmlApresFaq = computed(() =>
-  marked.parse(sectionsGuide.value.apresFaq.trim(), { async: false, gfm: true }) as string,
+  avecAncres(marked.parse(sectionsGuide.value.apresFaq.trim(), { async: false, gfm: true }) as string),
 )
 
 const questionsFrequentes = computed(() =>
@@ -57,7 +130,9 @@ const questionsFrequentes = computed(() =>
 </script>
 
 <template>
-  <Card>
+  <!-- overflow-visible : le `overflow-hidden` de Card neutraliserait le
+       `position: sticky` du sommaire. -->
+  <Card class="overflow-visible">
     <CardHeader>
       <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
         <div class="min-w-0">
@@ -73,12 +148,32 @@ const questionsFrequentes = computed(() =>
         </div>
       </div>
     </CardHeader>
-    <CardContent class="pt-0 pb-6">
+    <CardContent class="grid gap-6 pt-0 pb-6 xl:grid-cols-[minmax(0,1fr)_15rem] xl:gap-10">
+      <div class="min-w-0">
+      <!-- Sommaire replié tant que la largeur ne permet pas la colonne latérale. -->
+      <details v-if="sections.length" class="mb-6 rounded-lg border bg-muted/20 xl:hidden">
+        <summary class="cursor-pointer list-none px-3 py-2 text-sm font-medium">
+          Sommaire · {{ sections.length }} sections
+        </summary>
+        <ol class="grid gap-0.5 border-t px-3 py-2">
+          <li v-for="section in sections" :key="section.id">
+            <a
+              :href="`#${section.id}`"
+              class="flex gap-2 rounded-md px-1 py-1 text-sm transition-colors hover:text-foreground"
+              :class="sectionActive === section.id ? 'font-medium text-foreground' : 'text-muted-foreground'"
+            >
+              <span class="tabular-nums opacity-60">{{ section.numero }}</span>
+              <span>{{ section.titre }}</span>
+            </a>
+          </li>
+        </ol>
+      </details>
+
       <!-- Contenu de confiance (fichier du repo), pas de saisie utilisateur -->
       <div class="guide" v-html="htmlPrincipal" />
 
       <section v-if="questionsFrequentes.length" class="guide mt-7">
-        <h2>{{ sectionsGuide.faqTitre }}</h2>
+        <h2 :id="identifiantSection(sectionsGuide.faqTitre)">{{ sectionsGuide.faqTitre }}</h2>
         <div class="grid gap-2">
           <details
             v-for="item in questionsFrequentes"
@@ -97,6 +192,32 @@ const questionsFrequentes = computed(() =>
       </section>
 
       <div v-if="htmlApresFaq" class="guide mt-6" v-html="htmlApresFaq" />
+      </div>
+
+      <nav v-if="sections.length" class="hidden xl:block" aria-label="Sommaire du guide">
+        <div class="sticky top-20 grid gap-2">
+          <p class="text-[0.7rem] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+            Sommaire
+          </p>
+          <ol class="grid gap-0.5 border-l">
+            <li v-for="section in sections" :key="section.id">
+              <a
+                :href="`#${section.id}`"
+                class="-ml-px flex gap-2 border-l-2 py-1 pl-3 text-sm leading-snug transition-colors"
+                :class="
+                  sectionActive === section.id
+                    ? 'border-primary font-medium text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                "
+                :aria-current="sectionActive === section.id ? 'true' : undefined"
+              >
+                <span class="tabular-nums opacity-60">{{ section.numero }}</span>
+                <span>{{ section.titre }}</span>
+              </a>
+            </li>
+          </ol>
+        </div>
+      </nav>
     </CardContent>
   </Card>
 </template>
@@ -107,6 +228,7 @@ const questionsFrequentes = computed(() =>
   font-weight: 600;
   margin: 0 0 0.75rem;
 }
+.guide h2,
 .guide :deep(h2) {
   font-size: 1.15rem;
   font-weight: 600;
@@ -114,6 +236,7 @@ const questionsFrequentes = computed(() =>
   padding-top: 1.25rem;
   border-top: 1px solid var(--border);
 }
+.guide h2:first-of-type,
 .guide :deep(h2:first-of-type) {
   border-top: none;
   padding-top: 0;
