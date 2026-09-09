@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { z } from "zod";
 import { toast } from "vue-sonner";
-import { EyeIcon, EyeOffIcon, MailIcon, Pencil } from "@lucide/vue";
+import { ArrowLeft, EyeIcon, EyeOffIcon, MailIcon, Pencil } from "@lucide/vue";
 import { useAuth } from "@/composables/useAuth";
 import { api } from "@/lib/api";
 import type { MeResponse } from "@/lib/types";
@@ -434,6 +434,19 @@ async function onSubmit() {
 
             <!-- Étape 2 : choix de la méthode pour l'adresse validée. -->
             <div v-else key="methodes" class="grid gap-4">
+            <!--
+              Le crayon ci-dessous ramène déjà à l'étape 1, mais une icône
+              d'édition ne se lit pas comme un retour : sans ce lien explicite,
+              la connexion Google paraît hors d'atteinte une fois l'e-mail validé.
+            -->
+            <button
+              type="button"
+              class="-mt-1 -ml-1 flex items-center gap-1.5 justify-self-start rounded-md px-1 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              @click="modifierEmail"
+            >
+              <ArrowLeft class="size-3.5" aria-hidden="true" />
+              Choisir une autre méthode de connexion
+            </button>
             <div
               class="flex items-center justify-between gap-3 rounded-xl border border-emerald-950/10 bg-white/55 px-3 py-2.5 shadow-inner shadow-black/[0.02]"
             >
