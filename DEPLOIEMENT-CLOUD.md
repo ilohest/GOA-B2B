@@ -33,7 +33,15 @@ localisation doit être validé avant de créer la base.
 ## 2. Installer les outils locaux
 
 Les commandes `gcloud` et `firebase` doivent être disponibles, puis connectées
-au compte Google autorisé sur le projet du client.
+au compte Google autorisé sur le projet du client. Sur macOS :
+
+```bash
+brew install --cask google-cloud-sdk
+npm install -g firebase-tools
+```
+
+La connexion se fait avec le compte nominatif du développeur, ajouté au projet
+par le client. Les identifiants Google du client ne sont jamais nécessaires.
 
 ```bash
 gcloud auth login

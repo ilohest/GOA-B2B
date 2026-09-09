@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "demo-goa-kombucha"
+    "default": "demo-goa-kombucha",
+    "dev": "demo-goa-kombucha",
+    "prod": "goa-b2b-production"
   }
 }
