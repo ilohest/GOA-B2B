@@ -551,7 +551,7 @@ const columns: ColumnDef<ClientResume>[] = [
   },
   {
     id: "categorie",
-    header: () => enteteTri("categorie", "Catégorie"),
+    header: () => enteteTri("categorie", "Type de client"),
     cell: ({ row }) =>
       h("span", { class: "text-sm" }, row.original.categorie ?? "—"),
   },
@@ -623,7 +623,7 @@ function ouvrirFiche(client: ClientResume) {
         <div class="flex flex-wrap items-center gap-2">
           <Input
             v-model="recherche"
-            placeholder="Rechercher (nom, n°, email, catégorie)…"
+            placeholder="Rechercher (nom, n°, email, type de client)…"
             class="max-w-xs"
             @input="surRecherche"
           />

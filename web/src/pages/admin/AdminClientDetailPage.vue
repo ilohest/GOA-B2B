@@ -215,7 +215,7 @@ const infos = computed(() => [
     valeur: client.value?.adresseLivraison,
     confirmationCopie: "Adresse de livraison copiée.",
   },
-  { label: "Catégorie", valeur: client.value?.categorie },
+  { label: "Type de client", valeur: client.value?.categorie },
   { label: "Mode de livraison", valeur: client.value?.typeLivraisonFav },
   { label: "Tournée", valeur: client.value?.tournee },
 ]);
@@ -423,9 +423,10 @@ function datesRemiseCiblee(
         </CardTitle>
         <CardDescription>
           Easybeer ne renvoie aucun tarif pour {{ data?.tarifsAbsents }}
-          {{ (data?.tarifsAbsents ?? 0) > 1 ? "produits" : "produit" }} sur la grille
-          <template v-if="client?.categorie">«&nbsp;{{ client.categorie }}&nbsp;»</template>
-          <template v-else>de ce client</template>. Sa boutique les affiche comme non
+          {{ (data?.tarifsAbsents ?? 0) > 1 ? "produits" : "produit" }}
+          <template v-if="client?.categorie">
+            sur le type de client «&nbsp;{{ client.categorie }}&nbsp;»</template>
+          <template v-else>pour ce client</template>. Sa boutique les affiche comme non
           commandables, sans qu'il puisse agir. Changez son type dans Easybeer pour un
           type disposant de tarifs, ou complétez cette grille.
         </CardDescription>

@@ -337,7 +337,7 @@ const stats = computed<CarteStatistique[]>(() => {
             {{ comptesSansTarif.length > 1 ? 'clients ne peuvent pas commander' : 'client ne peut pas commander' }}
           </CardTitle>
           <CardDescription>
-            Easybeer ne renvoie aucun tarif pour la grille tarifaire concernée. La boutique
+            Easybeer ne renvoie aucun tarif pour le type de client concerné. La boutique
             affiche alors des produits non commandables, sans que le client puisse agir.
             Corrigez le type du client dans Easybeer, ou complétez la grille.
           </CardDescription>
@@ -354,7 +354,7 @@ const stats = computed<CarteStatistique[]>(() => {
               <span class="text-muted-foreground">
                 — {{ compte.produits }}
                 {{ compte.produits > 1 ? 'produits sans tarif' : 'produit sans tarif' }}
-                <template v-if="compte.typeLibelle"> · grille «&nbsp;{{ compte.typeLibelle }}&nbsp;»</template>
+                <template v-if="compte.typeLibelle"> · type «&nbsp;{{ compte.typeLibelle }}&nbsp;»</template>
               </span>
             </li>
           </ul>

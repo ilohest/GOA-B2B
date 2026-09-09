@@ -1943,6 +1943,8 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
       telephonePrincipal: client.telephonePrincipal ?? null,
       adresseFacturation: client.adresse?.complete ?? null,
       adresseLivraison: client.adresseLivraisonDefaut?.complete ?? null,
+      // Libellé du TYPE de client Easybeer. Le champ garde son nom historique
+      // `categorie`, mais l'interface l'affiche « Type de client », comme Easybeer.
       categorie: client.type?.libelle ?? null,
       minimumCommande: client.minimumCommande ?? client.minimumCommandeAutorise ?? null,
       fraisLivraisonHT: client.fraisLivraisonHT ?? null,

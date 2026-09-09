@@ -24,7 +24,7 @@ seule à la synchronisation suivante.
 | ------------------------------------ | ----------------------------------------------------------------- |
 | Prix, grilles tarifaires, remises    | Visibilité des produits (ce que le client voit)                   |
 | Fiches produits, conditionnements    | Nom d'affichage et photo d'un produit                             |
-| Fiches clients, adresses, catégories | Rupture (afficher « en rupture »)                                 |
+| Fiches clients, adresses, types de client | Rupture (afficher « en rupture »)                                 |
 | Tarifs personnalisés par client      | Invitations des clients (création de compte)                      |
 |                                      | Paramètres clients en masse (tournée, mode de livraison, minimum) |
 
