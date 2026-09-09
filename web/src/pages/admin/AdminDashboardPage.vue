@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { LayoutDashboard } from '@lucide/vue'
+import { LayoutDashboard, Loader2 } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 const queryClient = useQueryClient()
 const SYNC_ATTENTION_MS = 30 * 60 * 60 * 1000
 const TOAST_SYNC_ID = 'admin-sync'
+const SYNC_EN_COURS = 'Une synchronisation est actuellement en cours.'
 
 function accord(nombre: number, singulier: string, pluriel: string) {
   return nombre === 1 ? singulier : pluriel
@@ -91,6 +92,16 @@ const syncAncienne = computed(() => {
   return !cachePlusAncienAt || Date.now() - cachePlusAncienAt > SYNC_ATTENTION_MS
 })
 
+/**
+ * Un cache ancien n'appelle pas le même message selon qu'une actualisation
+ * tourne ou non : pendant une synchronisation, un avertissement inquiète
+ * l'administrateur alors que la situation est déjà en train de se résoudre.
+ */
+const bandeauSync = computed<'en-cours' | 'attention' | null>(() => {
+  if (!syncAncienne.value) return null
+  return actualisationAutomatiqueEnCours.value || syncGlobaleEnCours.value ? 'en-cours' : 'attention'
+})
+
 const derniereTentativePartielle = computed(() => {
   const rapport = data.value?.dernierRapportSync
   const cachePlusAncienAt = data.value?.cache.plusAncienAt
@@ -141,7 +152,7 @@ const diagnosticSync = computed(() => {
     return `Ban persisté jusqu'à ${dateHeureFr(s.banPersiste.until)}.`
   }
   if (s.verrou?.actif) {
-    return 'Une synchronisation est actuellement en cours.'
+    return SYNC_EN_COURS
   }
   if (s.verrou) {
     return `Verrou de synchronisation ancien (${s.verrou.ageMinutes} min).`
@@ -154,6 +165,12 @@ const diagnosticSync = computed(() => {
       : 'La dernière tentative de synchronisation était partielle.'
   }
   return 'Aucun ban local actif détecté.'
+})
+
+const diagnosticAffiche = computed(() => {
+  const message = diagnosticSync.value
+  if (!message) return null
+  return bandeauSync.value === 'en-cours' && message === SYNC_EN_COURS ? null : message
 })
 
 type CarteStatistique = {
@@ -310,7 +327,23 @@ const stats = computed<CarteStatistique[]>(() => {
     <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
     <template v-else>
-      <Card v-if="syncAncienne" class="border-amber-300 bg-amber-50/60">
+      <Card v-if="bandeauSync === 'en-cours'" class="border-sky-200 bg-sky-50/60">
+        <CardHeader class="pb-2">
+          <CardTitle class="flex items-center gap-2 text-base text-sky-900">
+            <Loader2 class="size-4 animate-spin" />
+            Mise à jour des données en cours
+          </CardTitle>
+          <CardDescription class="text-sky-800">
+            Les données Easybeer sont en train d'être actualisées. Il n'y a rien à faire :
+            cet écran se met à jour tout seul dès que c'est terminé.
+          </CardDescription>
+        </CardHeader>
+        <CardContent v-if="diagnosticAffiche" class="pt-0">
+          <p class="text-sm text-sky-900">{{ diagnosticAffiche }}</p>
+        </CardContent>
+      </Card>
+
+      <Card v-else-if="bandeauSync === 'attention'" class="border-amber-300 bg-amber-50/60">
         <CardHeader class="pb-2">
           <CardTitle class="text-base text-amber-900">Synchronisation à vérifier</CardTitle>
           <CardDescription class="text-amber-800">
@@ -318,8 +351,8 @@ const stats = computed<CarteStatistique[]>(() => {
             Chaque section se rafraîchit automatiquement à son ouverture ; vous pouvez aussi tout synchroniser maintenant.
           </CardDescription>
         </CardHeader>
-        <CardContent v-if="diagnosticSync" class="pt-0">
-          <p class="text-sm text-amber-900">{{ diagnosticSync }}</p>
+        <CardContent v-if="diagnosticAffiche" class="pt-0">
+          <p class="text-sm text-amber-900">{{ diagnosticAffiche }}</p>
         </CardContent>
       </Card>
 
