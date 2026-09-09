@@ -164,6 +164,8 @@ Ne pas considérer le snapshot Hostinger comme une sauvegarde de Firestore, Auth
 
 ## 10. Test de restauration avant mise en production
 
+La marche à suivre détaillée est dans [`RESTAURATION.md`](./RESTAURATION.md).
+
 - [ ] Restaurer une sauvegarde Firestore dans une base de test.
 - [ ] Vérifier les collections `users`, `orders`, `catalogueOverrides` et `invitations`.
 - [ ] Vérifier qu'une commande et ses lignes sont cohérentes après restauration.

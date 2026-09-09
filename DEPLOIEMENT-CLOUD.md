@@ -194,40 +194,12 @@ gcloud run jobs execute goa-export-auth --region europe-west1 \
 Le script local `npm run export:auth` reste disponible pour un export manuel
 ponctuel vers le poste de travail.
 
-### Restaurer des comptes Authentication
+### Restaurer
 
-À tester au moins une fois, dans un projet Firebase distinct, jamais directement
-en production.
-
-```bash
-gcloud storage cp gs://goa-b2b-production-sauvegardes-auth/auth/FICHIER.json.age .
-age -d -i cle-privee-goa.txt -o sauvegarde.json FICHIER.json.age
-```
-
-Le fichier obtenu contient `hashConfig` et `users`. Extraire les comptes et
-relire les paramètres de hachage :
-
-```bash
-node -e 'const d=require("./sauvegarde.json");require("fs").writeFileSync("users.json",JSON.stringify({users:d.users}));console.log(d.hashConfig)'
-```
-
-Puis importer en reportant les valeurs affichées :
-
-```bash
-firebase auth:import users.json \
-  --hash-algo=SCRYPT \
-  --hash-key="SIGNER_KEY" \
-  --salt-separator="SALT_SEPARATOR" \
-  --rounds=8 \
-  --mem-cost=14 \
-  --project projet-de-test
-```
-
-Supprimer ensuite les fichiers déchiffrés : ils contiennent des données
-personnelles et des empreintes de mots de passe.
-
-La checklist complète, incluant les tests de restauration et la supervision, se
-trouve dans [`TODO-SAUVEGARDES-PRODUCTION.md`](./TODO-SAUVEGARDES-PRODUCTION.md).
+La marche à suivre complète — retour à un instant précis, sauvegardes
+planifiées, photos, comptes de connexion — vit dans
+[`RESTAURATION.md`](./RESTAURATION.md). À lire avant d'en avoir besoin, et à
+tester au moins une fois dans un projet distinct.
 
 ## 9. Recette avant commandes réelles
 
