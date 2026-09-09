@@ -1,4 +1,4 @@
-<!-- guide-version: 1.48 -->
+<!-- guide-version: 1.49 -->
 <!-- guide-updated-at: 2026-09-09 -->
 
 # Guide administrateur — plateforme de commande GOA
@@ -79,7 +79,13 @@ Pour chaque unité vous pouvez :
   contenant et le conditionnement restent toujours affichés dans le catalogue,
   le panier et le récapitulatif de la commande. Sans nom personnalisé, seul le
   nom du produit apparaît en titre : son format est indiqué juste en dessous.
-- **Photo** : glissez une image sur la vignette.
+- **Photo** : cliquez sur la vignette pour ouvrir la **bibliothèque d'images**.
+  Vous y déposez une nouvelle image, ou vous réutilisez une image déjà envoyée —
+  pratique quand plusieurs formats d'un même goût partagent le même visuel. Vous
+  pouvez aussi glisser directement un fichier sur la vignette : il rejoint la
+  bibliothèque puis s'applique. Une image utilisée par un produit ne peut pas
+  être supprimée de la bibliothèque tant qu'elle sert ; retirez-la d'abord des
+  produits concernés. Formats acceptés : JPEG, PNG ou WebP, 5 Mo maximum.
 
 La **visibilité s'applique à l'unité** (un conditionnement) : tous ses tarifs
 suivent. Le client ne voit que **le prix de son type** (voir §5).

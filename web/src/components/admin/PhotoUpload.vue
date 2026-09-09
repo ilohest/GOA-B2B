@@ -1,51 +1,47 @@
 <script setup lang="ts">
 /**
- * Vignette + zone d'upload de photo produit, façon Shopify :
- * clic ou glisser-déposer, remplacement, suppression, état d'envoi.
+ * Vignette de photo produit. Le clic ouvre la bibliothèque d'images, où l'on
+ * choisit une image déjà envoyée ou l'on en dépose une nouvelle. Déposer
+ * directement sur la vignette reste possible : le fichier est alors importé
+ * dans la bibliothèque puis appliqué.
  */
 import { ref } from 'vue'
 import { Plus, Trash2 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
+import MediaPicker from '@/components/admin/MediaPicker.vue'
 
 const props = defineProps<{
   photoUrl: string
   libelle: string
-  /** Envoie le fichier (l'appelant gère l'appel API) ; doit rejeter en cas d'échec. */
-  envoyer: (fichier: File) => Promise<void>
+  /** Applique l'image choisie (l'appelant décide quoi en faire). */
+  choisir: (url: string) => void
   retirer: () => Promise<void>
 }>()
 
-const input = ref<HTMLInputElement>()
 const enCours = ref(false)
 const survole = ref(false)
+const bibliothequeOuverte = ref(false)
+const fichierDepose = ref<File | null>(null)
 
 const TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
-async function traiter(fichier: File | undefined | null) {
-  if (!fichier || enCours.value) return
-  if (!TYPES.includes(fichier.type)) {
-    toast.error('Format non supporté — JPEG, PNG ou WebP.')
-    return
-  }
-  if (fichier.size > 5 * 1024 * 1024) {
-    toast.error('Image trop lourde (5 Mo maximum).')
-    return
-  }
-  enCours.value = true
-  try {
-    await props.envoyer(fichier)
-    toast.success('Photo ajoutée aux modifications.')
-  } catch (e) {
-    toast.error((e as Error).message)
-  } finally {
-    enCours.value = false
-    if (input.value) input.value.value = ''
-  }
+function ouvrirBibliotheque(fichier: File | null = null) {
+  fichierDepose.value = fichier
+  bibliothequeOuverte.value = true
 }
 
 function onDrop(e: DragEvent) {
   survole.value = false
-  traiter(e.dataTransfer?.files?.[0])
+  const fichier = e.dataTransfer?.files?.[0]
+  if (!fichier) return
+  if (!TYPES.includes(fichier.type)) return toast.error('Format non supporté — JPEG, PNG ou WebP.')
+  if (fichier.size > 5 * 1024 * 1024) return toast.error('Image trop lourde (5 Mo maximum).')
+  ouvrirBibliotheque(fichier)
+}
+
+function onChoisir(url: string) {
+  props.choisir(url)
+  toast.success('Photo ajoutée aux modifications.')
 }
 
 async function onRetirer() {
@@ -73,7 +69,7 @@ async function onRetirer() {
         enCours ? 'pointer-events-none opacity-60' : '',
       ]"
       :aria-label="photoUrl ? `Remplacer la photo de ${libelle}` : `Ajouter une photo pour ${libelle}`"
-      @click="input?.click()"
+      @click="ouvrirBibliotheque()"
       @dragover.prevent="survole = true"
       @dragleave="survole = false"
       @drop.prevent="onDrop"
@@ -114,12 +110,11 @@ async function onRetirer() {
       <Trash2 class="size-3.5" />
     </button>
 
-    <input
-      ref="input"
-      type="file"
-      accept="image/jpeg,image/png,image/webp"
-      class="hidden"
-      @change="traiter(($event.target as HTMLInputElement).files?.[0])"
+    <MediaPicker
+      v-model:ouvert="bibliothequeOuverte"
+      :libelle="libelle"
+      :fichier-a-importer="fichierDepose"
+      @choisir="onChoisir"
     />
 </div>
 </template>

@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { config, validerConfigurationProduction } from './config.js'
 import {
   comptePlateformeAutorise,
@@ -2104,6 +2104,23 @@ const TYPES_IMAGE = new Map([
 const TAILLE_MAX_PHOTO = 5 * 1024 * 1024 // 5 Mo
 
 /**
+ * Le type déclaré par le navigateur n'engage à rien : il se change à volonté et
+ * un fichier quelconque renommé en .jpg passerait. On regarde les premiers
+ * octets, seule preuve du format réel.
+ */
+function formatImageReel(octets: Buffer): string | null {
+  if (octets.length < 12) return null
+  if (octets[0] === 0xff && octets[1] === 0xd8 && octets[2] === 0xff) return 'image/jpeg'
+  if (octets.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return 'image/png'
+  }
+  if (octets.subarray(0, 4).toString('ascii') === 'RIFF' && octets.subarray(8, 12).toString('ascii') === 'WEBP') {
+    return 'image/webp'
+  }
+  return null
+}
+
+/**
  * Upload de la photo d'un produit (multipart, champ `photo`). Stockée comme
  * brouillon ; l'override n'est mis à jour qu'au clic sur « Enregistrer ».
  */
@@ -2123,11 +2140,17 @@ app.post('/api/admin/catalogue/:idStockBouteille/photo', requireAuth, requireAdm
     return c.json({ error: 'Image trop lourde (5 Mo maximum)' }, 400)
   }
 
-  const extension = TYPES_IMAGE.get(photo.type)
+  const contenuPhoto = Buffer.from(await photo.arrayBuffer())
+  const typeReelPhoto = formatImageReel(contenuPhoto)
+  if (!typeReelPhoto) {
+    return c.json({ error: "Ce fichier n'est pas une image JPEG, PNG ou WebP" }, 400)
+  }
+
+  const extension = TYPES_IMAGE.get(typeReelPhoto)
   const nomBrouillon = `${id}-${Date.now()}.${extension}`
 
-  await bucket.file(`produits-drafts/${nomBrouillon}`).save(Buffer.from(await photo.arrayBuffer()), {
-    contentType: photo.type,
+  await bucket.file(`produits-drafts/${nomBrouillon}`).save(contenuPhoto, {
+    contentType: typeReelPhoto,
     resumable: false,
     metadata: { cacheControl: 'public, max-age=31536000, immutable' },
   })
@@ -2188,6 +2211,148 @@ app.get('/api/photos/catalogue-drafts/:nomBrouillon', async (c) => {
   return new Response(new Uint8Array(contenu), {
     headers: {
       'Content-Type': (meta.contentType as string) ?? 'image/jpeg',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  })
+})
+
+// ---- Bibliothèque d'images (médias réutilisables entre produits) ----
+
+/**
+ * Une image y existe indépendamment des produits : plusieurs unités peuvent
+ * pointer vers la même sans la dupliquer, et on peut la choisir au lieu de la
+ * rechercher sur son disque à chaque fois.
+ */
+interface MediaDoc {
+  nom: string
+  contentType: string
+  extension: string
+  taille: number
+  creeLe: number
+  creePar: string | null
+}
+
+function cheminMedia(id: string, extension: string) {
+  return `media/${id}.${extension}`
+}
+
+/** Identifiant opaque : le nom d'origine ne doit pas décider du chemin de stockage. */
+function nouvelIdMedia() {
+  return randomBytes(12).toString('hex')
+}
+
+app.get('/api/admin/media', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  if (!db) return c.json({ error: 'Firebase non configuré' }, 501)
+  const snap = await db.collection('media').orderBy('creeLe', 'desc').limit(200).get()
+  return c.json({
+    media: snap.docs.map((doc) => {
+      const d = doc.data() as MediaDoc
+      return {
+        id: doc.id,
+        nom: d.nom,
+        taille: d.taille,
+        contentType: d.contentType,
+        creeLe: d.creeLe,
+        url: `/api/photos/media/${doc.id}`,
+      }
+    }),
+  })
+})
+
+app.post('/api/admin/media', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  const bucket = getBucket()
+  if (!db || !bucket) return c.json({ error: 'Firebase non configuré' }, 501)
+
+  const body = await c.req.parseBody()
+  const fichier = body.fichier
+  if (!(fichier instanceof File)) return c.json({ error: 'Fichier manquant (champ « fichier »)' }, 400)
+  if (!TYPES_IMAGE.has(fichier.type)) {
+    return c.json({ error: 'Format non supporté — utilisez JPEG, PNG ou WebP' }, 400)
+  }
+  if (fichier.size > TAILLE_MAX_PHOTO) {
+    return c.json({ error: 'Image trop lourde (5 Mo maximum)' }, 400)
+  }
+
+  const contenu = Buffer.from(await fichier.arrayBuffer())
+  const typeReel = formatImageReel(contenu)
+  if (!typeReel) {
+    return c.json({ error: "Ce fichier n'est pas une image JPEG, PNG ou WebP" }, 400)
+  }
+
+  const extension = TYPES_IMAGE.get(typeReel)!
+  const id = nouvelIdMedia()
+  await bucket.file(cheminMedia(id, extension)).save(contenu, {
+    contentType: typeReel,
+    resumable: false,
+    metadata: { cacheControl: 'public, max-age=31536000, immutable' },
+  })
+
+  const doc: MediaDoc = {
+    nom: (fichier.name || 'image').slice(0, 120),
+    contentType: typeReel,
+    extension,
+    taille: fichier.size,
+    creeLe: Date.now(),
+    creePar: c.get('user')?.email ?? null,
+  }
+  await db.collection('media').doc(id).set(doc)
+
+  return c.json({ ok: true, media: { id, nom: doc.nom, taille: doc.taille, contentType: doc.contentType, creeLe: doc.creeLe, url: `/api/photos/media/${id}` } })
+})
+
+app.delete('/api/admin/media/:id', requireAuth, requireAdmin, async (c) => {
+  const db = getDb()
+  const bucket = getBucket()
+  if (!db || !bucket) return c.json({ error: 'Firebase non configuré' }, 501)
+  const id = c.req.param('id') ?? ''
+  if (!/^[a-f0-9]{24}$/.test(id)) return c.json({ error: 'Identifiant invalide' }, 400)
+
+  const snap = await db.collection('media').doc(id).get()
+  if (!snap.exists) return c.json({ error: 'Image introuvable' }, 404)
+  const doc = snap.data() as MediaDoc
+
+  // Une image encore utilisée ne doit pas disparaître d'un produit sans que
+  // personne ne l'ait décidé : on refuse et on dit où elle sert.
+  const url = `/api/photos/media/${id}`
+  const usages = await db.collection('catalogueOverrides').where('photoUrl', '==', url).get()
+  if (!usages.empty) {
+    return c.json(
+      {
+        error: `Image utilisée par ${usages.size} produit${usages.size > 1 ? 's' : ''} — retirez-la d'abord de ${usages.size > 1 ? 'ces produits' : 'ce produit'}.`,
+        idsProduits: usages.docs.map((d) => Number(d.id)),
+      },
+      409,
+    )
+  }
+
+  await bucket.file(cheminMedia(id, doc.extension)).delete({ ignoreNotFound: true })
+  await db.collection('media').doc(id).delete()
+  return c.json({ ok: true })
+})
+
+/** Service PUBLIC d'une image de la bibliothèque (visuels non sensibles). */
+app.get('/api/photos/media/:id', async (c) => {
+  const db = getDb()
+  const bucket = getBucket()
+  if (!db || !bucket) return c.json({ error: 'Stockage non configuré' }, 501)
+  const id = c.req.param('id') ?? ''
+  if (!/^[a-f0-9]{24}$/.test(id)) return c.json({ error: 'Identifiant invalide' }, 400)
+
+  const snap = await db.collection('media').doc(id).get()
+  if (!snap.exists) return c.json({ error: 'Image introuvable' }, 404)
+  const doc = snap.data() as MediaDoc
+
+  const fichier = bucket.file(cheminMedia(id, doc.extension))
+  const [existe] = await fichier.exists()
+  if (!existe) return c.json({ error: 'Image introuvable' }, 404)
+
+  const [contenu] = await fichier.download()
+  return new Response(new Uint8Array(contenu), {
+    headers: {
+      'Content-Type': doc.contentType,
+      // L'identifiant est unique et le contenu ne change jamais : cache long.
       'Cache-Control': 'public, max-age=31536000, immutable',
     },
   })

@@ -451,3 +451,13 @@ export interface CommandeEdition {
 export interface CommandeRecommande extends Omit<CommandeEdition, 'lignes'> {
   lignes: { idStockBouteille: number | null; quantite: number; designation: string }[]
 }
+
+/** Image de la bibliothèque, réutilisable par plusieurs produits. */
+export interface MediaItem {
+  id: string
+  nom: string
+  taille: number
+  contentType: string
+  creeLe: number
+  url: string
+}

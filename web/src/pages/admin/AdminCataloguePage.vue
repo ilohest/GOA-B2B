@@ -316,14 +316,10 @@ onBeforeUnmount(clearSaveBar)
 
 // --- Photos (upload Storage via le serveur) ---
 
-async function envoyerPhoto(idStockBouteille: number, fichier: File) {
-  const res = await api.envoyerFichier<{ ok: boolean; photoUrl: string }>(
-    `/admin/catalogue/${idStockBouteille}/photo`,
-    'photo',
-    fichier,
-  )
+/** L'image vient de la bibliothèque : rien à envoyer, on pose son URL. */
+function choisirPhoto(idStockBouteille: number, url: string) {
   const unite = data.value?.unites.find((u) => u.idStockBouteille === idStockBouteille)
-  if (unite) definirBrouillon(unite, 'photoUrl', res.photoUrl)
+  if (unite) definirBrouillon(unite, 'photoUrl', url)
 }
 
 async function retirerPhoto(idStockBouteille: number) {
@@ -510,7 +506,7 @@ async function retirerPhoto(idStockBouteille: number) {
                 <PhotoUpload
                   :photo-url="overrideAffiche(u).photoUrl"
                   :libelle="u.override.displayName || u.produit"
-                  :envoyer="(f) => envoyerPhoto(u.idStockBouteille, f)"
+                  :choisir="(url) => choisirPhoto(u.idStockBouteille, url)"
                   :retirer="() => retirerPhoto(u.idStockBouteille)"
                 />
 
@@ -624,7 +620,7 @@ async function retirerPhoto(idStockBouteille: number) {
                   <PhotoUpload
                     :photo-url="overrideAffiche(u).photoUrl"
                     :libelle="u.override.displayName || u.produit"
-                    :envoyer="(f) => envoyerPhoto(u.idStockBouteille, f)"
+                    :choisir="(url) => choisirPhoto(u.idStockBouteille, url)"
                     :retirer="() => retirerPhoto(u.idStockBouteille)"
                   />
                 </TableCell>
