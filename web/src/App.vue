@@ -27,11 +27,16 @@ let saveBarShakeTimer: number | undefined
 /**
  * Sous `md`, la barre d'enregistrement occupe le bas de l'écran : un toast
  * affiché au même endroit recouvre le bouton « Enregistrer ». Les toasts
- * passent donc en haut, sous l'en-tête de 56 px.
+ * passent donc en haut, sous l'en-tête de 56 px, et restent alignés à droite
+ * comme sur grand écran.
  */
 const petitEcran = useMediaQuery('(max-width: 767px)')
-const positionToasts = computed(() => (petitEcran.value ? 'top-center' : 'bottom-right'))
-const decalageToasts = computed(() => (petitEcran.value ? '72px' : undefined))
+const positionToasts = computed(() => (petitEcran.value ? 'top-right' : 'bottom-right'))
+// Seul le haut est décalé, pour passer sous l'en-tête : appliquer la même
+// marge à droite éloignerait inutilement le toast du bord.
+const decalageToasts = computed(() =>
+  petitEcran.value ? { top: '72px', right: '16px', bottom: '16px', left: '16px' } : undefined,
+)
 
 const estAdmin = computed(() => me.value?.user.role === 'admin')
 const sectionsHeader = computed(() => (estAdmin.value ? adminSections : clientSections))
