@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
-import { onClickOutside, useEventListener } from '@vueuse/core'
+import { onClickOutside, useEventListener, useMediaQuery } from '@vueuse/core'
 import { toast } from 'vue-sonner'
 import { LogOut, Store } from '@lucide/vue'
 import { useAuth } from '@/composables/useAuth'
@@ -23,6 +23,15 @@ const saveBarShaking = ref(false)
 const profilMobileOuvert = ref(false)
 const menuProfilMobile = ref<HTMLElement | null>(null)
 let saveBarShakeTimer: number | undefined
+
+/**
+ * Sous `md`, la barre d'enregistrement occupe le bas de l'écran : un toast
+ * affiché au même endroit recouvre le bouton « Enregistrer ». Les toasts
+ * passent donc en haut, sous l'en-tête de 56 px.
+ */
+const petitEcran = useMediaQuery('(max-width: 767px)')
+const positionToasts = computed(() => (petitEcran.value ? 'top-center' : 'bottom-right'))
+const decalageToasts = computed(() => (petitEcran.value ? '72px' : undefined))
 
 const estAdmin = computed(() => me.value?.user.role === 'admin')
 const sectionsHeader = computed(() => (estAdmin.value ? adminSections : clientSections))
@@ -230,7 +239,12 @@ function ouvrirApercuBoutique() {
       </div>
     </div>
   </div>
-  <Toaster position="bottom-right" rich-colors />
+  <Toaster
+    :position="positionToasts"
+    :offset="decalageToasts"
+    :mobile-offset="decalageToasts"
+    rich-colors
+  />
 </template>
 
 <style scoped>

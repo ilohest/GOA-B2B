@@ -37,6 +37,9 @@ function ouvrirApercu(item: MediaItem) {
   // Les dimensions ne sont pas stockées : on les lit sur l'image chargée.
   dimensions.value = null
   apercu.value = item
+  // Sélectionner en même temps évite deux notions concurrentes : l'image
+  // affichée en grand est celle que le bouton du pied appliquera.
+  selection.value = item.url
 }
 
 const media = useQuery({
@@ -257,7 +260,6 @@ function poids(octets: number) {
             </p>
             <p class="text-xs text-muted-foreground">{{ poids(apercu.taille) }}</p>
           </div>
-          <Button size="sm" @click="((selection = apercu.url), valider())">Utiliser cette image</Button>
         </aside>
         </div>
 
