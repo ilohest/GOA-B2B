@@ -414,6 +414,7 @@ app.get('/api/catalogue', requireAuth, async (c) => {
     catalogueClient(produits, overrides, {
       prixClient: cacheClient?.prix ?? null,
       prixUpdatedAt: cacheClient?.prixUpdatedAt ?? null,
+      tarifsAbsents: cacheClient?.tarifsAbsents ?? null,
       grillePrix,
       grilleSyncedAt: grille.syncedAt,
       maxAgeMs: prixMaxAgeMs,
@@ -1430,6 +1431,44 @@ app.put('/api/commandes/:id', requireAuth, async (c) => {
 /** Statuts des comptes plateforme par idClient (collection users, petite). */
 type StatutCompte = 'invited' | 'active' | 'revoked' | 'source_deleted'
 
+/**
+ * Comptes actifs dont les tarifs ne peuvent pas être rafraîchis : Easybeer
+ * répond sans prix pour leur grille tarifaire. Le client voit alors tout son
+ * catalogue bloqué, et rien ne le signale à l'administrateur — pourtant lui
+ * seul peut corriger, en changeant le type du client ou en complétant la
+ * grille dans Easybeer.
+ */
+async function comptesSansTarif(
+  comptes: Record<number, { statut: StatutCompte; emails: string[] }>,
+): Promise<
+  { idClient: number; nom: string | null; emails: string[]; produits: number; typeLibelle: string | null }[]
+> {
+  const db = getDb()
+  if (!db) return []
+  const ids = Object.entries(comptes)
+    .filter(([, compte]) => compte.statut === 'active')
+    .map(([id]) => Number(id))
+    .filter((id) => Number.isFinite(id))
+  if (!ids.length) return []
+
+  const snaps = await db.getAll(...ids.map((id) => db.doc(`cacheClients/${id}`)))
+  return snaps
+    .flatMap((snap) => {
+      const doc = snap.data() as CacheClientDoc | undefined
+      const produits = Object.keys(doc?.tarifsAbsents ?? {}).length
+      if (!doc || produits === 0) return []
+      const idClient = Number(snap.id)
+      return [{
+        idClient,
+        nom: doc.client?.nom ?? null,
+        emails: comptes[idClient]?.emails ?? [],
+        produits,
+        typeLibelle: doc.client?.type?.libelle ?? null,
+      }]
+    })
+    .sort((a, b) => b.produits - a.produits || (a.nom ?? '').localeCompare(b.nom ?? '', 'fr'))
+}
+
 async function comptesParClient(): Promise<Record<number, { statut: StatutCompte; emails: string[] }>> {
   const comptes: Record<number, { statut: StatutCompte; emails: string[] }> = {}
   const db = getDb()
@@ -1861,6 +1900,7 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
     .sort((a, b) => (b.dateCreation ?? 0) - (a.dateCreation ?? 0))
 
   const comptes: { uid: string; email: string; status: StatutCompte }[] = []
+  let tarifsAbsents = 0
   let invitation: Awaited<ReturnType<typeof derniereInvitationClient>> = null
   const db = getDb()
   const typesClient = await listeTypesClient().catch(() => [])
@@ -1876,11 +1916,13 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
   if (db) {
     await db.doc(`cacheClients/${idClient}`).set({ client: clientAvecRemises, clientUpdatedAt: Date.now() }, { merge: true })
 
-    const [snap, invitationRecente] = await Promise.all([
+    const [snap, invitationRecente, cacheSnap] = await Promise.all([
       db.collection('users').where('easybeerIdClient', '==', idClient).get(),
       derniereInvitationClient(db, idClient),
+      db.doc(`cacheClients/${idClient}`).get(),
     ])
     invitation = invitationRecente
+    tarifsAbsents = Object.keys((cacheSnap.data() as CacheClientDoc | undefined)?.tarifsAbsents ?? {}).length
     for (const doc of snap.docs) {
       const d = doc.data()
       const status: StatutCompte =
@@ -1918,6 +1960,7 @@ app.get('/api/admin/clients/:id', requireAuth, requireAdmin, async (c) => {
     commandes,
     comptes,
     invitation,
+    tarifsAbsents,
     easybeerAppUrl: config.easybeer.appUrl,
   })
 })
@@ -2284,6 +2327,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
   )
   const caTTC30j = commandes30j.reduce((somme, cmd) => somme + (cmd.totalTTC ?? 0), 0)
 
+  const sansTarif = await comptesSansTarif(comptes)
   const statutsComptes = Object.values(comptes)
   let visibles = 0
   let ruptures = 0
@@ -2311,6 +2355,7 @@ app.get('/api/admin/dashboard', requireAuth, requireAdmin, async (c) => {
     dernierSync: (meta?.dernierSyncReussiAt as number | undefined) ?? ancienRapportReussi,
     dernierRapportSync: dernierRapportNormalise,
     revalidationEnCours,
+    comptesSansTarif: sansTarif,
   })
 })
 

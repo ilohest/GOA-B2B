@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { LayoutDashboard, Loader2 } from '@lucide/vue'
+import { LayoutDashboard, Loader2, TriangleAlert } from '@lucide/vue'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { api } from '@/lib/api'
@@ -101,6 +101,8 @@ const bandeauSync = computed<'en-cours' | 'attention' | null>(() => {
   if (!syncAncienne.value) return null
   return actualisationAutomatiqueEnCours.value || syncGlobaleEnCours.value ? 'en-cours' : 'attention'
 })
+
+const comptesSansTarif = computed(() => data.value?.comptesSansTarif ?? [])
 
 const derniereTentativePartielle = computed(() => {
   const rapport = data.value?.dernierRapportSync
@@ -327,6 +329,38 @@ const stats = computed<CarteStatistique[]>(() => {
     <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
     <template v-else>
+      <Card v-if="comptesSansTarif.length" class="border-destructive/40 bg-destructive/5">
+        <CardHeader class="pb-2">
+          <CardTitle class="flex items-center gap-2 text-base">
+            <TriangleAlert class="size-4 text-destructive" />
+            {{ comptesSansTarif.length }}
+            {{ comptesSansTarif.length > 1 ? 'clients ne peuvent pas commander' : 'client ne peut pas commander' }}
+          </CardTitle>
+          <CardDescription>
+            Easybeer ne renvoie aucun tarif pour la grille tarifaire concernée. La boutique
+            affiche alors des produits non commandables, sans que le client puisse agir.
+            Corrigez le type du client dans Easybeer, ou complétez la grille.
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="pt-0">
+          <ul class="grid gap-1.5">
+            <li v-for="compte in comptesSansTarif" :key="compte.idClient" class="text-sm">
+              <RouterLink
+                :to="{ name: 'admin-client', params: { id: compte.idClient } }"
+                class="font-medium underline underline-offset-2"
+              >
+                {{ compte.nom ?? `Client ${compte.idClient}` }}
+              </RouterLink>
+              <span class="text-muted-foreground">
+                — {{ compte.produits }}
+                {{ compte.produits > 1 ? 'produits sans tarif' : 'produit sans tarif' }}
+                <template v-if="compte.typeLibelle"> · grille «&nbsp;{{ compte.typeLibelle }}&nbsp;»</template>
+              </span>
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
+
       <Card v-if="bandeauSync === 'en-cours'" class="border-sky-200 bg-sky-50/60">
         <CardHeader class="pb-2">
           <CardTitle class="flex items-center gap-2 text-base text-sky-900">

@@ -86,7 +86,12 @@ const emit = defineEmits<{
         v-if="produit.prixHT == null || !produit.prixEstFrais"
         class="text-xs text-amber-700"
       >
-        Commande temporairement indisponible pour ce produit.
+        <template v-if="produit.tarifAbsent">
+          Aucun tarif n'est défini pour votre compte sur ce produit.
+        </template>
+        <template v-else>
+          Tarif en cours de vérification pour ce produit.
+        </template>
       </p>
     </div>
   </article>

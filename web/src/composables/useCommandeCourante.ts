@@ -103,6 +103,14 @@ export function useCommandeCourante(modeApercu: MaybeRefOrGetter<boolean>) {
   const commandeBloqueeParPrix = computed(() =>
     lignesDetail.value.some((ligne) => !ligne.produit.prixEstFrais),
   )
+  /**
+   * Le blocage vient d'une grille sans tarif, pas d'un cache en retard. C'est
+   * un état durable que seul GOA peut lever : le client doit être invité à
+   * nous contacter plutôt qu'à réessayer indéfiniment.
+   */
+  const commandeBloqueeParTarifAbsent = computed(() =>
+    lignesDetail.value.some((ligne) => !ligne.produit.prixEstFrais && ligne.produit.tarifAbsent),
+  )
   const tagsClient = computed(() => {
     const tags = profil.data.value?.client?.tags
     if (!tags) return []
@@ -139,6 +147,7 @@ export function useCommandeCourante(modeApercu: MaybeRefOrGetter<boolean>) {
     remisesDetail,
     remiseMontant,
     commandeBloqueeParPrix,
+    commandeBloqueeParTarifAbsent,
     erreursConditionnementPostal,
     commandeBloqueeParConditionnement,
   }

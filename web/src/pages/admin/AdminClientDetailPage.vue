@@ -8,6 +8,7 @@ import {
   Copy,
   Info,
   Mail,
+  TriangleAlert,
   UserRound,
 } from "@lucide/vue";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
@@ -24,7 +25,13 @@ import IconTooltip from "@/components/admin/IconTooltip.vue";
 import ProduitFormat from "@/components/catalogue/ProduitFormat.vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const route = useRoute();
@@ -404,6 +411,26 @@ function datesRemiseCiblee(
         />
       </div>
     </div>
+
+    <Card
+      v-if="!isPending && (data?.tarifsAbsents ?? 0) > 0"
+      class="border-destructive/40 bg-destructive/5"
+    >
+      <CardHeader class="pb-2">
+        <CardTitle class="flex items-center gap-2 text-base">
+          <TriangleAlert class="size-4 text-destructive" />
+          Ce client ne peut pas commander
+        </CardTitle>
+        <CardDescription>
+          Easybeer ne renvoie aucun tarif pour {{ data?.tarifsAbsents }}
+          {{ (data?.tarifsAbsents ?? 0) > 1 ? "produits" : "produit" }} sur la grille
+          <template v-if="client?.categorie">«&nbsp;{{ client.categorie }}&nbsp;»</template>
+          <template v-else>de ce client</template>. Sa boutique les affiche comme non
+          commandables, sans qu'il puisse agir. Changez son type dans Easybeer pour un
+          type disposant de tarifs, ou complétez cette grille.
+        </CardDescription>
+      </CardHeader>
+    </Card>
 
     <div
       v-if="isPending"

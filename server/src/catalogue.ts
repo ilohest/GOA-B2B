@@ -190,6 +190,12 @@ export interface ProduitCatalogueClient {
   prixHT: number | null
   prixUpdatedAt: number | null
   prixEstFrais: boolean
+  /**
+   * Easybeer ne définit aucun tarif pour cette unité sur la grille du client.
+   * Distingue une indisponibilité durable, que seul l'administrateur peut
+   * lever, d'un simple cache en cours de rafraîchissement.
+   */
+  tarifAbsent: boolean
   /** Unité masquée, exposée uniquement pour modifier une commande qui la contient déjà. */
   historique: boolean
   /** Incrément par goût (toujours 1 ; contraintes logistiques au niveau panier). */
@@ -300,6 +306,8 @@ export function catalogueClient(
   options: SourcesPrixClient & {
     tagsClient?: unknown
     idsInclus?: Set<number>
+    /** Unités constatées sans tarif chez Easybeer (cacheClients.tarifsAbsents). */
+    tarifsAbsents?: Record<string, number> | null
     unitesMeta?: Record<
       number,
       { produit: string | null; contenant: string | null; packaging: string | null }
@@ -334,6 +342,7 @@ export function catalogueClient(
         prixHT,
         prixUpdatedAt: updatedAt,
         prixEstFrais: prixHT != null && updatedAt != null && now - updatedAt <= prixMaxAgeMs,
+        tarifAbsent: options.tarifsAbsents?.[String(p.idStockBouteille)] != null,
         historique: !o.visible,
         // Le client choisit chaque goût à l'unité. La contrainte La Poste est
         // contrôlée globalement dans le panier par contenant + packaging.

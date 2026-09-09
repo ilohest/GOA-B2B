@@ -71,6 +71,7 @@ const {
   remisesDetail,
   remiseMontant,
   commandeBloqueeParPrix,
+  commandeBloqueeParTarifAbsent,
   erreursConditionnementPostal,
   commandeBloqueeParConditionnement,
 } = useCommandeCourante(modeApercu);
@@ -190,6 +191,19 @@ const produitsCatalogue = computed(() =>
   (catalogue.data.value?.produits ?? []).filter(
     (produit) => !produit.historique,
   ),
+);
+/**
+ * Grille tarifaire sans prix chez Easybeer : état durable, que seul GOA peut
+ * lever. À distinguer d'un cache en cours de rafraîchissement, qui se résout
+ * seul et ne mérite pas d'alerter le client.
+ */
+const catalogueSansTarif = computed(() =>
+  produitsCatalogue.value.some((produit) => produit.tarifAbsent),
+);
+const catalogueToutSansTarif = computed(
+  () =>
+    produitsCatalogue.value.length > 0 &&
+    produitsCatalogue.value.every((produit) => produit.tarifAbsent),
 );
 const contenantsDisponibles = computed(() =>
   [
@@ -493,6 +507,28 @@ function viderPanierAvecAnnulation() {
         </p>
 
         <template v-else>
+          <!--
+            Sans cette explication, un client dont la grille n'a aucun tarif voit
+            un catalogue entièrement non commandable, sans savoir pourquoi ni
+            quoi faire — et rafraîchir n'y change rien.
+          -->
+          <div
+            v-if="catalogueSansTarif"
+            class="mb-5 rounded-xl border border-amber-300 bg-amber-50/60 p-3 text-sm text-amber-900"
+          >
+            <p class="font-medium">Vos tarifs ne sont pas encore en place</p>
+            <p class="mt-1 text-amber-800">
+              Aucun tarif n'est défini pour votre compte sur
+              {{ catalogueToutSansTarif ? "les produits du catalogue" : "certains produits" }}.
+              Vous ne pouvez donc pas les commander pour le moment. Ce n'est pas une
+              erreur de votre part et rafraîchir la page n'y changera rien&nbsp;:
+              <RouterLink :to="{ name: 'contact' }" class="underline underline-offset-2">
+                écrivez-nous
+              </RouterLink>
+              et nous les mettrons en place rapidement.
+            </p>
+          </div>
+
           <div
             class="mb-5 grid gap-3 rounded-xl border bg-muted/20 p-3 sm:flex sm:flex-wrap sm:items-end"
           >
@@ -695,7 +731,17 @@ function viderPanierAvecAnnulation() {
             @vider="viderPanierAvecAnnulation"
           >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
-              Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
+              <template v-if="commandeBloqueeParTarifAbsent">
+                Aucun tarif n'est défini pour votre compte sur un ou plusieurs produits du panier.
+                Nous devons les mettre en place avant que vous puissiez commander&nbsp;:
+              </template>
+              <template v-else>
+                Un ou plusieurs tarifs sont en cours de vérification. Si cela dure,
+                inutile d'attendre&nbsp;:
+              </template>
+              <RouterLink :to="{ name: 'contact' }" class="underline underline-offset-2">
+                contactez-nous
+              </RouterLink>, nous réglons cela rapidement.
             </p>
             <Button
               class="mt-2 w-full"
@@ -772,7 +818,17 @@ function viderPanierAvecAnnulation() {
             @vider="viderPanierAvecAnnulation"
           >
             <p v-if="commandeBloqueeParPrix" class="text-xs text-amber-700">
-              Un ou plusieurs tarifs doivent être vérifiés avant l'envoi.
+              <template v-if="commandeBloqueeParTarifAbsent">
+                Aucun tarif n'est défini pour votre compte sur un ou plusieurs produits du panier.
+                Nous devons les mettre en place avant que vous puissiez commander&nbsp;:
+              </template>
+              <template v-else>
+                Un ou plusieurs tarifs sont en cours de vérification. Si cela dure,
+                inutile d'attendre&nbsp;:
+              </template>
+              <RouterLink :to="{ name: 'contact' }" class="underline underline-offset-2">
+                contactez-nous
+              </RouterLink>, nous réglons cela rapidement.
             </p>
             <button
               v-if="modification"

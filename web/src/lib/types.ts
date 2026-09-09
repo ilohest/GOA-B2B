@@ -109,6 +109,17 @@ export interface AdminDashboardResponse {
   dernierRapportSync: SyncReport | null
   /** Un cache ancien vient de déclencher une synchronisation automatique. */
   revalidationEnCours?: boolean
+  /**
+   * Comptes actifs dont Easybeer ne renvoie aucun tarif : leur boutique est
+   * bloquée et seul l'administrateur peut y remédier.
+   */
+  comptesSansTarif?: {
+    idClient: number
+    nom: string | null
+    emails: string[]
+    produits: number
+    typeLibelle: string | null
+  }[]
 }
 
 export interface CatalogueOverride {
@@ -159,6 +170,8 @@ export interface ProduitCatalogueClient {
   prixHT: number | null
   prixUpdatedAt: number | null
   prixEstFrais: boolean
+  /** Aucun tarif défini chez Easybeer pour ce produit sur la grille du client. */
+  tarifAbsent: boolean
   historique: boolean
   /** Incrément par goût (toujours 1 ; contraintes logistiques au niveau panier). */
   pas: number
@@ -372,6 +385,8 @@ export interface AdminClientDetail {
     expiresAt: number
     usedAt: number | null
   } | null
+  /** Nombre de produits sans tarif chez Easybeer pour la grille de ce client. */
+  tarifsAbsents?: number
   easybeerAppUrl: string
 }
 

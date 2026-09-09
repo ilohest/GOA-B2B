@@ -251,6 +251,13 @@ export interface CacheClientDoc {
   prix: Record<string, number>
   /** Timestamp par prix réussi. Indispensable quand une synchro est partielle. */
   prixUpdatedAt: Record<string, number>
+  /**
+   * Unités pour lesquelles Easybeer répond sans tarif, avec la date du constat.
+   * C'est un état durable, pas une panne : la grille du client ne comporte
+   * simplement aucun prix pour cette unité. Sans cette trace, l'échec est
+   * invisible et le client reste bloqué sans que personne ne sache pourquoi.
+   */
+  tarifsAbsents?: Record<string, number>
   syncedAt: number
 }
 
@@ -435,6 +442,7 @@ export async function syncClient(
     ...(existant?.prixUpdatedAt ??
       Object.fromEntries(Object.keys(existant?.prix ?? {}).map((id) => [id, existant?.syncedAt ?? 0]))),
   }
+  const tarifsAbsents: Record<string, number> = { ...(existant?.tarifsAbsents ?? {}) }
 
   // On ne tarife que les unités VISIBLES (le catalogue expose ~41 conditionnements ;
   // sans ce filtre, on ferait 41 × N appels prix → ban assuré). Les unités masquées
@@ -449,10 +457,17 @@ export async function syncClient(
           () => getPrix(p.idStockBouteille, idClientType, idClient),
           (r) => r != null,
         )
+        const id = String(p.idStockBouteille)
         if (res?.prixHT != null) {
-          const id = String(p.idStockBouteille)
           prix[id] = res.prixHT
           prixUpdatedAt[id] = Date.now()
+          delete tarifsAbsents[id]
+        } else if (res != null) {
+          // Easybeer a répondu, mais sans tarif : la grille du client n'en
+          // comporte pas pour cette unité. Rien à réessayer, et le prix en
+          // cache ne redeviendra jamais frais. On le consigne pour que
+          // l'administrateur puisse corriger la grille ou le type du client.
+          tarifsAbsents[id] = Date.now()
         }
       } catch (e) {
         // Ban en cours → inutile de marteler les produits suivants : on garde
@@ -472,11 +487,24 @@ export async function syncClient(
       if (!idsAPricer.has(Number(id))) {
         delete prix[id]
         delete prixUpdatedAt[id]
+        delete tarifsAbsents[id]
       }
     }
   }
 
-  const doc: CacheClientDoc = { client: allegerClient(fiche, types), idGrilleTarifaire, prix, prixUpdatedAt, syncedAt: Date.now() }
+  // Une unité sortie du périmètre tarifé ne doit pas rester signalée.
+  for (const id of Object.keys(tarifsAbsents)) {
+    if (!aPricer.some((p) => String(p.idStockBouteille) === id)) delete tarifsAbsents[id]
+  }
+
+  const doc: CacheClientDoc = {
+    client: allegerClient(fiche, types),
+    idGrilleTarifaire,
+    prix,
+    prixUpdatedAt,
+    tarifsAbsents,
+    syncedAt: Date.now(),
+  }
   await db.doc(`cacheClients/${idClient}`).set(doc)
   return doc
 }
