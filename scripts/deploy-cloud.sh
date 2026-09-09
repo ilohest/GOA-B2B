@@ -18,7 +18,6 @@ SMTP_HOST_VALUE="${SMTP_HOST:-}"
 SMTP_PORT_VALUE="${SMTP_PORT:-587}"
 SMTP_USER_VALUE="${SMTP_USER:-}"
 SMTP_FROM_VALUE="${SMTP_FROM:-GOA Kombucha <contact@goa-kombucha.fr>}"
-COMMANDE_EST_DEVIS_VALUE="${COMMANDE_EST_DEVIS:-true}"
 
 for command in npm gcloud firebase; do
   if ! command -v "$command" >/dev/null 2>&1; then
@@ -40,6 +39,28 @@ exiger SMTP_USER "$SMTP_USER_VALUE"
 if [[ "$PUBLIC_URL" != https://* ]]; then
   echo "PUBLIC_URL doit commencer par https://" >&2
   exit 1
+fi
+
+# Le mode devis décide si une commande part pour de vrai chez Easybeer. Le
+# redéployer depuis une valeur par défaut rebasculerait la plateforme en devis
+# sans que personne ne l'ait demandé : la valeur en place fait donc foi. Une
+# valeur passée dans l'environnement reste prioritaire, c'est une intention
+# explicite ; le premier déploiement, lui, démarre prudemment en devis.
+if [[ -n "${COMMANDE_EST_DEVIS:-}" ]]; then
+  COMMANDE_EST_DEVIS_VALUE="$COMMANDE_EST_DEVIS"
+  echo "Mode devis : ${COMMANDE_EST_DEVIS_VALUE} (imposé par l'environnement)"
+else
+  COMMANDE_EST_DEVIS_VALUE="$(gcloud run services describe "$SERVICE_NAME" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --format='value(spec.template.spec.containers[0].env.filter("name:COMMANDE_EST_DEVIS").extract("value").flatten())' \
+    2>/dev/null || true)"
+  if [[ "$COMMANDE_EST_DEVIS_VALUE" == "true" || "$COMMANDE_EST_DEVIS_VALUE" == "false" ]]; then
+    echo "Mode devis : ${COMMANDE_EST_DEVIS_VALUE} (valeur actuelle du service, conservée)"
+  else
+    COMMANDE_EST_DEVIS_VALUE="true"
+    echo "Mode devis : true (premier déploiement — aucune commande réelle ne partira)"
+  fi
 fi
 
 cd "$(dirname "$0")/.."

@@ -93,13 +93,18 @@ export VITE_FIREBASE_AUTH_DOMAIN="identifiant-du-projet-client.firebaseapp.com"
 export FIREBASE_STORAGE_BUCKET="identifiant-du-projet-client.firebasestorage.app"
 export SMTP_HOST="serveur-smtp-indiqué-dans-ovh"
 export SMTP_USER="adresse-email-ovh"
-export COMMANDE_EST_DEVIS="true"
 npm run deploy:cloud
 ```
 
 Le script exécute les tests, construit les deux applications, déploie Cloud Run,
 injecte les secrets, crée ou met à jour le job Cloud Scheduler avec son identité
 OIDC, déploie Firebase Hosting et teste les endpoints publics.
+
+Il n'y a pas de `COMMANDE_EST_DEVIS` à exporter : le script lit la valeur en
+place sur le service et la conserve, et démarre en mode devis lorsque le service
+n'existe pas encore. Un redéploiement ne peut donc pas remettre la plateforme en
+devis sans qu'on l'ait demandé. Le script annonce à chaque exécution le mode
+retenu et d'où il vient.
 
 ## 6. Domaine OVH
 
@@ -215,12 +220,19 @@ tester au moins une fois dans un projet distinct.
 La checklist détaillée des exports et tests de restauration se trouve dans
 [`TODO-SAUVEGARDES-PRODUCTION.md`](./TODO-SAUVEGARDES-PRODUCTION.md).
 
-Après validation écrite du client, redéployer avec :
+Après validation écrite du client, basculer en commandes réelles. Le service
+tournant déjà, une mise à jour de la variable suffit — inutile de tout
+redéployer :
 
 ```bash
-export COMMANDE_EST_DEVIS="false"
-npm run deploy:cloud
+gcloud run services update goa-b2b-api \
+  --region europe-west1 \
+  --project "$FIREBASE_PROJECT_ID" \
+  --update-env-vars COMMANDE_EST_DEVIS=false
 ```
+
+Les déploiements suivants conserveront cette valeur. Pour revenir en arrière,
+rejouer la même commande avec `true`.
 
 ## 10. Migration depuis le projet temporaire
 

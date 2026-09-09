@@ -176,7 +176,7 @@ function poids(octets: number) {
           <li v-for="item in liste" :key="item.id" class="relative">
             <button
               type="button"
-              class="group grid w-full gap-1.5 rounded-lg border p-1.5 text-left transition-colors"
+              class="grid w-full gap-1.5 rounded-lg border p-1.5 text-left transition-colors"
               :class="
                 selection === item.url
                   ? 'border-primary ring-2 ring-primary/30'
@@ -194,8 +194,7 @@ function poids(octets: number) {
             </button>
             <button
               type="button"
-              class="absolute top-2.5 right-2.5 grid size-6 place-items-center rounded-md border bg-background/90 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition hover:bg-destructive hover:text-destructive-foreground focus-visible:opacity-100 group-hover:opacity-100"
-              :class="{ 'opacity-100': suppression.isPending.value }"
+              class="absolute top-2.5 right-2.5 grid size-6 place-items-center rounded-md border bg-background/90 text-muted-foreground opacity-70 shadow-sm backdrop-blur transition hover:bg-destructive hover:text-destructive-foreground hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
               :aria-label="`Supprimer ${item.nom} de la bibliothèque`"
               :disabled="suppression.isPending.value"
               @click.stop="suppression.mutate(item.id)"
