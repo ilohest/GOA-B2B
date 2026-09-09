@@ -235,6 +235,9 @@ const questionsFrequentes = computed(() =>
   margin: 1.75rem 0 0.5rem;
   padding-top: 1.25rem;
   border-top: 1px solid var(--border);
+  /* L'en-tête collant fait 56 px : sans cette marge, un saut vers une ancre
+     cache le titre visé sous l'en-tête. */
+  scroll-margin-top: 5rem;
 }
 .guide h2:first-of-type,
 .guide :deep(h2:first-of-type) {
