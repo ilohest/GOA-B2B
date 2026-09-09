@@ -5,7 +5,7 @@ function configurationProductionValide(): typeof config {
   return {
     ...config,
     production: true,
-    webOrigin: 'https://commande.goa-kombucha.fr',
+    webOrigin: 'https://commandes.goa-kombucha.fr',
     authDisabled: false,
     syncIntervalMinutes: 0,
     schedulerServiceAccountEmail: 'goa-scheduler@goa-production.iam.gserviceaccount.com',

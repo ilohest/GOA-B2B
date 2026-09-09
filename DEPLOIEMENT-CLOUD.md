@@ -1,6 +1,6 @@
 # Mise en production GOA B2B — Firebase et Cloud Run
 
-Ce guide prépare `commande.goa-kombucha.fr` sans VPS. Le projet Firebase et le
+Ce guide prépare `commandes.goa-kombucha.fr` sans VPS. Le projet Firebase et le
 compte de facturation doivent appartenir au client.
 
 ## Architecture
@@ -26,7 +26,7 @@ localisation doit être validé avant de créer la base.
 4. Créer une application Web et relever : API key, App ID et Auth domain.
 5. Relever le nom exact du bucket Storage. Un nouveau projet utilise normalement
    `PROJECT_ID.firebasestorage.app`, tandis qu'un ancien peut utiliser `appspot.com`.
-6. Ajouter `commande.goa-kombucha.fr` aux domaines autorisés d'Authentication.
+6. Ajouter `commandes.goa-kombucha.fr` aux domaines autorisés d'Authentication.
 7. Donner au développeur les droits nécessaires sans partager le mot de passe
    Google ni les coordonnées bancaires.
 
@@ -86,7 +86,7 @@ Le premier déploiement reste volontairement en mode devis.
 
 ```bash
 export FIREBASE_PROJECT_ID="identifiant-du-projet-client"
-export PUBLIC_URL="https://commande.goa-kombucha.fr"
+export PUBLIC_URL="https://commandes.goa-kombucha.fr"
 export VITE_FIREBASE_API_KEY="valeur-application-web"
 export VITE_FIREBASE_APP_ID="valeur-application-web"
 export VITE_FIREBASE_AUTH_DOMAIN="identifiant-du-projet-client.firebaseapp.com"
@@ -104,7 +104,7 @@ OIDC, déploie Firebase Hosting et teste les endpoints publics.
 ## 6. Domaine OVH
 
 Dans Firebase Hosting, ajouter le domaine personnalisé
-`commande.goa-kombucha.fr`. Reporter uniquement les enregistrements DNS demandés
+`commandes.goa-kombucha.fr`. Reporter uniquement les enregistrements DNS demandés
 par Firebase dans la zone DNS OVH. Ne pas modifier les enregistrements MX, SPF,
 DKIM ou DMARC utilisés par les e-mails.
 

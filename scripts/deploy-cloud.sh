@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_ID="${FIREBASE_PROJECT_ID:-}"
-PUBLIC_URL="${PUBLIC_URL:-https://commande.goa-kombucha.fr}"
+PUBLIC_URL="${PUBLIC_URL:-https://commandes.goa-kombucha.fr}"
 REGION="${CLOUD_REGION:-europe-west1}"
 SERVICE_NAME="${CLOUD_RUN_SERVICE_NAME:-goa-b2b-api}"
 SERVICE_ACCOUNT_NAME="${CLOUD_SERVICE_ACCOUNT_NAME:-goa-api}"
