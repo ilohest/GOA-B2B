@@ -13,7 +13,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "remplir-commandes": "tsx scripts/remplir-cache-commandes.ts"
+    "remplir-commandes": "tsx scripts/remplir-cache-commandes.ts",
+    "migrer:photos": "tsx scripts/migrer-photos-bibliotheque.ts"
   },
   "dependencies": {
     "@google-cloud/tasks": "^6.2.3",

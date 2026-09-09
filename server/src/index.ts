@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { config, validerConfigurationProduction } from './config.js'
 import {
   comptePlateformeAutorise,
@@ -2228,6 +2228,8 @@ interface MediaDoc {
   contentType: string
   extension: string
   taille: number
+  /** Empreinte du contenu : évite de stocker deux fois la même image. */
+  empreinte?: string
   creeLe: number
   creePar: string | null
 }
@@ -2281,6 +2283,20 @@ app.post('/api/admin/media', requireAuth, requireAdmin, async (c) => {
     return c.json({ error: "Ce fichier n'est pas une image JPEG, PNG ou WebP" }, 400)
   }
 
+  // Redéposer une image déjà présente ne doit pas encombrer la bibliothèque
+  // d'entrées identiques : on renvoie celle qui existe déjà.
+  const empreinte = createHash('sha256').update(contenu).digest('hex')
+  const dejaLa = await db.collection('media').where('empreinte', '==', empreinte).limit(1).get()
+  if (!dejaLa.empty) {
+    const doc = dejaLa.docs[0]
+    const d = doc.data() as MediaDoc
+    return c.json({
+      ok: true,
+      deja: true,
+      media: { id: doc.id, nom: d.nom, taille: d.taille, contentType: d.contentType, creeLe: d.creeLe, url: `/api/photos/media/${doc.id}` },
+    })
+  }
+
   const extension = TYPES_IMAGE.get(typeReel)!
   const id = nouvelIdMedia()
   await bucket.file(cheminMedia(id, extension)).save(contenu, {
@@ -2294,6 +2310,7 @@ app.post('/api/admin/media', requireAuth, requireAdmin, async (c) => {
     contentType: typeReel,
     extension,
     taille: fichier.size,
+    empreinte,
     creeLe: Date.now(),
     creePar: c.get('user')?.email ?? null,
   }
