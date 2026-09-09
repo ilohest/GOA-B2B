@@ -1,4 +1,4 @@
-<!-- guide-version: 1.47 -->
+<!-- guide-version: 1.48 -->
 <!-- guide-updated-at: 2026-09-09 -->
 
 # Guide administrateur — plateforme de commande GOA
@@ -337,6 +337,22 @@ ce qui a été fait entre-temps est perdu. Signalez donc un problème dès que v
 le remarquez, même si vous n'êtes pas sûr qu'il soit grave.
 
 ## 11. Questions fréquentes
+
+**Un client ne voit aucun produit dans sa boutique.**
+→ Quatre causes possibles, de la plus fréquente à la plus rare :
+
+1. **Aucun produit n'a été rendu visible.** C'est le cas le plus courant sur une
+   boutique récente : les produits sont masqués par défaut, il faut les activer
+   un par un dans **Catalogue**. Le tableau de bord vous alerte dans ce cas.
+2. **Ce client n'a pas de tarif.** Si les autres clients voient bien la boutique
+   mais pas celui-ci, son **type de client** ne comporte probablement aucun prix
+   dans Easybeer. Le tableau de bord signale les comptes concernés, et sa fiche
+   client l'indique aussi. Corrigez son type dans Easybeer, ou complétez la
+   grille tarifaire correspondante.
+3. **Le catalogue n'a jamais été synchronisé.** Le tableau de bord affiche alors
+   0 produit référencé. Cliquez **« Tout synchroniser »**.
+4. **Les produits sont en rupture.** Ils restent visibles, avec la mention
+   « Victime de son succès », mais ne peuvent pas être commandés.
 
 **J'ai changé un prix dans Easybeer, le client voit encore l'ancien.**
 → Les prix sont revérifiés à l'ouverture de la boutique lorsqu'ils ont plus de

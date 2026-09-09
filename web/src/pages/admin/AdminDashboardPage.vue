@@ -104,6 +104,17 @@ const bandeauSync = computed<'en-cours' | 'attention' | null>(() => {
 
 const comptesSansTarif = computed(() => data.value?.comptesSansTarif ?? [])
 
+/**
+ * Aucun produit visible = boutique vide pour TOUS les clients. La visibilité
+ * étant un réglage d'administration et non une donnée Easybeer, rien ne la
+ * met en place toute seule : sans alerte, un catalogue pourtant synchronisé
+ * reste invisible sans que personne ne comprenne pourquoi.
+ * Distingué d'un catalogue non encore synchronisé, qui relève de la synchro.
+ */
+const aucunProduitVisible = computed(
+  () => (data.value?.catalogue.produits ?? 0) > 0 && data.value?.catalogue.visibles === 0,
+)
+
 const derniereTentativePartielle = computed(() => {
   const rapport = data.value?.dernierRapportSync
   const cachePlusAncienAt = data.value?.cache.plusAncienAt
@@ -329,6 +340,26 @@ const stats = computed<CarteStatistique[]>(() => {
     <p v-else-if="isError" class="text-sm text-destructive">{{ (error as Error)?.message }}</p>
 
     <template v-else>
+      <Card v-if="aucunProduitVisible" class="border-destructive/40 bg-destructive/5">
+        <CardHeader class="pb-2">
+          <CardTitle class="flex items-center gap-2 text-base">
+            <TriangleAlert class="size-4 text-destructive" />
+            Aucun produit n'est visible : la boutique est vide
+          </CardTitle>
+          <CardDescription>
+            Les {{ data?.catalogue.produits }} produits d'Easybeer sont bien synchronisés,
+            mais aucun n'a été rendu visible. Vos clients voient donc une boutique vide et
+            ne peuvent rien commander. La visibilité se règle produit par produit, elle ne
+            vient pas d'Easybeer.
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="pt-0">
+          <Button as-child size="sm">
+            <RouterLink :to="{ name: 'admin-catalogue' }">Ouvrir le catalogue</RouterLink>
+          </Button>
+        </CardContent>
+      </Card>
+
       <Card v-if="comptesSansTarif.length" class="border-destructive/40 bg-destructive/5">
         <CardHeader class="pb-2">
           <CardTitle class="flex items-center gap-2 text-base">
