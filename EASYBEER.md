@@ -48,8 +48,8 @@
   unique avec espacement minimal entre TOUS les appels sortants + erreur typée `EasybeerBanError`.
   - ⚠️ La limite réelle est PLUS stricte que le message : un run de synchro à **~5 req/s soutenus**
     (espacement 200 ms) a re-déclenché un ban, et la durée annoncée **augmente** (220 s → 298 s).
-    Probable fenêtre glissante / quota par minute. Espacement adopté : **400 ms** (2,5 req/s) —
-    à ajuster si nouveau ban.
+    Probable fenêtre glissante / quota par minute. Espacement adopté ensuite : **1000 ms** (1 req/s). Le test de charge du 2026-09-11 montre
+    que c'est proche du plafond réel (voir le journal) : **ne pas le réduire**.
   - ⚠️ 2026-07-09 : l'API renvoie AUSSI des **HTTP 429** (en plus du 400 « banned »), y compris
     APRÈS la fin annoncée d'un ban — prévoir les deux formes et des attentes généreuses.
   - ⚠️⚠️ **Requêter PENDANT un ban le PROLONGE** (durées annoncées qui remontent : 3 s → 60 s →
@@ -473,5 +473,9 @@ Body = `ModeleCommande` (163 champs dans le Swagger, mais **références légèr
 - **2026-09-09 — la grille sans tarif bloque le client pour toujours (corrigé).** Le comportement était déjà documenté plus haut (grilles `Particulier livraison` 16966 et `N/A` 16938 → réponse HTTP 200 avec un objet sans `prixHT`), mais sa conséquence ne l'était pas. Le code n'écrivait alors ni prix ni horodatage : le prix en cache ne redevenait jamais frais, la boutique du client passait entièrement en « temporairement indisponible », et rien ne le signalait. Constaté sur un client rattaché à 16966 dont les prix dataient de 44 jours ; rafraîchir n'y changeait rien.
   - ⚠️ **Un objet sans `prixHT` n'est pas une erreur à réessayer** : c'est une réponse valide qui dit « aucun tarif sur cette grille ». À distinguer d'un corps vide (throttling), lui à réessayer. Traité par `tarifsAbsents` dans `cacheClients/{id}` (`sync.ts`), remonté au client et à l'administrateur.
   - Le repli sur la grille tarifaire ne sauve pas la situation : quand le prix perso est périmé, le code se replie déjà sur la grille, mais celle du type en cause n'a précisément aucun prix.
+
+- **2026-09-11 — latence mesurée : ~0,2 s par appel.** 7 appels GET à 1 req/s (`getClient`, `getPrix`) : moyenne 226 ms, min 169, max 474 (premier appel). La durée d'une synchro vient de l'espacement imposé côté plateforme (`MIN_INTERVAL_MS = 1000`, `easybeer.ts`), pas d'une lenteur d'Easybeer : chaque appel occupe un créneau d'1 s dont ~0,8 s d'attente. Synchro complète du 2026-07-27 : au moins ~96 appels pour 135 s — ~22 s de traitement Easybeer, ~74 s d'espacement, et ~30 à 39 s de reprises inutiles sur 5 clients supprimés d'Easybeer (HTTP 400 « introuvable », retentés 3 fois), désormais exclus de la synchro par la réconciliation (`source_deleted`).
+
+- **2026-09-11 — ⚠️ la limite réelle se situe entre 1 et 1,33 req/s, pas à 10.** Test de charge en lecture seule (`getPrix` / `getClient`, arrêt au premier signal) : à 750 ms d'espacement (1,33 req/s), **HTTP 429 dès le 11ᵉ appel**, en ~8 s. À 1 req/s, la synchro du 2026-07-27 n'avait reçu aucun 429 sur ~96 appels. Confirmé le jour même par un palier de 40 appels à 1 req/s : aucune anomalie, latence moyenne 175 ms ; la maintenance de production exécutée juste avant n'a pas été gênée. **Ne pas descendre `MIN_INTERVAL_MS` sous 1000 ms** : ce réglage n'est pas conservateur, il est proche du plafond. Pour accélérer une synchro, réduire le nombre d'appels plutôt que leur espacement.
 
 <!-- Ajouter ici toute nouvelle découverte, avec la date. -->

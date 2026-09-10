@@ -23,8 +23,10 @@ const BASIC_AUTH =
  * file unique avec espacement minimal — aucun code appelant ne peut créer de
  * rafale, même sous trafic concurrent.
  */
-// 1000 ms (1 req/s) : volontairement conservateur. Easybeer annonce 10 req/s,
-// mais des runs plus rapides ont déclenché des bans sur fenêtre glissante.
+// 1000 ms (1 req/s). Easybeer annonce 10 req/s, mais la limite réelle est bien
+// plus basse : 429 dès le 11ᵉ appel à 1,33 req/s, aucune anomalie à 1 req/s
+// (test de charge du 2026-09-11, cf. EASYBEER.md). Ce réglage est donc proche du
+// plafond, et non conservateur : ne pas le réduire.
 const MIN_INTERVAL_MS = 1000
 let fileAttente: Promise<unknown> = Promise.resolve()
 let dernierAppel = 0
