@@ -1,5 +1,5 @@
-<!-- guide-version: 1.49 -->
-<!-- guide-updated-at: 2026-09-09 -->
+<!-- guide-version: 1.50 -->
+<!-- guide-updated-at: 2026-09-11 -->
 
 # Guide administrateur — plateforme de commande GOA
 
@@ -51,9 +51,10 @@ et dans la boutique client. Utilisez-le si :
 
 Une fois la synchronisation terminée, les nouvelles informations sont utilisées
 au prochain affichage de la boutique. Si un client avait déjà la page ouverte,
-il lui suffit de la recharger. Vous pouvez quitter le tableau de bord pendant la
-synchronisation : elle continue automatiquement. Évitez simplement de cliquer
-plusieurs fois.
+il lui suffit de la recharger. La synchronisation peut prendre plusieurs minutes,
+au rythme qu'impose Easybeer (voir les questions fréquentes). Vous pouvez quitter
+le tableau de bord pendant ce temps : elle continue automatiquement. Évitez
+simplement de cliquer plusieurs fois.
 
 Les boutons des pages **Clients**, **Commandes** et **Catalogue** actualisent
 uniquement la page concernée. Les boutons **« Ouvrir dans Easybeer »** ouvrent
@@ -389,6 +390,13 @@ correctement au total de commande.
 automatiquement. Le bouton manuel sert seulement en cas de changement urgent ou
 si le tableau de bord signale des informations qui n'ont pas été vérifiées
 récemment.
+
+**Pourquoi « Tout synchroniser » peut-il prendre plusieurs minutes ?**
+→ Cela ne vient pas de la plateforme : Easybeer n'accepte qu'environ une demande
+par seconde, et suspend l'accès plusieurs minutes si l'on va plus vite. La
+plateforme suit donc ce rythme. Comme chaque client inscrit demande plusieurs
+vérifications de prix, la durée augmente avec le nombre de clients. La
+synchronisation se poursuit en arrière-plan : vous pouvez continuer à travailler.
 
 **Qu'est-ce qui déclenche une mise à jour sans clic admin ?**
 → L'ouverture de la boutique vérifie automatiquement le catalogue commun et les
