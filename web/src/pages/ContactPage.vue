@@ -7,7 +7,6 @@ import {
   ExternalLink,
   Mail,
   MapPin,
-  MessageCircle,
   Phone,
 } from '@lucide/vue'
 import { toast } from 'vue-sonner'
@@ -43,45 +42,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="grid gap-4">
-    <section
-      class="relative isolate min-h-72 overflow-hidden rounded-2xl border border-emerald-950/10 bg-emerald-950 text-white shadow-sm"
-      aria-labelledby="titre-contact"
-    >
-      <img
-        src="/produits/orange-sanguine.webp"
-        alt=""
-        class="absolute inset-0 -z-20 size-full object-cover object-center opacity-55"
-      />
-      <div
-        class="absolute inset-0 -z-10 bg-gradient-to-r from-emerald-950 via-emerald-950/90 to-emerald-950/45"
-      />
-      <div class="grid min-h-72 content-center gap-5 p-6 sm:p-8 lg:max-w-3xl lg:p-10">
-        <div class="grid gap-3">
-          <p
-            class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-200"
-          >
-            <MessageCircle class="size-4" aria-hidden="true" />
-            L’équipe GOA vous répond
-          </p>
-          <h1 id="titre-contact" class="max-w-2xl text-3xl font-semibold leading-tight sm:text-4xl">
-            Une question, un avis, un partenariat&nbsp;?
-          </h1>
-          <p class="max-w-2xl text-sm leading-relaxed text-emerald-50/80 sm:text-base">
-            Besoin d’un conseil sur la gamme, votre commande ou les formats
-            adaptés à votre établissement&nbsp;? Échangez directement avec la
-            Brasserie de GOA.
-          </p>
-        </div>
-        <a
-          href="mailto:contact@goa-kombucha.fr"
-          class="inline-flex min-h-11 w-fit items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 shadow-lg shadow-black/10 transition hover:-translate-y-0.5 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-emerald-950"
-        >
-          <Mail class="size-4" aria-hidden="true" />
-          Écrire à GOA
-        </a>
-      </div>
-    </section>
-
     <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(20rem,0.9fr)]">
       <Card>
         <CardHeader>
