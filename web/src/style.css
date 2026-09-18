@@ -89,6 +89,10 @@
   --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
   --sidebar-border: oklch(0.923 0.003 48.717);
   --sidebar-ring: oklch(0.602 0.155 148.4);
+  /* Sélection de texte : émeraude de la marque (brand-800 sur un voile clair)
+     plutôt que le bleu du système, qui jurait avec la DA. */
+  --selection: #d3efdd;
+  --selection-foreground: #175c2b;
 }
 
 .dark {
@@ -123,6 +127,8 @@
   --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.708 0.142 149.0);
+  --selection: oklch(0.708 0.142 149 / 35%);
+  --selection-foreground: oklch(0.985 0.001 106.423);
 }
 
 @layer base {
@@ -146,5 +152,9 @@
     @apply bg-background text-foreground;
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background-color: var(--selection);
+    color: var(--selection-foreground);
   }
 }
