@@ -1596,7 +1596,6 @@ async function inviterEtEnvoyer(
   if (envoyerParEmail && invitation.email && emailActif()) {
     try {
       await envoyerInvitationEmail({
-        nom: invitation.client.nom || invitation.email,
         email: invitation.email,
         lien: invitation.lien,
       })

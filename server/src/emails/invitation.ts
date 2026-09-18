@@ -5,11 +5,13 @@
  *
  * `renderInvitationEmail` renvoie { subject, html, text } — le branchement SMTP
  * (server/src/email.ts) n'a qu'à l'envoyer.
+ *
+ * Le message ne nomme pas le client : le texte validé par GOA s'ouvre sur un
+ * « Bonjour, » neutre, ce qui évite d'afficher un nom Easybeer parfois cryptique
+ * (raison sociale tronquée, « TEST », etc.).
  */
 
 export interface InvitationEmailInput {
-  /** Nom du commerce (fiche client Easybeer). */
-  nom: string
   /** Lien sécurisé vers /activer (token d'invitation). */
   lien: string
   /** Email utilisé uniquement pour la livraison du message. */
@@ -26,17 +28,35 @@ const TEXTE = '#1c1917'
 const GRIS = '#78716c'
 const FOND = '#f0faf2'
 
+/** Bénéfices listés dans le corps du message (ordre validé par GOA). */
+const AVANTAGES = [
+  'Un espace personnel et sécurisé',
+  'Une interface simple et intuitive',
+  'Vos documents et votre historique de commandes regroupés au même endroit',
+  'Le suivi de l’état de vos commandes en temps réel',
+  'La possibilité de modifier votre commande à tout moment',
+]
+
 export function renderInvitationEmail(input: InvitationEmailInput): {
   subject: string
   html: string
   text: string
 } {
-  const { nom, lien, expiresInDays = 14, logoUrl } = input
-  const subject = 'Votre accès à la plateforme de commande GOA'
+  const { lien, expiresInDays = 14, logoUrl } = input
+  const subject = 'Votre nouvelle plateforme de commande GOA'
 
   const entete = logoUrl
     ? `<img src="${logoUrl}" alt="GOA Kombucha" width="120" style="display:block;margin:0 auto;height:auto;" />`
     : `<span style="font-family:Georgia,serif;font-size:26px;font-weight:700;letter-spacing:1px;color:${VERT};">GOA <span style="font-weight:400;">KOMBUCHA</span></span>`
+
+  // Liste en table plutôt qu'en <ul> : Outlook (moteur Word) écrase les
+  // marges des listes, les puces se retrouvent décalées ou collées au texte.
+  const avantages = AVANTAGES.map(
+    (a) => `<tr>
+              <td valign="top" style="width:16px;padding:0 0 8px;font-size:15px;line-height:1.6;color:${VERT};">&bull;</td>
+              <td style="padding:0 0 8px;font-size:15px;line-height:1.6;color:${TEXTE};">${a}</td>
+            </tr>`,
+  ).join('\n')
 
   const html = `<!doctype html>
 <html lang="fr">
@@ -48,12 +68,18 @@ export function renderInvitationEmail(input: InvitationEmailInput): {
         <tr><td style="background:${VERT};height:6px;line-height:6px;font-size:0;">&nbsp;</td></tr>
         <tr><td align="center" style="padding:32px 32px 8px;">${entete}</td></tr>
         <tr><td style="padding:8px 32px 0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:${TEXTE};">
-          <h1 style="margin:16px 0 8px;font-size:20px;font-weight:600;">Bonjour ${escapeHtml(nom)},</h1>
+          <p style="margin:16px 0 16px;font-size:15px;line-height:1.6;color:${TEXTE};">Bonjour,</p>
           <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:${TEXTE};">
-            GOA passe à une <strong>plateforme de commande en ligne</strong> pour ses clients professionnels.
+            GOA évolue&nbsp;! Passez désormais vos commandes depuis notre <strong>nouvelle plateforme en ligne</strong>.
           </p>
+          <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:${TEXTE};">
+            Ce qui change pour vous&nbsp;:
+          </p>
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+${avantages}
+          </table>
           <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:${TEXTE};">
-            Pour activer votre accès, choisissez librement votre adresse de connexion, ou continuez simplement avec Google — aucun mot de passe à retenir.
+            Pour activer votre accès, choisissez votre adresse e-mail de connexion, ou identifiez-vous directement avec votre compte Google.
           </p>
         </td></tr>
         <tr><td align="center" style="padding:0 32px 24px;">
@@ -85,10 +111,14 @@ export function renderInvitationEmail(input: InvitationEmailInput): {
 </html>`
 
   const text = [
-    `Bonjour ${nom},`,
+    `Bonjour,`,
     ``,
-    `GOA passe à une plateforme de commande en ligne pour ses clients professionnels.`,
-    `Pour activer votre accès, choisissez librement votre adresse de connexion, continuez avec Google (sans mot de passe) ou créez un mot de passe via ce lien :`,
+    `GOA évolue ! Passez désormais vos commandes depuis notre nouvelle plateforme en ligne.`,
+    ``,
+    `Ce qui change pour vous :`,
+    ...AVANTAGES.map((a) => `- ${a}`),
+    ``,
+    `Pour activer votre accès, choisissez votre adresse e-mail de connexion, ou identifiez-vous directement avec votre compte Google, via ce lien :`,
     lien,
     ``,
     `Lien personnel, valable ${expiresInDays} jours, utilisable une seule fois.`,
@@ -97,8 +127,4 @@ export function renderInvitationEmail(input: InvitationEmailInput): {
   ].join('\n')
 
   return { subject, html, text }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 }

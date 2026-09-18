@@ -32,13 +32,12 @@ describe('invitations sans email imposé', () => {
 
   it("présente l'adresse destinataire comme un simple canal de livraison", () => {
     const email = renderInvitationEmail({
-      nom: 'Le Bar',
       email: 'contact-easybeer@example.com',
       lien: 'https://commande.example.com/activer?token=secret',
     })
 
     expect(email.html).not.toContain('contact-easybeer@example.com')
     expect(email.text).not.toContain('contact-easybeer@example.com')
-    expect(email.text).toContain('choisissez librement votre adresse de connexion')
+    expect(email.text).toContain('choisissez votre adresse e-mail de connexion')
   })
 })
