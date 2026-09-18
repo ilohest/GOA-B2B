@@ -478,11 +478,26 @@ app.get('/api/admin/boutique-apercu', requireAuth, requireAdmin, async (c) => {
   ])
   const normaliser = (valeur: string) =>
     valeur.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
-  const ligneTarifStandard =
-    grille.lignes.find((ligne) => normaliser(ligne.typeClient) === 'client pro') ??
-    grille.lignes[0]
-  const idTypeStandard = ligneTarifStandard?.idClientType ?? null
-  const grillePrix = grillePrixPourClient(grille.lignes, idTypeStandard, []).prix
+
+  // Types tarifaires réellement présents dans la grille : ce sont les seules
+  // vues de prix qu'on sait rendre sans usurper un client.
+  const typesTarifaires: { idClientType: number; libelle: string }[] = []
+  for (const ligne of grille.lignes) {
+    if (typesTarifaires.some((type) => type.idClientType === ligne.idClientType)) continue
+    typesTarifaires.push({ idClientType: ligne.idClientType, libelle: ligne.typeClient })
+  }
+  // « Client PRO » d'abord : c'est le tarif de référence de la boutique.
+  typesTarifaires.sort((a, b) => {
+    const pro = (type: { libelle: string }) => (normaliser(type.libelle) === 'client pro' ? 0 : 1)
+    return pro(a) - pro(b) || a.libelle.localeCompare(b.libelle, 'fr')
+  })
+
+  const typeDemande = Number(c.req.query('type'))
+  const idTypeTarifaire =
+    typesTarifaires.find((type) => type.idClientType === typeDemande)?.idClientType ??
+    typesTarifaires[0]?.idClientType ??
+    null
+  const grillePrix = grillePrixPourClient(grille.lignes, idTypeTarifaire, []).prix
   const unitesMeta = Object.fromEntries(
     grille.lignes
       .filter((ligne) => ligne.idStockBouteille != null)
@@ -509,6 +524,8 @@ app.get('/api/admin/boutique-apercu', requireAuth, requireAdmin, async (c) => {
     prixPlusAncienAgeMs: null,
     cacheEnPreparation: false,
     revalidationEnCours: false,
+    typesTarifaires,
+    idTypeTarifaire,
   })
 })
 

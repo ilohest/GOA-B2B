@@ -1,9 +1,10 @@
-import { computed, toValue, type MaybeRefOrGetter } from 'vue'
+import { computed, toValue, watchEffect, type MaybeRefOrGetter } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { api } from '@/lib/api'
 import type { CatalogueClientResponse, ProduitCatalogueClient } from '@/lib/types'
 import { estimerRemisesCommande } from '@/lib/remises'
 import { groupesConditionnementPostalInvalides } from '@/lib/livraisonPostale'
+import { useApercuBoutique } from '@/composables/useApercuBoutique'
 import { useMe } from '@/composables/useMe'
 import { usePanier } from '@/composables/usePanier'
 
@@ -11,16 +12,20 @@ import { usePanier } from '@/composables/usePanier'
 export function useCommandeCourante(modeApercu: MaybeRefOrGetter<boolean>) {
   const profil = useMe()
   const panier = usePanier(toValue(modeApercu) ? 'apercu-admin' : 'client')
+  const { typeTarifaireApercu } = useApercuBoutique()
 
   const catalogue = useQuery({
     queryKey: computed(() => [
       toValue(modeApercu) ? 'catalogue-apercu-admin' : 'catalogue',
       panier.modification.value?.idCommande ?? null,
+      toValue(modeApercu) ? typeTarifaireApercu.value : null,
     ]),
     queryFn: () =>
       api.get<CatalogueClientResponse>(
         toValue(modeApercu)
-          ? '/admin/boutique-apercu'
+          ? typeTarifaireApercu.value != null
+            ? `/admin/boutique-apercu?type=${typeTarifaireApercu.value}`
+            : '/admin/boutique-apercu'
           : panier.modification.value
             ? `/catalogue?commande=${panier.modification.value.idCommande}`
             : '/catalogue',
@@ -33,6 +38,16 @@ export function useCommandeCourante(modeApercu: MaybeRefOrGetter<boolean>) {
           ? 30000
           : false,
   })
+
+  // Au premier affichage aucun type n'est choisi : on adopte celui que le
+  // serveur a retenu par défaut, pour que le sélecteur ne reste pas vide.
+  watchEffect(() => {
+    if (!toValue(modeApercu) || typeTarifaireApercu.value != null) return
+    const defaut = catalogue.data.value?.idTypeTarifaire
+    if (defaut != null) typeTarifaireApercu.value = defaut
+  })
+
+  const typesTarifairesApercu = computed(() => catalogue.data.value?.typesTarifaires ?? [])
 
   const compteSansTarifs = computed(
     () => profil.data.value?.client != null && profil.data.value.idGrilleTarifaire == null,
@@ -137,6 +152,8 @@ export function useCommandeCourante(modeApercu: MaybeRefOrGetter<boolean>) {
     ...profil,
     ...panier,
     catalogue,
+    typeTarifaireApercu,
+    typesTarifairesApercu,
     comptePreparation,
     produitsParId,
     lignesDetail,

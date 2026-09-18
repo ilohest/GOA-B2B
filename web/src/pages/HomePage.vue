@@ -54,6 +54,8 @@ const {
   isError,
   error,
   catalogue,
+  typeTarifaireApercu,
+  typesTarifairesApercu,
   comptePreparation,
   quantites,
   changer,
@@ -79,6 +81,17 @@ const {
 const conditionsCommerciales = computed(() =>
   modeApercu.value ? null : resumeConditionsCommerciales(data.value?.client),
 );
+
+/**
+ * En aperçu, les prix viennent d'une grille tarifaire choisie (et non du client
+ * connecté) : changer de type de client montre la boutique telle que la verra
+ * un distributeur, un CHR, etc.
+ */
+function changerTypeTarifaire(valeur: unknown) {
+  const idClientType = Number(valeur);
+  if (!Number.isFinite(idClientType)) return;
+  typeTarifaireApercu.value = idClientType;
+}
 
 // Hors route d'aperçu explicite, l'admin reste dans son espace.
 watchEffect(() => {
@@ -335,14 +348,44 @@ function viderPanierAvecAnnulation() {
             >
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          class="border-blue-200 bg-white"
-          @click="router.push('/admin')"
-        >
-          Quitter l’aperçu
-        </Button>
+        <div class="flex flex-wrap items-center gap-2">
+          <div
+            v-if="typesTarifairesApercu.length > 1"
+            class="flex items-center gap-2 text-xs font-medium text-blue-900"
+          >
+            <span>Type de client</span>
+            <Select
+              :model-value="
+                typeTarifaireApercu != null ? String(typeTarifaireApercu) : undefined
+              "
+              @update:model-value="changerTypeTarifaire"
+            >
+              <SelectTrigger
+                class="h-8 w-44 border-blue-200 bg-white text-sm"
+                aria-label="Type de client simulé"
+              >
+                <SelectValue placeholder="Tarif appliqué" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="type in typesTarifairesApercu"
+                  :key="type.idClientType"
+                  :value="String(type.idClientType)"
+                >
+                  {{ type.libelle }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            class="border-blue-200 bg-white"
+            @click="router.push('/admin')"
+          >
+            Quitter l’aperçu
+          </Button>
+        </div>
       </div>
 
       <!-- Compte fraîchement activé : overlay bloquant tant que les prix se

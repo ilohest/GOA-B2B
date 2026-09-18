@@ -186,6 +186,10 @@ export interface CatalogueClientResponse {
   cacheEnPreparation?: boolean
   /** Un snapshot valide est affiché pendant sa revalidation en arrière-plan. */
   revalidationEnCours?: boolean
+  /** Aperçu admin uniquement : grilles tarifaires proposées au choix. */
+  typesTarifaires?: { idClientType: number; libelle: string }[]
+  /** Aperçu admin uniquement : grille effectivement appliquée aux prix ci-dessus. */
+  idTypeTarifaire?: number | null
 }
 
 /** Réponse de création/modification de commande : totaux réels d'Easybeer. */
