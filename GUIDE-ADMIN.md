@@ -101,6 +101,21 @@ de la liste sont identiques sur mobile et sur ordinateur.
 > chez Easybeer peut être masqué/en rupture dans l'app, et inversement : c'est
 > **vous** qui pilotez la disponibilité affichée au client via ces interrupteurs.
 
+### Voir la boutique comme un client (mode aperçu)
+
+Le bouton **« Voir la boutique »**, en haut à droite, ouvre la boutique telle
+que la voient vos clients : produits visibles, photos, noms d'affichage, panier.
+C'est le moyen le plus simple de vérifier une modification du catalogue.
+
+- Le panier de l'aperçu est **séparé** de celui des clients et **aucune commande
+  ne peut partir** depuis ce mode.
+- Le sélecteur **« Type de client »** du bandeau bleu choisit la **grille
+  tarifaire** affichée (`client PRO`, `Distributeur`…) : vous voyez les prix
+  exactement comme les verrait un client de ce type. Les remises négociées
+  propres à un client, elles, ne sont pas simulées (voir §6).
+- Pour revenir à l'administration : **« Quitter l'aperçu »** dans le bandeau, ou
+  le bouton **« Retour au tableau de bord »** en haut à droite.
+
 ## 5. Comment le prix du client est déterminé
 
 Les types de client Easybeer sont **hiérarchiques**. La plateforme cherche la
