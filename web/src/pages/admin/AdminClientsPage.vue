@@ -543,7 +543,10 @@ const columns: ColumnDef<ClientResume>[] = [
           },
         },
         [
-          h("span", { class: "min-w-0 break-all whitespace-normal" }, email),
+                    // Le retour à la ligne n'a lieu qu'en colonnes fixes : en largeur
+          // naturelle, une adresse coupable n'importe où réduit la colonne à
+          // presque rien et empile la ligne sur dix hauteurs.
+          h("span", { class: "min-w-0 md:break-all md:whitespace-normal" }, email),
           h(Icone, {
             class: copie
               ? "size-3.5 shrink-0 text-primary"
@@ -596,7 +599,7 @@ function ouvrirFiche(client: ClientResume) {
   <div class="grid gap-4">
     <!-- overflow-visible : la carte ne doit pas devenir une zone de défilement,
     sinon l'en-tête figé du tableau n'a plus la page comme repère. -->
-    <Card class="overflow-visible">
+    <Card class="min-w-0 overflow-visible">
       <CardHeader class="gap-3">
         <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-center justify-between gap-3 sm:block">
@@ -745,53 +748,59 @@ function ouvrirFiche(client: ClientResume) {
                page, qui redevient la zone de défilement — condition pour que
                l'en-tête reste figé sous l'en-tête d'application. Sous md, le
                tableau reprend sa largeur naturelle et défile latéralement. -->
-          <div class="min-w-0 rounded-lg border md:[&_[data-slot=table-container]]:overflow-visible">
-            <Table class="md:table-fixed">
-              <colgroup>
-                <col style="width: 4%" />
-                <col style="width: 32%" />
-                <col style="width: 30%" />
-                <col style="width: 22%" />
-                <col style="width: 12%" />
-              </colgroup>
-              <TableHeader class="[&_tr]:bg-muted" fige="page">
-                <TableRow v-for="hg in table.getHeaderGroups()" :key="hg.id">
-                  <TableHead v-for="header in hg.headers" :key="header.id">
-                    <FlexRender
-                      v-if="!header.isPlaceholder"
-                      :render="header.column.columnDef.header"
-                      :props="header.getContext()"
-                    />
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow
-                  v-for="row in table.getRowModel().rows"
-                  :key="row.id"
-                  class="cursor-pointer"
-                  @click="ouvrirFiche(row.original)"
-                >
-                  <TableCell
-                    v-for="cell in row.getVisibleCells()"
-                    :key="cell.id"
+          <div class="min-w-0">
+            <div
+              class="sticky top-14 z-20 -mx-4 hidden h-2 bg-card md:block"
+              aria-hidden="true"
+            ></div>
+            <div class="min-w-0 overflow-clip rounded-lg border md:[&_[data-slot=table-container]]:overflow-visible">
+              <Table class="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b [&_tbody_tr:last-child_td]:border-b-0 md:table-fixed">
+                <colgroup>
+                  <col class="md:w-[4%]" />
+                  <col class="md:w-[32%]" />
+                  <col class="md:w-[30%]" />
+                  <col class="md:w-[22%]" />
+                  <col class="md:w-[12%]" />
+                </colgroup>
+                <TableHeader fige="md">
+                  <TableRow v-for="hg in table.getHeaderGroups()" :key="hg.id">
+                    <TableHead v-for="header in hg.headers" :key="header.id">
+                      <FlexRender
+                        v-if="!header.isPlaceholder"
+                        :render="header.column.columnDef.header"
+                        :props="header.getContext()"
+                      />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow
+                    v-for="row in table.getRowModel().rows"
+                    :key="row.id"
+                    class="cursor-pointer"
+                    @click="ouvrirFiche(row.original)"
                   >
-                    <FlexRender
-                      :render="cell.column.columnDef.cell"
-                      :props="cell.getContext()"
-                    />
-                  </TableCell>
-                </TableRow>
-                <TableRow v-if="!table.getRowModel().rows.length">
-                  <TableCell
-                    :colspan="columns.length"
-                    class="h-16 text-center text-muted-foreground"
-                  >
-                    Aucun client trouvé.
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+                    <TableCell
+                      v-for="cell in row.getVisibleCells()"
+                      :key="cell.id"
+                    >
+                      <FlexRender
+                        :render="cell.column.columnDef.cell"
+                        :props="cell.getContext()"
+                      />
+                    </TableCell>
+                  </TableRow>
+                  <TableRow v-if="!table.getRowModel().rows.length">
+                    <TableCell
+                      :colspan="columns.length"
+                      class="h-16 text-center text-muted-foreground"
+                    >
+                      Aucun client trouvé.
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
           </div>
 
           <div

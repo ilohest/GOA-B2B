@@ -5,25 +5,30 @@ import { cn } from "@/lib/utils"
 const props = defineProps<{
   class?: HTMLAttributes["class"]
   /**
-   * Fige la ligne d'en-tête pendant le défilement. « page » la cale sous
-   * l'en-tête d'application (56 px) quand c'est la page qui défile ;
-   * « conteneur » la cale en haut de la zone défilante qui entoure le tableau.
+   * Fige la ligne d'en-tête sous l'en-tête de l'application pendant que la
+   * page défile, à partir de la largeur indiquée — celle où le tableau tient
+   * dans la page.
+   *
+   * Deux conditions côté tableau : aucun ancêtre ne doit être une zone
+   * défilante (sinon `sticky` s'y rattache), et le tableau doit être en
+   * `border-separate` — en `border-collapse`, les bordures appartiennent au
+   * tableau et resteraient en place pendant que l'en-tête défile.
+   *
+   * Les cellules ne portent volontairement aucun arrondi : il découperait leur
+   * fond et laisserait aux deux coins une encoche transparente où l'on verrait
+   * défiler les lignes. C'est la boîte du tableau qui rogne ses angles.
    */
-  fige?: "page" | "conteneur"
+  fige?: "md" | "xl"
 }>()
 
-// Fond et filet portés par les <th> : celui du <tr> ne suit pas les cellules
-// figées et laisserait les lignes défiler en transparence sous l'en-tête.
-//
-// Le décalage de 56 px n'est posé qu'à partir de md : sous md, ces tableaux
-// défilent à l'intérieur de leur propre boîte, et un `top` non nul y pousserait
-// l'en-tête vers le bas au lieu de le figer.
+const FIGE = {
+  md: "md:sticky md:top-16 md:z-20",
+  xl: "xl:sticky xl:top-16 xl:z-20",
+} as const
+
 const classesFigees = computed(() =>
   props.fige
-    ? cn(
-        "[&_th]:sticky [&_th]:top-0 [&_th]:z-20 [&_th]:bg-muted [&_th]:shadow-[inset_0_-1px_0_var(--border)]",
-        props.fige === "page" ? "md:[&_th]:top-14" : "",
-      )
+    ? cn("[&_th]:bg-muted", FIGE[props.fige])
     : "",
 )
 </script>

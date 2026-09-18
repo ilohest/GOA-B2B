@@ -195,7 +195,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
 <template>
   <!-- overflow-visible : la carte ne doit pas devenir une zone de défilement,
   sinon l'en-tête figé du tableau n'a plus la page comme repère. -->
-  <Card class="overflow-visible">
+  <Card class="min-w-0 overflow-visible">
     <CardHeader class="gap-3">
         <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-center justify-between gap-3 sm:block">
@@ -378,90 +378,96 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
           </p>
         </div>
 
-        <div class="hidden rounded-lg border [&_[data-slot=table-container]]:overflow-visible md:block">
-          <Table class="table-fixed">
-            <colgroup>
-              <col style="width: 8%" />
-              <col style="width: 11%" />
-              <col style="width: 12%" />
-              <col style="width: 22%" />
-              <col style="width: 6%" />
-              <col style="width: 13%" />
-              <col style="width: 11%" />
-              <col style="width: 11%" />
-              <col style="width: 6%" />
-            </colgroup>
-            <TableHeader class="[&_tr]:bg-muted" fige="page">
-              <TableRow>
-                <TableHead
-                  v-for="colonne in colonnesTri"
-                  :key="colonne.cle"
-                  :class="colonne.classe?.includes('justify-end') ? 'text-right' : ''"
+        <div class="min-w-0">
+          <div
+            class="sticky top-14 z-20 -mx-4 hidden h-2 bg-card md:block"
+            aria-hidden="true"
+          ></div>
+          <div class="hidden overflow-clip rounded-lg border md:block md:[&_[data-slot=table-container]]:overflow-visible">
+            <Table class="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b [&_tbody_tr:last-child_td]:border-b-0 table-fixed">
+              <colgroup>
+                <col style="width: 8%" />
+                <col style="width: 11%" />
+                <col style="width: 12%" />
+                <col style="width: 22%" />
+                <col style="width: 6%" />
+                <col style="width: 13%" />
+                <col style="width: 11%" />
+                <col style="width: 11%" />
+                <col style="width: 6%" />
+              </colgroup>
+              <TableHeader fige="md">
+                <TableRow>
+                  <TableHead
+                    v-for="colonne in colonnesTri"
+                    :key="colonne.cle"
+                    :class="colonne.classe?.includes('justify-end') ? 'text-right' : ''"
+                  >
+                    <button
+                      class="inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-xs font-semibold uppercase tracking-wide text-foreground/80 transition-colors hover:bg-background/80"
+                      :class="colonne.classe"
+                      @click="basculerTri(colonne.cle)"
+                    >
+                      {{ colonne.label }}
+                      <ArrowUp v-if="tri.cle === colonne.cle && tri.direction === 'asc'" class="size-3" />
+                      <ArrowDown v-else-if="tri.cle === colonne.cle && tri.direction === 'desc'" class="size-3" />
+                      <ArrowUpDown v-else class="size-3 text-muted-foreground" />
+                    </button>
+                  </TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow
+                  v-for="cmd in commandesAffichees"
+                  :key="cmd.idCommande"
+                  class="cursor-pointer"
+                  @click="commandeOuverte = cmd.idCommande"
                 >
-                  <button
-                    class="inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1 py-0.5 text-xs font-semibold uppercase tracking-wide text-foreground/80 transition-colors hover:bg-background/80"
-                    :class="colonne.classe"
-                    @click="basculerTri(colonne.cle)"
-                  >
-                    {{ colonne.label }}
-                    <ArrowUp v-if="tri.cle === colonne.cle && tri.direction === 'asc'" class="size-3" />
-                    <ArrowDown v-else-if="tri.cle === colonne.cle && tri.direction === 'desc'" class="size-3" />
-                    <ArrowUpDown v-else class="size-3 text-muted-foreground" />
-                  </button>
-                </TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="cmd in commandesAffichees"
-                :key="cmd.idCommande"
-                class="cursor-pointer"
-                @click="commandeOuverte = cmd.idCommande"
-              >
-                <TableCell class="font-medium">#{{ cmd.numero ?? cmd.idCommande }}</TableCell>
-                <TableCell class="text-sm text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</TableCell>
-                <TableCell><EtatBadge :etat="cmd.etat" /></TableCell>
-                <TableCell class="min-w-0">
-                  <RouterLink
-                    v-if="cmd.client?.idClient"
-                    :to="{ path: `/admin/clients/${cmd.client.idClient}`, query: { retour: 'commandes' } }"
-                    class="flex min-w-0 items-baseline gap-1 hover:underline"
-                    @click.stop
-                  >
-                    <span class="truncate">{{ cmd.client.nom }}</span>
-                    <span class="shrink-0 text-xs text-muted-foreground">{{ cmd.client.numero }}</span>
-                  </RouterLink>
-                  <span v-else class="text-muted-foreground">—</span>
-                </TableCell>
-                <TableCell class="text-center">
-                  <IconTooltip v-if="cmd.facture?.existe" :text="cmd.facture.numero ?? 'Facture disponible'">
-                    <FileText class="size-4 text-cyan-600" />
-                  </IconTooltip>
-                  <span
-                    v-else-if="cmd.facture"
-                    class="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-600"
-                  >
-                    Non
-                  </span>
-                  <span v-else class="text-sm text-muted-foreground">—</span>
-                </TableCell>
-                <TableCell><PaiementBadge :paiement="cmd.paiement" /></TableCell>
-                <TableCell class="text-right font-medium tabular-nums">
-                  {{ totalHTCommande(cmd) != null ? prixFr(totalHTCommande(cmd)!) : '—' }}
-                </TableCell>
-                <TableCell class="text-right font-medium tabular-nums">
-                  {{ cmd.totalTTC != null ? prixFr(cmd.totalTTC) : '—' }}
-                </TableCell>
-                <TableCell class="text-right text-muted-foreground">Détail →</TableCell>
-              </TableRow>
-              <TableRow v-if="!data?.commandes.length">
-                <TableCell colspan="9" class="h-16 text-center text-muted-foreground">
-                  Aucune commande.
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+                  <TableCell class="font-medium">#{{ cmd.numero ?? cmd.idCommande }}</TableCell>
+                  <TableCell class="text-sm text-muted-foreground">{{ dateFr(cmd.dateCreation) }}</TableCell>
+                  <TableCell><EtatBadge :etat="cmd.etat" /></TableCell>
+                  <TableCell class="min-w-0">
+                    <RouterLink
+                      v-if="cmd.client?.idClient"
+                      :to="{ path: `/admin/clients/${cmd.client.idClient}`, query: { retour: 'commandes' } }"
+                      class="flex min-w-0 items-baseline gap-1 hover:underline"
+                      @click.stop
+                    >
+                      <span class="truncate">{{ cmd.client.nom }}</span>
+                      <span class="shrink-0 text-xs text-muted-foreground">{{ cmd.client.numero }}</span>
+                    </RouterLink>
+                    <span v-else class="text-muted-foreground">—</span>
+                  </TableCell>
+                  <TableCell class="text-center">
+                    <IconTooltip v-if="cmd.facture?.existe" :text="cmd.facture.numero ?? 'Facture disponible'">
+                      <FileText class="size-4 text-cyan-600" />
+                    </IconTooltip>
+                    <span
+                      v-else-if="cmd.facture"
+                      class="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-600"
+                    >
+                      Non
+                    </span>
+                    <span v-else class="text-sm text-muted-foreground">—</span>
+                  </TableCell>
+                  <TableCell><PaiementBadge :paiement="cmd.paiement" /></TableCell>
+                  <TableCell class="text-right font-medium tabular-nums">
+                    {{ totalHTCommande(cmd) != null ? prixFr(totalHTCommande(cmd)!) : '—' }}
+                  </TableCell>
+                  <TableCell class="text-right font-medium tabular-nums">
+                    {{ cmd.totalTTC != null ? prixFr(cmd.totalTTC) : '—' }}
+                  </TableCell>
+                  <TableCell class="text-right text-muted-foreground">Détail →</TableCell>
+                </TableRow>
+                <TableRow v-if="!data?.commandes.length">
+                  <TableCell colspan="9" class="h-16 text-center text-muted-foreground">
+                    Aucune commande.
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">

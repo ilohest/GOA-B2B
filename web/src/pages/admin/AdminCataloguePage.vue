@@ -330,7 +330,9 @@ async function retirerPhoto(idStockBouteille: number) {
 
 <template>
   <div class="grid gap-4">
-    <Card>
+    <!-- overflow-visible : la carte ne doit pas devenir une zone de défilement,
+         sinon la boîte du tableau n'a plus la page comme repère. -->
+    <Card class="min-w-0 overflow-visible">
       <CardHeader class="gap-3">
         <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-center justify-between gap-3 sm:block">
@@ -586,118 +588,131 @@ async function retirerPhoto(idStockBouteille: number) {
         <!-- Vue desktop : tableau à colonnes (inspiré d'Easybeer) — contenant et
              packaging ont leur propre colonne, et la visibilité affiche son ÉTAT
              en toutes lettres à côté de l'interrupteur. -->
-        <!-- Le tableau catalogue a des colonnes trop larges pour tenir dans la
-             page : il garde son défilement horizontal, et devient donc sa
-             propre zone de défilement verticale pour que l'en-tête reste figé
-             au-dessus des lignes. -->
-        <div
-          class="hidden max-h-[calc(100dvh-18rem)] overflow-auto rounded-lg border md:block [&_[data-slot=table-container]]:overflow-visible"
-        >
-          <Table>
-            <TableHeader class="[&_tr]:bg-muted" fige="conteneur">
-              <TableRow>
-                <TableHead class="w-16"><span class="sr-only">Photo</span></TableHead>
-                <TableHead
-                  v-for="colonne in colonnesTri"
-                  :key="colonne.cle"
-                  :class="classeColonneTri(colonne.cle)"
-                >
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-background/80"
-                    :aria-label="`Trier par ${colonne.label}`"
-                    @click="basculerTri(colonne.cle)"
+        <!-- Colonnes trop larges pour la page : ce tableau garde en plus son
+             défilement horizontal. -->
+        <div class="min-w-0">
+          <div
+            class="sticky top-14 z-20 -mx-4 hidden h-2 bg-card xl:block"
+            aria-hidden="true"
+          ></div>
+          <div class="hidden min-w-0 overflow-clip rounded-lg border md:block xl:[&_[data-slot=table-container]]:overflow-visible">
+            <Table class="border-separate border-spacing-0 [&_td]:border-b [&_th]:border-b [&_tbody_tr:last-child_td]:border-b-0 xl:table-fixed">
+              <colgroup>
+                <!-- La vignette fait 5rem, plus le padding de la cellule. -->
+                <col class="xl:w-24" />
+                <col class="xl:w-[24%]" />
+                <col class="xl:w-[12%]" />
+                <col class="xl:w-[12%]" />
+                <col class="xl:w-[19%]" />
+                <col class="xl:w-[15%]" />
+                <col class="xl:w-[17%]" />
+              </colgroup>
+              <TableHeader fige="xl">
+                <TableRow>
+                  <TableHead class="w-16"><span class="sr-only">Photo</span></TableHead>
+                  <TableHead
+                    v-for="colonne in colonnesTri"
+                    :key="colonne.cle"
+                    class="whitespace-normal"
+                    :class="classeColonneTri(colonne.cle)"
                   >
-                    {{ colonne.label }}
-                    <ArrowUp v-if="tri.cle === colonne.cle && tri.direction === 'asc'" class="size-3" />
-                    <ArrowDown v-else-if="tri.cle === colonne.cle && tri.direction === 'desc'" class="size-3" />
-                    <ArrowUpDown v-else class="size-3 text-muted-foreground/60" />
-                  </button>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow
-                v-for="u in unitesTriees"
-                :key="u.idStockBouteille"
-                :class="overrideAffiche(u).visible ? '' : 'bg-muted/30'"
-              >
-                <TableCell>
-                  <PhotoUpload
-                    :photo-url="overrideAffiche(u).photoUrl"
-                    :libelle="u.override.displayName || u.produit"
-                    :choisir="(url) => choisirPhoto(u.idStockBouteille, url)"
-                    :retirer="() => retirerPhoto(u.idStockBouteille)"
-                  />
-                </TableCell>
-
-                <TableCell class="min-w-64">
-                  <p class="text-sm font-medium">{{ u.produit }}</p>
-                  <Input
-                    :model-value="overrideAffiche(u).displayName"
-                    :placeholder="`Nom d'affichage (sinon : ${u.produit} — ${u.packaging})`"
-                    class="mt-1.5 max-w-md"
-                    @update:model-value="(v) => definirBrouillon(u, 'displayName', String(v))"
-                    @keydown.enter="($event.target as HTMLInputElement).blur()"
-                  />
-                </TableCell>
-
-                <TableCell class="whitespace-nowrap text-sm">{{ u.contenant }}</TableCell>
-                <TableCell class="whitespace-nowrap text-sm">{{ u.packaging }}</TableCell>
-
-                <TableCell class="w-48 pr-8 text-sm">
-                  <div v-if="u.tarifs.length" class="grid w-fit grid-cols-[max-content_max-content] items-baseline gap-x-8">
-                    <template v-for="t in u.tarifs" :key="t.idClientType">
-                      <span class="text-muted-foreground">{{ t.typeClient }}</span>
-                      <span class="justify-self-start text-left font-semibold tabular-nums">{{ prixFr(t.prixHT) }}</span>
-                    </template>
-                  </div>
-                  <p v-if="!u.tarifs.length" class="text-xs text-muted-foreground">Aucun tarif</p>
-                </TableCell>
-
-                <TableCell class="w-48 pl-6">
-                  <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap">
-                    <Switch
-                      :model-value="overrideAffiche(u).visible"
-                      @update:model-value="(v: boolean) => definirBrouillon(u, 'visible', v)"
-                    />
-                    <span
-                      class="flex items-center gap-1 text-xs font-medium"
-                      :class="overrideAffiche(u).visible ? 'text-primary' : 'text-muted-foreground'"
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-background/80"
+                      :aria-label="`Trier par ${colonne.label}`"
+                      @click="basculerTri(colonne.cle)"
                     >
-                      <Eye v-if="overrideAffiche(u).visible" class="size-3.5" />
-                      <EyeOff v-else class="size-3.5" />
-                      {{ overrideAffiche(u).visible ? 'Visible' : 'Masqué' }}
-                    </span>
-                  </label>
-                </TableCell>
-
-                <TableCell class="w-40">
-                  <label class="flex cursor-pointer items-center gap-2 whitespace-nowrap">
-                    <Switch
-                      :model-value="overrideAffiche(u).rupture"
-                      color-mode="availability"
-                      @update:model-value="(v: boolean) => definirBrouillon(u, 'rupture', v)"
+                      {{ colonne.label }}
+                      <ArrowUp v-if="tri.cle === colonne.cle && tri.direction === 'asc'" class="size-3" />
+                      <ArrowDown v-else-if="tri.cle === colonne.cle && tri.direction === 'desc'" class="size-3" />
+                      <ArrowUpDown v-else class="size-3 text-muted-foreground/60" />
+                    </button>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow
+                  v-for="u in unitesTriees"
+                  :key="u.idStockBouteille"
+                  :class="overrideAffiche(u).visible ? '' : 'bg-muted/30'"
+                >
+                  <TableCell>
+                    <PhotoUpload
+                      :photo-url="overrideAffiche(u).photoUrl"
+                      :libelle="u.override.displayName || u.produit"
+                      :choisir="(url) => choisirPhoto(u.idStockBouteille, url)"
+                      :retirer="() => retirerPhoto(u.idStockBouteille)"
                     />
-                    <span
-                      class="flex items-center gap-1 text-xs font-medium"
-                      :class="overrideAffiche(u).rupture ? 'text-destructive' : 'text-primary'"
-                    >
-                      <PackageX v-if="overrideAffiche(u).rupture" class="size-3.5" />
-                      <PackageCheck v-else class="size-3.5" />
-                      {{ overrideAffiche(u).rupture ? 'Rupture' : 'Disponible' }}
-                    </span>
-                  </label>
-                </TableCell>
-              </TableRow>
+                  </TableCell>
 
-              <TableRow v-if="!unitesFiltrees.length">
-                <TableCell colspan="7" class="py-8 text-center text-sm text-muted-foreground">
-                  Aucun produit trouvé.
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+                  <TableCell>
+                    <p class="text-sm font-medium">{{ u.produit }}</p>
+                    <Input
+                      :model-value="overrideAffiche(u).displayName"
+                      :placeholder="`Nom d'affichage (sinon : ${u.produit} — ${u.packaging})`"
+                      class="mt-1.5 max-w-md"
+                      @update:model-value="(v) => definirBrouillon(u, 'displayName', String(v))"
+                      @keydown.enter="($event.target as HTMLInputElement).blur()"
+                    />
+                  </TableCell>
+
+                  <TableCell class="text-sm whitespace-normal">{{ u.contenant }}</TableCell>
+                  <TableCell class="text-sm whitespace-normal">{{ u.packaging }}</TableCell>
+
+                  <TableCell class="text-sm whitespace-normal">
+                    <div v-if="u.tarifs.length" class="grid grid-cols-[minmax(0,1fr)_max-content] items-baseline gap-x-3">
+                      <template v-for="t in u.tarifs" :key="t.idClientType">
+                        <span class="text-muted-foreground">{{ t.typeClient }}</span>
+                        <span class="justify-self-start text-left font-semibold tabular-nums">{{ prixFr(t.prixHT) }}</span>
+                      </template>
+                    </div>
+                    <p v-if="!u.tarifs.length" class="text-xs text-muted-foreground">Aucun tarif</p>
+                  </TableCell>
+
+                  <TableCell>
+                    <label class="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1">
+                      <Switch
+                        :model-value="overrideAffiche(u).visible"
+                        @update:model-value="(v: boolean) => definirBrouillon(u, 'visible', v)"
+                      />
+                      <span
+                        class="flex items-center gap-1 text-xs font-medium"
+                        :class="overrideAffiche(u).visible ? 'text-primary' : 'text-muted-foreground'"
+                      >
+                        <Eye v-if="overrideAffiche(u).visible" class="size-3.5" />
+                        <EyeOff v-else class="size-3.5" />
+                        {{ overrideAffiche(u).visible ? 'Visible' : 'Masqué' }}
+                      </span>
+                    </label>
+                  </TableCell>
+
+                  <TableCell>
+                    <label class="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1">
+                      <Switch
+                        :model-value="overrideAffiche(u).rupture"
+                        color-mode="availability"
+                        @update:model-value="(v: boolean) => definirBrouillon(u, 'rupture', v)"
+                      />
+                      <span
+                        class="flex items-center gap-1 text-xs font-medium"
+                        :class="overrideAffiche(u).rupture ? 'text-destructive' : 'text-primary'"
+                      >
+                        <PackageX v-if="overrideAffiche(u).rupture" class="size-3.5" />
+                        <PackageCheck v-else class="size-3.5" />
+                        {{ overrideAffiche(u).rupture ? 'Rupture' : 'Disponible' }}
+                      </span>
+                    </label>
+                  </TableCell>
+                </TableRow>
+
+                <TableRow v-if="!unitesFiltrees.length">
+                  <TableCell colspan="7" class="py-8 text-center text-sm text-muted-foreground">
+                    Aucun produit trouvé.
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
         </div>
         </template>
       </CardContent>
