@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { Badge } from '@/components/ui/badge'
+import ContenantBadge from '@/components/catalogue/ContenantBadge.vue'
+
 defineProps<{
   contenant?: string | null
   packaging?: string | null
   nowrap?: boolean
+  /** Rupture de stock : les pastilles s'effacent avec le reste de la carte. */
+  attenue?: boolean
 }>()
 </script>
 
@@ -13,17 +18,11 @@ defineProps<{
     :class="nowrap ? 'flex-nowrap' : 'flex-wrap'"
     aria-label="Format du produit"
   >
-    <span
-      v-if="contenant"
-      class="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground"
-    >
-      {{ contenant }}
-    </span>
-    <span
-      v-if="packaging"
-      class="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground"
-    >
+    <ContenantBadge :contenant="contenant" :attenue="attenue" />
+    <!-- Le conditionnement reste neutre : une seule couleur par carte, sinon
+         le code couleur du contenant ne ressort plus. -->
+    <Badge v-if="packaging" variant="outline" :class="attenue ? 'text-muted-foreground' : ''">
       {{ packaging }}
-    </span>
+    </Badge>
   </div>
 </template>

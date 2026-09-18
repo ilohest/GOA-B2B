@@ -23,6 +23,7 @@ import { dateFr, prixFr } from "@/lib/format";
 import { resumeConditionsCommerciales } from "@/lib/conditionsCommerciales";
 import { useCommandeCourante } from "@/composables/useCommandeCourante";
 import ProduitCard from "@/components/catalogue/ProduitCard.vue";
+import ContenantBadge from "@/components/catalogue/ContenantBadge.vue";
 import PanierRecap from "@/components/catalogue/PanierRecap.vue";
 import CommandeDetailDialog from "@/components/CommandeDetailDialog.vue";
 import RecommanderDialog from "@/components/catalogue/RecommanderDialog.vue";
@@ -191,8 +192,9 @@ const rappelDerniereCommande = computed(
 
 // --- Filtres du catalogue ---
 
+// Côté boutique le filtre s'intitule « Format », mais il porte bien sur le champ
+// `contenant` d'Easybeer — d'où les noms internes, alignés sur la donnée.
 const filtreContenant = ref("tous");
-const filtrePackaging = ref("tous");
 const rechercheProduit = ref("");
 const normaliserRecherche = (valeur: string) =>
   valeur
@@ -227,15 +229,6 @@ const contenantsDisponibles = computed(() =>
     ),
   ].sort((a, b) => a.localeCompare(b, "fr")),
 );
-const packagingsDisponibles = computed(() =>
-  [
-    ...new Set(
-      produitsCatalogue.value
-        .map((p) => p.packaging)
-        .filter((v): v is string => Boolean(v)),
-    ),
-  ].sort((a, b) => a.localeCompare(b, "fr")),
-);
 const produitsFiltres = computed(() =>
   produitsCatalogue.value.filter(
     (p) =>
@@ -244,22 +237,18 @@ const produitsFiltres = computed(() =>
           `${p.libelle} ${p.contenant ?? ""} ${p.packaging ?? ""}`,
         ).includes(normaliserRecherche(rechercheProduit.value))) &&
       (filtreContenant.value === "tous" ||
-        p.contenant === filtreContenant.value) &&
-      (filtrePackaging.value === "tous" ||
-        p.packaging === filtrePackaging.value),
+        p.contenant === filtreContenant.value),
   ),
 );
 const filtresCatalogueActifs = computed(
   () =>
     Boolean(rechercheProduit.value.trim()) ||
-    filtreContenant.value !== "tous" ||
-    filtrePackaging.value !== "tous",
+    filtreContenant.value !== "tous",
 );
 
 function reinitialiserFiltresCatalogue() {
   rechercheProduit.value = "";
   filtreContenant.value = "tous";
-  filtrePackaging.value = "tous";
 }
 
 const panierVisible = computed(
@@ -592,48 +581,24 @@ function viderPanierAvecAnnulation() {
             </div>
 
             <div class="grid gap-1.5 sm:w-56">
-              <Label class="text-xs text-muted-foreground">Contenant</Label>
+              <Label class="text-xs text-muted-foreground">Format</Label>
               <Select v-model="filtreContenant">
                 <SelectTrigger
                   class="w-full bg-background"
-                  aria-label="Filtrer par contenant"
+                  aria-label="Filtrer par format"
                 >
-                  <SelectValue placeholder="Tous les contenants" />
+                  <SelectValue placeholder="Tous les formats" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="tous">Tous les contenants</SelectItem>
+                  <SelectItem value="tous">Tous les formats</SelectItem>
+                  <!-- La même pastille que sur les fiches produit : le menu et
+                       la grille se lisent avec le même repère visuel. -->
                   <SelectItem
                     v-for="valeur in contenantsDisponibles"
                     :key="valeur"
                     :value="valeur"
                   >
-                    {{ valeur }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div class="grid gap-1.5 sm:w-56">
-              <Label class="text-xs text-muted-foreground"
-                >Conditionnement</Label
-              >
-              <Select v-model="filtrePackaging">
-                <SelectTrigger
-                  class="w-full bg-background"
-                  aria-label="Filtrer par conditionnement"
-                >
-                  <SelectValue placeholder="Tous les conditionnements" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tous"
-                    >Tous les conditionnements</SelectItem
-                  >
-                  <SelectItem
-                    v-for="valeur in packagingsDisponibles"
-                    :key="valeur"
-                    :value="valeur"
-                  >
-                    {{ valeur }}
+                    <ContenantBadge :contenant="valeur" />
                   </SelectItem>
                 </SelectContent>
               </Select>

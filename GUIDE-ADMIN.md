@@ -91,8 +91,16 @@ Pour chaque unité vous pouvez :
 La **visibilité s'applique à l'unité** (un conditionnement) : tous ses tarifs
 suivent. Le client ne voit que **le prix de son type** (voir §5).
 
-Dans la boutique, le client peut filtrer les produits par **contenant** et par
-**conditionnement**. Les deux filtres peuvent être utilisés en même temps.
+Dans la boutique, le filtre s'appelle **Format** (c'est le contenant Easybeer :
+bouteille 0,35 L, bouteille 1 L, fût 20 L…). Chaque format y porte **sa propre
+couleur**, la même dans le menu du filtre et sur les fiches produit, pour
+repérer un format d'un coup d'œil. La couleur se déduit du libellé Easybeer :
+un nouveau format reconnu prend sa teinte tout seul, un libellé inattendu
+s'affiche en gris sans rien casser. Le client peut aussi rechercher un produit
+par nom, format ou conditionnement.
+
+Le catalogue administrateur, lui, garde le mot **Contenant** : il reprend les
+colonnes d'Easybeer.
 
 Dans le catalogue administrateur, la recherche et les filtres placés au-dessus
 de la liste sont identiques sur mobile et sur ordinateur.

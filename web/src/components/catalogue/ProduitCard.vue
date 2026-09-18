@@ -47,6 +47,7 @@ const emit = defineEmits<{
           class="mt-2"
           :contenant="produit.contenant"
           :packaging="produit.packaging"
+          :attenue="produit.rupture"
         />
       </div>
     </div>
