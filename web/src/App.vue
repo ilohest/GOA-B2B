@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useQueryClient } from '@tanstack/vue-query'
 import { onClickOutside, useEventListener, useMediaQuery } from '@vueuse/core'
 import { toast } from 'vue-sonner'
-import { LogOut, Store } from '@lucide/vue'
+import { LayoutDashboard, LogOut, Store } from '@lucide/vue'
 import { useAuth } from '@/composables/useAuth'
 import { useHeaderSaveBar } from '@/composables/useHeaderSaveBar'
 import { useMe } from '@/composables/useMe'
@@ -15,6 +15,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { adminSections, clientSections } from '@/lib/navigation'
 
 const router = useRouter()
+const route = useRoute()
 const queryClient = useQueryClient()
 const { isAuthenticated, user, logout } = useAuth()
 const { data: me } = useMe()
@@ -39,6 +40,10 @@ const decalageToasts = computed(() =>
 )
 
 const estAdmin = computed(() => me.value?.user.role === 'admin')
+// Dans l'aperçu, « Voir la boutique » n'a plus d'objet : le bouton devient la
+// sortie vers l'espace admin, comme le lien du bandeau d'aperçu.
+const ROUTES_APERCU = new Set(['admin-boutique-apercu', 'admin-boutique-confirmation'])
+const modeApercu = computed(() => ROUTES_APERCU.has(String(route.name)))
 const sectionsHeader = computed(() => (estAdmin.value ? adminSections : clientSections))
 const nomHeader = computed(() => {
   if (me.value?.user.role === 'client') {
@@ -101,9 +106,10 @@ async function onLogout() {
   }
 }
 
-function ouvrirApercuBoutique() {
+function basculerApercuBoutique() {
   profilMobileOuvert.value = false
-  router.push({ name: 'admin-boutique-apercu' })
+  if (modeApercu.value) router.push('/admin')
+  else router.push({ name: 'admin-boutique-apercu' })
 }
 </script>
 
@@ -111,7 +117,7 @@ function ouvrirApercuBoutique() {
   <div class="flex min-h-dvh flex-col" :class="isAuthenticated ? 'bg-zinc-950' : 'bg-background'">
     <header
       v-if="isAuthenticated"
-      class="sticky top-0 z-10 bg-zinc-950 text-white"
+      class="sticky top-0 z-30 bg-zinc-950 text-white"
     >
       <div class="mx-auto flex h-14 w-full items-center justify-between gap-3 px-4" :class="largeur">
         <div class="flex min-w-0 items-center gap-2">
@@ -154,10 +160,11 @@ function ouvrirApercuBoutique() {
             variant="outline"
             size="sm"
             class="hidden border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white sm:inline-flex"
-            @click="ouvrirApercuBoutique"
+            @click="basculerApercuBoutique"
           >
-            <Store class="size-4" />
-            Voir la boutique
+            <LayoutDashboard v-if="modeApercu" class="size-4" />
+            <Store v-else class="size-4" />
+            {{ modeApercu ? 'Retour au tableau de bord' : 'Voir la boutique' }}
           </Button>
           <Button
             variant="outline"
@@ -189,10 +196,11 @@ function ouvrirApercuBoutique() {
                 v-if="estAdmin"
                 type="button"
                 class="flex w-full items-center gap-2 border-b px-4 py-3 text-left text-sm font-medium text-zinc-800 transition hover:bg-zinc-100"
-                @click="ouvrirApercuBoutique"
+                @click="basculerApercuBoutique"
               >
-                <Store class="size-4 text-zinc-500" />
-                Voir la boutique
+                <LayoutDashboard v-if="modeApercu" class="size-4 text-zinc-500" />
+                <Store v-else class="size-4 text-zinc-500" />
+                {{ modeApercu ? 'Retour au tableau de bord' : 'Voir la boutique' }}
               </button>
               <button
                 type="button"
