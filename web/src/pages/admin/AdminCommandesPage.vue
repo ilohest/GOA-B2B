@@ -193,7 +193,9 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
 </script>
 
 <template>
-  <Card>
+  <!-- overflow-visible : la carte ne doit pas devenir une zone de défilement,
+  sinon l'en-tête figé du tableau n'a plus la page comme repère. -->
+  <Card class="overflow-visible">
     <CardHeader class="gap-3">
         <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-center justify-between gap-3 sm:block">
@@ -389,7 +391,7 @@ const totalHTCommande = (cmd: AdminCommandesResponse['commandes'][number]) =>
               <col style="width: 11%" />
               <col style="width: 6%" />
             </colgroup>
-            <TableHeader class="[&_tr]:bg-muted">
+            <TableHeader class="[&_tr]:bg-muted" fige="page">
               <TableRow>
                 <TableHead
                   v-for="colonne in colonnesTri"

@@ -586,9 +586,15 @@ async function retirerPhoto(idStockBouteille: number) {
         <!-- Vue desktop : tableau à colonnes (inspiré d'Easybeer) — contenant et
              packaging ont leur propre colonne, et la visibilité affiche son ÉTAT
              en toutes lettres à côté de l'interrupteur. -->
-        <div class="hidden overflow-x-auto rounded-lg border md:block">
+        <!-- Le tableau catalogue a des colonnes trop larges pour tenir dans la
+             page : il garde son défilement horizontal, et devient donc sa
+             propre zone de défilement verticale pour que l'en-tête reste figé
+             au-dessus des lignes. -->
+        <div
+          class="hidden max-h-[calc(100dvh-18rem)] overflow-auto rounded-lg border md:block [&_[data-slot=table-container]]:overflow-visible"
+        >
           <Table>
-            <TableHeader class="[&_tr]:bg-muted">
+            <TableHeader class="[&_tr]:bg-muted" fige="conteneur">
               <TableRow>
                 <TableHead class="w-16"><span class="sr-only">Photo</span></TableHead>
                 <TableHead

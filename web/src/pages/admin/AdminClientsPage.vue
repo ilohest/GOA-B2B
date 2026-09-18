@@ -503,12 +503,17 @@ const columns: ColumnDef<ClientResume>[] = [
       h("div", { class: "min-w-40" }, [
         h(
           "p",
-          { class: "font-medium" },
+          {
+            // Colonnes à largeur fixe : un nom trop long est coupé plutôt que
+            // de déborder sur la colonne voisine (la fiche donne le nom entier).
+            class: "truncate font-medium",
+            title: row.original.nom ?? row.original.raisonSociale ?? undefined,
+          },
           row.original.nom ?? row.original.raisonSociale ?? "—",
         ),
         h(
           "p",
-          { class: "text-xs text-muted-foreground" },
+          { class: "truncate text-xs text-muted-foreground" },
           row.original.numero ?? "",
         ),
       ]),
@@ -538,7 +543,7 @@ const columns: ColumnDef<ClientResume>[] = [
           },
         },
         [
-          h("span", { class: "min-w-0 break-all" }, email),
+          h("span", { class: "min-w-0 break-all whitespace-normal" }, email),
           h(Icone, {
             class: copie
               ? "size-3.5 shrink-0 text-primary"
@@ -553,7 +558,11 @@ const columns: ColumnDef<ClientResume>[] = [
     id: "categorie",
     header: () => enteteTri("categorie", "Type de client"),
     cell: ({ row }) =>
-      h("span", { class: "text-sm" }, row.original.categorie ?? "—"),
+      h(
+        "p",
+        { class: "truncate text-sm", title: row.original.categorie ?? undefined },
+        row.original.categorie ?? "—",
+      ),
   },
   {
     id: "compte",
@@ -585,7 +594,9 @@ function ouvrirFiche(client: ClientResume) {
 
 <template>
   <div class="grid gap-4">
-    <Card>
+    <!-- overflow-visible : la carte ne doit pas devenir une zone de défilement,
+    sinon l'en-tête figé du tableau n'a plus la page comme repère. -->
+    <Card class="overflow-visible">
       <CardHeader class="gap-3">
         <div class="grid gap-3 sm:flex sm:items-start sm:justify-between">
           <div class="flex min-w-0 items-center justify-between gap-3 sm:block">
@@ -730,9 +741,20 @@ function ouvrirFiche(client: ClientResume) {
         />
 
         <template v-else>
-          <div class="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader class="[&_tr]:bg-muted">
+          <!-- À partir de md, colonnes à largeur fixe : le tableau tient dans la
+               page, qui redevient la zone de défilement — condition pour que
+               l'en-tête reste figé sous l'en-tête d'application. Sous md, le
+               tableau reprend sa largeur naturelle et défile latéralement. -->
+          <div class="min-w-0 rounded-lg border md:[&_[data-slot=table-container]]:overflow-visible">
+            <Table class="md:table-fixed">
+              <colgroup>
+                <col style="width: 4%" />
+                <col style="width: 32%" />
+                <col style="width: 30%" />
+                <col style="width: 22%" />
+                <col style="width: 12%" />
+              </colgroup>
+              <TableHeader class="[&_tr]:bg-muted" fige="page">
                 <TableRow v-for="hg in table.getHeaderGroups()" :key="hg.id">
                   <TableHead v-for="header in hg.headers" :key="header.id">
                     <FlexRender
